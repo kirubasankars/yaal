@@ -253,8 +253,21 @@ class NodeDescritporBuilder:
         node_descriptor.set_input_model(input_model)
         node_descriptor.set_output_model(output_model)
 
-        nodes = []
+        sub_nodes_names = {}
         for k in treemap:
+            sub_nodes_names[k] = treemap[k]
+        
+        output_model = node_descriptor.get_output_model()
+        _typestr = "_type"
+        if output_model is not None:
+            for k, v in output_model.items():
+                if type(v) == dict and _typestr in v:                        
+                    _type = v[_typestr]       
+                    if _type == "list" or _type == "object":
+                        sub_nodes_names[k] = {}
+        
+        nodes = []
+        for k, v in sub_nodes_names.items():
             name = ".".join([method, k])
             sub_node_descriptor = NodeDescriptor(k, name, path, False, self)
 
@@ -265,28 +278,8 @@ class NodeDescritporBuilder:
             if output_model is not None and k in output_model:
                 sub_output_model = output_model[k]
 
-            sub_node_descriptor.build(treemap[k], sub_input_model, sub_output_model)
-            nodes.append(sub_node_descriptor)
-
-        output_model = node_descriptor.get_output_model()
-        _typestr = "_type"
-        if output_model is not None:
-            for k, v in output_model.items():
-                if type(v) == dict and _typestr in v:                        
-                    _type = v[_typestr]       
-                    if _type == "list" or _type == "object":
-                        name = ".".join([method, k])
-                        sub_node_descriptor = NodeDescriptor(k, name, path, False, self)
-
-                        sub_input_model = None
-                        sub_output_model = None
-                        if input_model is not None and k in input_model:
-                            sub_input_model = input_model[k]
-                        if output_model is not None and k in output_model:
-                            sub_output_model = output_model[k]
-
-                        sub_node_descriptor.build({}, sub_input_model, sub_output_model)
-                        nodes.append(sub_node_descriptor)
+            sub_node_descriptor.build(v, sub_input_model, sub_output_model)
+            nodes.append(sub_node_descriptor)    
 
         node_descriptor.set_nodes(nodes)
 
