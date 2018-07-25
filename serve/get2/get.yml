@@ -1,0 +1,31 @@
+output.model:
+  _type: list
+  _partition_by: order_id
+
+  id:
+    _mapped: order_id
+
+  order_date:
+    _mapped: order_date
+
+  items:
+    _type: list
+    _partition_by: item_id
+    _parent_rows: true
+
+    id:
+        _mapped: item_id
+
+    qty:
+        _mapped: qty
+
+    product:
+        _type: object
+        _partition_by: product_id
+        _parent_rows: true
+
+        id:
+            _mapped: product_id
+
+        name:
+            _mapped: product_name
