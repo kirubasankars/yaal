@@ -56,6 +56,7 @@ class NodeExecutor:
 
     def _execute(self, input, parent_rows):
         execution_context =  self._execution_context
+        node_descriptor = self.get_node_descritor()
         input_type = self._input_type
         output_partition_by = self._output_partition_by
     
@@ -68,7 +69,8 @@ class NodeExecutor:
                 # loop on input
                 # output.extend(execution_context.execute(self, input))
             elif input_type is None or input_type == "object":
-                output = execution_context.execute(self, input)            
+                if node_descriptor.get_content() is not None:
+                    output = execution_context.execute(self, input)            
             
             if self._parent_rows == True:
                 output = copy.deepcopy(parent_rows)
@@ -265,6 +267,27 @@ class NodeDescritporBuilder:
 
             sub_node_descriptor.build(treemap[k], sub_input_model, sub_output_model)
             nodes.append(sub_node_descriptor)
+
+        output_model = node_descriptor.get_output_model()
+        _typestr = "_type"
+        if output_model is not None:
+            for k, v in output_model.items():
+                if type(v) == dict and _typestr in v:                        
+                    _type = v[_typestr]       
+                    if _type == "list" or _type == "object":
+                        name = ".".join([method, k])
+                        sub_node_descriptor = NodeDescriptor(k, name, path, False, self)
+
+                        sub_input_model = None
+                        sub_output_model = None
+                        if input_model is not None and k in input_model:
+                            sub_input_model = input_model[k]
+                        if output_model is not None and k in output_model:
+                            sub_output_model = output_model[k]
+
+                        sub_node_descriptor.build({}, sub_input_model, sub_output_model)
+                        nodes.append(sub_node_descriptor)
+
         node_descriptor.set_nodes(nodes)
 
 class NodeDescritporFactory:
@@ -313,7 +336,9 @@ class NodeDescritporFactory:
                map[item] = {}
 
     def create(self, method, path):        
-        ordered_files = self._order_list_by_dots(self._content_reader.list_sql(method, path))        
+        ordered_files = self._order_list_by_dots(self._content_reader.list_sql(method, path))
+        if len(ordered_files) == 0:
+            return None
         treemap = self._build_treemap(ordered_files)
         
         config_str = self._content_reader.get_config(method, path)
@@ -416,14 +441,15 @@ parser.add_argument('--path', help='path')
 parser.add_argument('--method', help='method')
 args = parser.parse_args()
 
-#args.path = "order1"
+#args.path = "order"
 #args.method = "get"
 
 if args.path is None or args.method is None:
     parser.print_help()
 else:
-    gravity = Gravity(GravityConfiguration("/home/kirubasankars/workspace/serve"))
+    gravity = Gravity(GravityConfiguration("/home/kirubasankars/workspace/gravity/serve"))
     descriptor = gravity.create_descriptor(args.method, args.path)
-    execution_context = SQLiteExecutionContext()
-    executor = descriptor.create_executor(execution_context)
-    print(executor.get_result_json(None))
+    if descriptor is not None:
+        execution_context = SQLiteExecutionContext()
+        executor = descriptor.create_executor(execution_context)
+        print(executor.get_result_json(None))
