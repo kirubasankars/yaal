@@ -441,7 +441,7 @@ parser.add_argument('--path', help='path')
 parser.add_argument('--method', help='method')
 args = parser.parse_args()
 
-#args.path = "order"
+#args.path = "get3"
 #args.method = "get"
 
 if args.path is None or args.method is None:
