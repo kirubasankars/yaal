@@ -1,0 +1,14 @@
+input.model:
+  _type: object
+  order_date:
+    _type: date
+  items:
+    _type: list
+    qty:
+      _type: interger
+    product:
+      _type: object
+      id:
+        _type: integer
+      name:
+        _type: string

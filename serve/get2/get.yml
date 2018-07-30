@@ -1,3 +1,8 @@
+input.model:
+    _type: object
+    id:
+        _type: integer
+
 output.model:
   _type: list
   _partition_by: order_id
