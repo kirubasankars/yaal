@@ -65,7 +65,9 @@ class NodeExecutor:
             execution_context.begin()
 
             if input_type is not None and input_type == "list":
-                output = []                
+                output = []
+                if node_descriptor.get_content() is not None:
+                    output = execution_context.execute(self, input)   
                 # loop on input
                 # output.extend(execution_context.execute(self, input))
             elif input_type is None or input_type == "object":
@@ -80,7 +82,7 @@ class NodeExecutor:
                 for sub_node_executor in nodes:
                     sub_node_descriptor = sub_node_executor.get_node_descritor()
                     sub_node_name = sub_node_descriptor.get_name()
-                    sub_node_output = sub_node_executor._execute(input, output)                    
+                    sub_node_output = sub_node_executor._execute(input.get_prop(sub_node_name), output)                    
         
                     if output_partition_by is None:
                         for row in output:
@@ -224,7 +226,7 @@ class NodeDescriptor:
     def set_input_model(self, input_model):
         self._input_model = input_model
     
-    def get_input_model(self):
+    def get_input_model(self):        
         return self._input_model
 
     def set_output_model(self, output_model):
@@ -250,7 +252,7 @@ class NodeDescritporBuilder:
         content = self._content_reader.get_sql(method, path)
         node_descriptor.set_content(content)
         
-        node_descriptor.set_input_model(input_model)
+        node_descriptor.set_input_model(input_model)        
         node_descriptor.set_output_model(output_model)
 
         sub_nodes_names = {}
@@ -274,12 +276,12 @@ class NodeDescritporBuilder:
             sub_input_model = None
             sub_output_model = None
             if input_model is not None and k in input_model:
-                sub_input_model = input_model[k]
+                sub_input_model = input_model[k]            
             if output_model is not None and k in output_model:
                 sub_output_model = output_model[k]
 
             sub_node_descriptor.build(v, sub_input_model, sub_output_model)
-            nodes.append(sub_node_descriptor)    
+            nodes.append(sub_node_descriptor)            
 
         node_descriptor.set_nodes(nodes)
 
@@ -429,13 +431,75 @@ class SQLiteExecutionContext:
 
         return rows        
 
+class Shape:
+    def __init__(self, input_model, data, parent_shape):        
+        self._list = False
+        self._object = False
+
+        self.data = data
+        self.shapes = {}
+        self._parent = parent_shape
+        self._input_model = input_model
+        
+        if input_model is None:
+            return
+
+        _typestr = "_type"
+        if _typestr in input_model:
+            _type = input_model[_typestr]
+            if _type == "list":
+                self._list = True                
+            else:
+                self._object = True
+        
+        if self._list:
+            idx = 0
+            input_model["_type"] = "object"
+            for item in data:                
+                self.shapes["@" + str(idx)] = Shape(input_model, item, self)                
+                idx = idx + 1
+            input_model["_type"] = "list"
+        else:
+            for k, v in input_model.items():
+                if k != _typestr and type(v) == dict:
+                    if _typestr in v:
+                        _type = v[_typestr]
+                        if _type == "list" or _type == "object":
+                            self.shapes[k] = Shape(v, data.get(k), self)
+
+    def get_prop(self, prop):
+        dot = prop.find(".")
+        if dot > -1:
+            path = prop[:dot]
+            remaining_path = prop[dot+1:]
+            
+            if path == "$parent":
+                return self._parent.get_prop(remaining_path)
+
+            if path in self.shapes:
+                return self.shapes[path].get_prop(remaining_path)
+        else:
+            if prop == "$parent":
+                return self._parent
+
+            if prop == "$length":
+                return len(self.data)
+
+            if prop in self.shapes:
+                return self.shapes[prop]
+
+            if prop in self.data:
+                return self.data[prop]
+            
+            return None
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--path', help='path')
 parser.add_argument('--method', help='method')
 args = parser.parse_args()
 
-#args.path = "get3"
-#args.method = "get"
+args.path = "get2"
+args.method = "get"
 
 if args.path is None or args.method is None:
     parser.print_help()
@@ -443,6 +507,10 @@ else:
     gravity = Gravity(GravityConfiguration("/home/kirubasankars/workspace/gravity/serve"))
     descriptor = gravity.create_descriptor(args.method, args.path)
     if descriptor is not None:
+        
+        input_model = descriptor.get_input_model()
+        input_shape = Shape(input_model, { "id" : 1 }, None) 
+
         execution_context = SQLiteExecutionContext()
         executor = descriptor.create_executor(execution_context)
-        print(executor.get_result_json(None))
+        print(executor.get_result_json(input_shape))
