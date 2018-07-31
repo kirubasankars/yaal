@@ -1,4 +1,5 @@
 import os
+import re
 import argparse
 import copy
 from collections import defaultdict
@@ -8,6 +9,9 @@ import json
 
 import sqlite3 as lite
 
+from flask import Flask 
+from flask import jsonify
+from flask import request
 
 class NodeExecutor:
 
@@ -64,15 +68,12 @@ class NodeExecutor:
         try:            
             execution_context.begin()
 
-            if input_type is not None and input_type == "list":
-                output = []
-                if node_descriptor.get_content() is not None:
-                    output = execution_context.execute(self, input)   
+            if input_type is not None and input_type == "list":                
+                output = execution_context.execute(self, input)   
                 # loop on input
                 # output.extend(execution_context.execute(self, input))
-            elif input_type is None or input_type == "object":
-                if node_descriptor.get_content() is not None:
-                    output = execution_context.execute(self, input)            
+            elif input_type is None or input_type == "object":                
+                output = execution_context.execute(self, input)
             
             if self._parent_rows == True:
                 output = copy.deepcopy(parent_rows)
@@ -82,7 +83,10 @@ class NodeExecutor:
                 for sub_node_executor in nodes:
                     sub_node_descriptor = sub_node_executor.get_node_descritor()
                     sub_node_name = sub_node_descriptor.get_name()
-                    sub_node_output = sub_node_executor._execute(input.get_prop(sub_node_name), output)                    
+                    sub_node_value = None
+                    if input is not None:
+                        sub_node_value = input.get_prop(sub_node_name)
+                    sub_node_output = sub_node_executor._execute(sub_node_value, output)                    
         
                     if output_partition_by is None:
                         for row in output:
@@ -170,6 +174,10 @@ class NodeExecutor:
     
     def get_nodes(self):
         return self._nodes 
+    
+    def create_input_shape(self, data):
+        input_model = self._node_descriptor.get_input_model()
+        return Shape(input_model, data, None) 
 
     def build(self):
         self._node_execution_builder.build(self)
@@ -196,7 +204,9 @@ class NodeDescriptor:
         self._name = name
         self._method = method
         self._path = path
-        self._root = root        
+        self._root = root
+        self._parameters = None
+        self._positional_parameters = None
         self._node_descriptor_builder = node_descriptor_builder
 
     def build(self, treemap, input_model, output_model):        
@@ -235,15 +245,64 @@ class NodeDescriptor:
     def get_output_model(self):
         return self._output_model
 
+    def set_parameters(self, parameters, positions):
+        self._parameters = parameters
+        self._positional_parameters = positions
+
+    def get_parameters(self):
+        return (self._parameters, self._positional_parameters)
+
     def create_executor(self, execution_context):
         node_execution_builder = NodeExecutorBuilder()
         node_executor = NodeExecutor(self, node_execution_builder, execution_context)
         node_executor.build()   
         return node_executor     
 
+class NodeDescriptorParameter:
+    def __init__(self, name, ptype):
+        self._name = name
+        self._ptype = ptype
+
+    def get_name(self):
+        return self._name
+
+    def get_type(self):
+        return self._ptype
+
 class NodeDescritporBuilder:
     def __init__(self, content_reader):
         self._content_reader = content_reader
+        self._parameters_meta_rx = re.compile("--\((.*)\)--")
+        self._parameter_meta_rx = re.compile("([A-Za-z0-9_.$-]+)(\s+(\w+))?")
+        self._parameter_rx = re.compile("\{\{([A-Za-z0-9_.$-]*?)\}\}", re.MULTILINE)
+
+    def parse_clean_parameters(self, node_descriptor):
+        content = node_descriptor.get_content()
+        lines = content.splitlines()
+
+        if len(lines) == 0:
+            return
+
+        first_line = lines[0]
+        parameters_meta_m = self._parameters_meta_rx.match(first_line)
+
+        meta = {}
+        if parameters_meta_m is not None:
+            params_meta = parameters_meta_m.groups(1)[0].split(",")
+            for p in params_meta:
+                parameter_meta_m = self._parameter_meta_rx.match(p)
+
+                if parameter_meta_m is not None:
+                    gm = parameter_meta_m.groups(1)
+                    if len(gm) > 0:
+                        parameter_name = gm[0].lower()
+                    if len(gm) > 1:
+                        parameter_type = gm[2]                    
+                    node_descriptor_parameter = NodeDescriptorParameter(parameter_name, parameter_type)
+                    meta[parameter_name] = node_descriptor_parameter
+            
+            node_descriptor.set_parameters(meta, [x.lower() for x in self._parameter_rx.findall(content)])            
+            node_descriptor.set_content("\r\n".join(lines[1:]))
 
     def build(self, node_descriptor, treemap, input_model, output_model):
         path = node_descriptor.get_path()
@@ -251,12 +310,20 @@ class NodeDescritporBuilder:
 
         content = self._content_reader.get_sql(method, path)
         node_descriptor.set_content(content)
+
+        if content is not None and content is not "":
+            self.parse_clean_parameters(node_descriptor)
+        
+        if input_model is None:
+            input_model = {
+                "_type" : "object"
+            }
         
         node_descriptor.set_input_model(input_model)        
         node_descriptor.set_output_model(output_model)
 
         sub_nodes_names = {}
-        for k in treemap:
+        for k in treemap:            
             sub_nodes_names[k] = treemap[k]
         
         output_model = node_descriptor.get_output_model()
@@ -275,13 +342,18 @@ class NodeDescritporBuilder:
 
             sub_input_model = None
             sub_output_model = None
-            if input_model is not None and k in input_model:
-                sub_input_model = input_model[k]            
+            
+            if k not in input_model:                
+                input_model[k] = {
+                    "_type" : "object"
+                }
+                sub_input_model = input_model[k]
+                        
             if output_model is not None and k in output_model:
                 sub_output_model = output_model[k]
 
             sub_node_descriptor.build(v, sub_input_model, sub_output_model)
-            nodes.append(sub_node_descriptor)            
+            nodes.append(sub_node_descriptor)
 
         node_descriptor.set_nodes(nodes)
 
@@ -376,7 +448,7 @@ class FileReader:
 
     def _get(self, file_path):        
         try:
-            print(file_path)
+            #print(file_path)
             with open(file_path, "r") as file:
                 content = file.read()
         except:
@@ -408,7 +480,7 @@ def _dict_factory(cursor, row):
 class SQLiteExecutionContext:
 
     def __init__(self):
-        pass
+        self._parameter_rx = re.compile("\{\{([A-Za-z0-9_.$-]*?)\}\}", re.MULTILINE)
 
     def begin(self):
         pass
@@ -419,14 +491,23 @@ class SQLiteExecutionContext:
     def error(self):
         pass
 
-    def execute(self, node_executor, input):
+    def execute(self, node_executor, input):        
         node_descriptor = node_executor.get_node_descritor()
+        content = node_descriptor.get_content()
+        if content is None:
+            return []
+        content = self._parameter_rx.sub("?", content)                    
         con = lite.connect(":memory:")
-        con.row_factory = _dict_factory
-
+        con.row_factory = _dict_factory        
+        
         with con:
-            cur = con.cursor()
-            cur.execute(node_descriptor.get_content())
+            cur = con.cursor()            
+            args = []
+            parameters, positional = node_descriptor.get_parameters()
+            if parameters is not None:
+                for p in positional:
+                    args.append(str(input.get_prop(p)))
+            cur.execute(content, [1])
             rows = cur.fetchall()
 
         return rows        
@@ -436,7 +517,7 @@ class Shape:
         self._list = False
         self._object = False
 
-        self.data = data
+        self.data = data or {}
         self.shapes = {}
         self._parent = parent_shape
         self._input_model = input_model
@@ -452,7 +533,7 @@ class Shape:
             else:
                 self._object = True
         
-        if self._list:
+        if self._list and data is not None:            
             idx = 0
             input_model["_type"] = "object"
             for item in data:                
@@ -465,7 +546,10 @@ class Shape:
                     if _typestr in v:
                         _type = v[_typestr]
                         if _type == "list" or _type == "object":
-                            self.shapes[k] = Shape(v, data.get(k), self)
+                            dvalue = None
+                            if data is not None and k in data:
+                                dvalue = data.get(k)
+                            self.shapes[k] = Shape(v, dvalue, self)
 
     def get_prop(self, prop):
         dot = prop.find(".")
@@ -493,24 +577,42 @@ class Shape:
             
             return None
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--path', help='path')
-parser.add_argument('--method', help='method')
-args = parser.parse_args()
+    def set_prop(self, prop, value):
+        dot = prop.find(".")
+        if dot > -1:
+            path = prop[:dot]
+            remaining_path = prop[dot+1:]
+            
+            if path == "$parent":
+                return self._parent.set_prop(remaining_path, value)
 
-args.path = "get2"
-args.method = "get"
+            if path in self.shapes:
+                return self.shapes[path].set_prop(remaining_path, value)
+        else:                       
+            self.data[prop] = value
 
-if args.path is None or args.method is None:
-    parser.print_help()
-else:
-    gravity = Gravity(GravityConfiguration("/home/kirubasankars/workspace/gravity/serve"))
-    descriptor = gravity.create_descriptor(args.method, args.path)
-    if descriptor is not None:
-        
-        input_model = descriptor.get_input_model()
-        input_shape = Shape(input_model, { "id" : 1 }, None) 
+app = Flask(__name__)
+gravity = Gravity(GravityConfiguration("/home/kirubasankars/workspace/gravity/serve"))
+execution_context = SQLiteExecutionContext()
 
-        execution_context = SQLiteExecutionContext()
+@app.route('/<app_name>/', defaults={'app_name':'','path': ''}, methods=['GET', 'POST', 'PUT', 'DELETE'])
+@app.route('/<app_name>/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE'])
+def hello(app_name, path):    
+    descriptor = gravity.create_descriptor(request.method.lower(), app_name + "/" + path)
+    if descriptor is not None:        
         executor = descriptor.create_executor(execution_context)
-        print(executor.get_result_json(input_shape))
+
+        input_shape = None
+        try:
+            ijson = request.get_json()                    
+            input_shape = executor.create_input_shape(ijson)
+        except:
+            input_shape = executor.create_input_shape(None)
+
+        for k, v in request.args.items():
+            input_shape.set_prop(k, v)
+    
+    return jsonify(executor.get_result(input_shape))
+
+if __name__ == '__main__':
+    app.run()
