@@ -1,4 +1,6 @@
 import json
+import copy
+from collections import defaultdict
 
 from shape import Shape
 
