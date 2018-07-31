@@ -1,7 +1,3 @@
-import argparse
-import copy
-from collections import defaultdict
-
 from nodedescriptor import NodeDescriptor
 from contentreader import FileReader
 from nodedescriptor import NodeDescritporBuilder
@@ -27,10 +23,11 @@ class Gravity:
     def create_descriptor(self, method, path):        
         return self._node_descriptor_factory.create(method, path)
 
-g = Gravity(GravityConfiguration("/home/kirubasankars/workspace/gravity/serve"))
-execution_context = SQLiteExecutionContext()
-descriptor = g.create_descriptor("get", "app/api/product")
-if descriptor is not None:        
-    e = descriptor.create_executor(execution_context)
-    input_shape = e.create_input_shape({ "id": 1 })
-    print(e.get_result_json(input_shape))
+if __name__ == '__main__':
+    gravity = Gravity(GravityConfiguration("/home/kirubasankars/workspace/gravity/serve"))
+    execution_context = SQLiteExecutionContext()
+    descriptor = gravity.create_descriptor("get", "app/api/product")
+    if descriptor is not None:        
+        executor = descriptor.create_executor(execution_context)
+        input_shape = executor.create_input_shape({ "id": 1 })
+        print(executor.get_result_json(input_shape))
