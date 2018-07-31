@@ -1,0 +1,8 @@
+output.model:
+    _type: object
+    ProductID:
+        _mapped: product_id
+    Items:
+        _type: object
+        test:
+            _mapped: test
