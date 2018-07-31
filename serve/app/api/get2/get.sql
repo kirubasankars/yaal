@@ -1,4 +1,4 @@
---(id)--
+--(id int)--
 
 select * from (
 SELECT 1 as order_id, '5/5/2018' as order_date, 1 as item_id, 1 as qty, 1 as product_id, 'Apple' as product_name
