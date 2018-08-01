@@ -1,20 +1,23 @@
 from flask import Flask
 from flask import request
-from flask import jsonify
+from flask import abort
 
 from gravity import Gravity
 from gravity import GravityConfiguration
 from gravity import SQLiteExecutionContext
 
 app = Flask(__name__)
-g = Gravity(GravityConfiguration("/home/kirubasankars/workspace/gravity/serve"))
+g = Gravity(GravityConfiguration("serve"))
 execution_context = SQLiteExecutionContext()
 
 @app.route('/<app_name>/api/', defaults={'app_name':'','path': ''}, methods=['GET', 'POST', 'PUT', 'DELETE'])
 @app.route('/<app_name>/api/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE'])
-def hello(app_name, path):    
-    descriptor = g.create_descriptor(request.method.lower(), app_name + "/api/" + path)
-    if descriptor is not None:        
+def hello(app_name, path):
+    try:
+        descriptor = g.create_descriptor(request.method.lower(), app_name + "/api/" + path)
+        if descriptor is None:
+            return ""
+
         e = descriptor.create_executor(execution_context)
 
         input_shape = None
@@ -27,7 +30,9 @@ def hello(app_name, path):
         for k, v in request.args.items():
             input_shape.set_prop(k, v)
     
-        return jsonify(e.get_result(input_shape))
+        return e.get_result_json(input_shape)        
+    except Exception as e:
+        print(e)
 
 if __name__ == '__main__':
     app.run()

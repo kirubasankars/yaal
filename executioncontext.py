@@ -21,22 +21,17 @@ class SQLiteExecutionContext:
     def error(self):
         pass
 
-    def execute(self, node_executor, input):        
+    def execute(self, node_executor, input_shape):        
         node_descriptor = node_executor.get_node_descritor()
         content = node_descriptor.get_content()
         if content is None:
             return []
         content = self._parameter_rx.sub("?", content)                    
-        con = lite.connect(":memory:")
-        con.row_factory = _dict_factory        
-        
+        con = lite.connect("chinook.db")
+        con.row_factory = _dict_factory    
         with con:
-            cur = con.cursor()            
-            args = []
-            parameters = node_descriptor.get_parameters()
-            if parameters is not None:
-                for p in parameters:
-                    args.append(input.get_prop(p.get_name()))
+            cur = con.cursor()
+            args = node_descriptor.build_parameter_values(input_shape)
             cur.execute(content, args)
             rows = cur.fetchall()
 
