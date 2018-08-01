@@ -23,7 +23,10 @@ class FileReader:
             content = None
         return content
 
-    def list_sql(self, method, path):        
-        files = os.listdir(os.path.join(*[self._gravity_configuration.get_root_path(), path]))
-        ffiles = [f.replace(".sql", "") for f in files if f.startswith(method) and f.endswith(".sql")]        
+    def list_sql(self, method, path):
+        try:     
+            files = os.listdir(os.path.join(*[self._gravity_configuration.get_root_path(), path]))
+            ffiles = [f.replace(".sql", "") for f in files if f.startswith(method) and f.endswith(".sql")]        
+        except:
+            ffiles = None
         return ffiles

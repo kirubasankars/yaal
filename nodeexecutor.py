@@ -49,7 +49,10 @@ class NodeExecutor:
     def get_nodes(self):
         return self._nodes
 
-    def _execute(self, input, parent_rows):
+    def build_parameters_values(self):
+        pass
+
+    def _execute(self, input_shape, parent_rows, parent_partition_by):
         execution_context =  self._execution_context
         node_descriptor = self.get_node_descritor()
         input_type = self._input_type
@@ -60,11 +63,14 @@ class NodeExecutor:
             execution_context.begin()
 
             if input_type is not None and input_type == "list":                
-                output = execution_context.execute(self, input)   
+                output = execution_context.execute(self, input_shape)
                 # loop on input
                 # output.extend(execution_context.execute(self, input))
-            elif input_type is None or input_type == "object":                
-                output = execution_context.execute(self, input)
+            elif input_type is None or input_type == "object":
+                output = execution_context.execute(self, input_shape)
+            
+            if self._parent_rows == True and parent_partition_by is None:
+                raise Exception("parent _partition_by is can't be empty when child wanted to use parent rows")
             
             if self._parent_rows == True:
                 output = copy.deepcopy(parent_rows)
@@ -75,9 +81,9 @@ class NodeExecutor:
                     sub_node_descriptor = sub_node_executor.get_node_descritor()
                     sub_node_name = sub_node_descriptor.get_name()
                     sub_node_value = None
-                    if input is not None:
-                        sub_node_value = input.get_prop(sub_node_name)
-                    sub_node_output = sub_node_executor._execute(sub_node_value, output)                    
+                    if input_shape is not None:
+                        sub_node_shape = input_shape.get_prop(sub_node_name)
+                    sub_node_output = sub_node_executor._execute(sub_node_shape, output, output_partition_by)                    
         
                     if output_partition_by is None:
                         for row in output:
@@ -101,7 +107,7 @@ class NodeExecutor:
             else:
                 pass
 
-        except Exception as e:            
+        except Exception as e:
             print(e)
             execution_context.error()  
             raise e
@@ -134,15 +140,15 @@ class NodeExecutor:
                     if type(v) == dict and (_typestr in v or _mappedstr in v):
                         if _mappedstr in v:
                             _mapped = v[_mappedstr]
-                            mapped_row[k] = row[v["_mapped"]]
-                            prop_count = prop_count + 1
+                            if _mapped in row:
+                                mapped_row[k] = row[_mapped]
+                            else:
+                                raise Exception(_mapped + " _mapped column missing from row")
                         else:
                             if _typestr in v:
                                 _type = v[_typestr]       
                                 if _type == "list" or _type == "object":
-                                    mapped_row[k] = sub_mapped_nodes[k]                    
-                    #if prop_count == 0:
-                    #    mapped_row = row
+                                    mapped_row[k] = sub_mapped_nodes[k]                
             else:
                 mapped_row = row
 
@@ -159,7 +165,7 @@ class NodeExecutor:
         return mapped_result
 
     def get_result(self, input):        
-        rs = self._execute(input, [])
+        rs = self._execute(input, [], None)
         rs = self.map(rs)        
         return rs
 
@@ -170,7 +176,7 @@ class NodeExecutor:
         self._nodes = nodes
     
     def get_nodes(self):
-        return self._nodes 
+        return self._nodes
     
     def create_input_shape(self, data):
         input_model = self._node_descriptor.get_input_model()

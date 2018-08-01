@@ -60,8 +60,27 @@ class NodeDescriptor:
     def create_executor(self, execution_context):
         node_execution_builder = NodeExecutorBuilder()
         node_executor = NodeExecutor(self, node_execution_builder, execution_context)
-        node_executor.build()   
-        return node_executor     
+        node_executor.build()
+        return node_executor
+
+    def build_parameter_values(self, input_shape):
+        values = []
+        if self._parameters is not None:
+            for p in self._parameters:
+                n = p.get_name()
+                t = p.get_type()
+
+                v = input_shape.get_prop(n)
+                if v is not None:
+                    if t == "integer":
+                        v = int(v)
+                    elif t == "string":
+                        v = str(v)
+                    else:
+                        v = str(v)    
+                values.append(v)
+
+        return values  
 
 class NodeDescriptorParameter:
     def __init__(self, name, ptype):
@@ -169,7 +188,10 @@ class NodeDescritporFactory:
         self._content_reader = content_reader
         self._node_descriptor_builder = node_descriptor_builder
 
-    def _order_list_by_dots(self, files):        
+    def _order_list_by_dots(self, files):
+        if files is None:
+            return []
+
         dots = [x.count(".") for x in files]
         ordered = []
         for x in range(0, len(dots)):
@@ -219,7 +241,7 @@ class NodeDescritporFactory:
         output_model_str = "output.model"
         input_model = None
         output_model = None        
-        if config_str is not None:
+        if config_str is not None and config_str != "":
             config = yaml.load(config_str)
             if input_model_str in config:
                 input_model = config[input_model_str]

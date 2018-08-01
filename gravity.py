@@ -1,8 +1,10 @@
+import argparse
+
 from nodedescriptor import NodeDescriptor
-from contentreader import FileReader
 from nodedescriptor import NodeDescritporBuilder
 from nodedescriptor import NodeDescritporFactory
 from executioncontext import SQLiteExecutionContext
+from contentreader import FileReader
 
 class GravityConfiguration:
 
@@ -24,10 +26,20 @@ class Gravity:
         return self._node_descriptor_factory.create(method, path)
 
 if __name__ == '__main__':
-    gravity = Gravity(GravityConfiguration("/home/kirubasankars/workspace/gravity/serve"))
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--path', help='path')
+    parser.add_argument('--method', help='method')
+    args = parser.parse_args()
+    
+    if args.path is None or args.method is None:
+        args.path = "app/api/order/search"
+        args.method = "get"
+
+    gravity = Gravity(GravityConfiguration("serve"))
     execution_context = SQLiteExecutionContext()
-    descriptor = gravity.create_descriptor("get", "app/api/product")
+    descriptor = gravity.create_descriptor(args.method, args.path)
+
     if descriptor is not None:        
         executor = descriptor.create_executor(execution_context)
-        input_shape = executor.create_input_shape({ "id": 1 })
+        input_shape = executor.create_input_shape({ "id": "3" })
         print(executor.get_result_json(input_shape))
