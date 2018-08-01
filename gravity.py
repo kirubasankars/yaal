@@ -32,7 +32,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     if args.path is None or args.method is None:
-        args.path = "app/api/order/search"
+        args.path = "app/api/product"
         args.method = "get"
 
     gravity = Gravity(GravityConfiguration("serve"))
@@ -41,5 +41,5 @@ if __name__ == '__main__':
 
     if descriptor is not None:        
         executor = descriptor.create_executor(execution_context)
-        input_shape = executor.create_input_shape({ "id": "3" })
+        input_shape = executor.create_input_shape(None)
         print(executor.get_result_json(input_shape))

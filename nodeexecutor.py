@@ -20,9 +20,9 @@ class NodeExecutor:
         self._output_partition_by = None
         self._parent_rows = None
 
-        _typestr = "_type"
-        _partitionbystr = "_partition_by"
-        _parentrowsstr = "_parent_rows"
+        _typestr = "type"
+        _partitionbystr = "partition_by"
+        _parentrowsstr = "parent_rows"
         if self._input_model is not None and _typestr in self._input_model:
             self._input_type = self._input_model[_typestr]
         
@@ -62,7 +62,7 @@ class NodeExecutor:
         try:            
             execution_context.begin()
 
-            if input_type is not None and input_type == "list":                
+            if input_type is not None and input_type == "array":                
                 output = execution_context.execute(self, input_shape)
                 # loop on input
                 # output.extend(execution_context.execute(self, input))
@@ -132,23 +132,25 @@ class NodeExecutor:
                         sub_mapped_nodes[sub_node_name] = sub_node_executor.map(row[sub_node_name])
 
             output_model = self._output_model
-            _typestr = "_type"
-            _mappedstr = "_mapped"
+            _typestr = "type"
+            _mappedstr = "mapped"
+            _propertiesstr = "properties"
             if output_model is not None:
-                prop_count = 0
-                for k, v in output_model.items():
-                    if type(v) == dict and (_typestr in v or _mappedstr in v):
-                        if _mappedstr in v:
-                            _mapped = v[_mappedstr]
-                            if _mapped in row:
-                                mapped_row[k] = row[_mapped]
+                if _propertiesstr in  output_model:
+                    output_model_properties = output_model[_propertiesstr]
+                    for k, v in output_model_properties.items():
+                        if type(v) == dict and (_typestr in v or _mappedstr in v):
+                            if _mappedstr in v:
+                                _mapped = v[_mappedstr]
+                                if _mapped in row:
+                                    mapped_row[k] = row[_mapped]
+                                else:
+                                    raise Exception(_mapped + " _mapped column missing from row")
                             else:
-                                raise Exception(_mapped + " _mapped column missing from row")
-                        else:
-                            if _typestr in v:
-                                _type = v[_typestr]       
-                                if _type == "list" or _type == "object":
-                                    mapped_row[k] = sub_mapped_nodes[k]                
+                                if _typestr in v:
+                                    _type = v[_typestr]       
+                                    if _type == "array" or _type == "object":
+                                        mapped_row[k] = sub_mapped_nodes[k]                
             else:
                 mapped_row = row
 

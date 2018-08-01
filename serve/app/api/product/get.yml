@@ -1,8 +1,10 @@
 output.model:
-    _type: object
-    ProductID:
-        _mapped: product_id
-    Items:
-        _type: object
-        test:
-            _mapped: test
+    type: object
+    properties:
+        ProductID:
+            mapped: product_id
+        Items:            
+            type: object
+            properties:
+                test:
+                    mapped: test
