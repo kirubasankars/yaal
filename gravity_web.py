@@ -10,11 +10,11 @@ app = Flask(__name__)
 g = Gravity(GravityConfiguration("serve"))
 execution_context = SQLiteExecutionContext()
 
-@app.route('/<app_name>/api/', defaults={'app_name':'','path': ''}, methods=['GET', 'POST', 'PUT', 'DELETE'])
-@app.route('/<app_name>/api/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE'])
-def hello(app_name, path):
+@app.route('/<application>/api/', defaults={'app_name':'','path': ''}, methods=['GET', 'POST', 'PUT', 'DELETE'])
+@app.route('/<application>/api/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE'])
+def hello(application, path):
     try:
-        descriptor = g.create_descriptor(request.method.lower(), app_name + "/api/" + path)
+        descriptor = g.create_descriptor(request.method.lower(), application + "/api/" + path)
         if descriptor is None:
             return ""
 

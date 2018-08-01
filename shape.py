@@ -13,27 +13,27 @@ class Shape:
         if input_model is None:
             return
 
-        _typestr = "_type"
+        _typestr = "type"
         if _typestr in input_model:
             _type = input_model[_typestr]
-            if _type == "list":
+            if _type == "array":
                 self._list = True                
             else:
                 self._object = True
         
         if self._list and data is not None:            
             idx = 0
-            input_model["_type"] = "object"
+            input_model[_typestr] = "object"
             for item in data:                
                 self.shapes["@" + str(idx)] = Shape(input_model, item, self)                
                 idx = idx + 1
-            input_model["_type"] = "list"
+            input_model[_typestr] = "array"
         else:
             for k, v in input_model.items():
                 if k != _typestr and type(v) == dict:
                     if _typestr in v:
                         _type = v[_typestr]
-                        if _type == "list" or _type == "object":
+                        if _type == "array" or _type == "object":
                             dvalue = None
                             if data is not None and k in data:
                                 dvalue = data.get(k)

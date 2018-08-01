@@ -141,7 +141,7 @@ class NodeDescritporBuilder:
         
         if input_model is None:
             input_model = {
-                "_type" : "object"
+                "type" : "object"
             }
         
         node_descriptor.set_input_model(input_model)        
@@ -151,14 +151,13 @@ class NodeDescritporBuilder:
         for k in treemap:            
             sub_nodes_names[k] = treemap[k]
         
-        output_model = node_descriptor.get_output_model()
-        _typestr = "_type"
+        _propertiesstr = "properties"
+        output_model = node_descriptor.get_output_model()        
         if output_model is not None:
-            for k, v in output_model.items():
-                if type(v) == dict and _typestr in v:                        
-                    _type = v[_typestr]       
-                    if _type == "list" or _type == "object":
-                        sub_nodes_names[k] = {}
+            if _propertiesstr in output_model:
+                for k, v in output_model[_propertiesstr].items():
+                    if type(v) == dict and _propertiesstr in v:                        
+                            sub_nodes_names[k] = {}
         
         nodes = []
         for k, v in sub_nodes_names.items():
@@ -170,12 +169,14 @@ class NodeDescritporBuilder:
             
             if k not in input_model:                
                 input_model[k] = {
-                    "_type" : "object"
+                    "type" : "object"
                 }
                 sub_input_model = input_model[k]
-                        
-            if output_model is not None and k in output_model:
-                sub_output_model = output_model[k]
+            
+            if output_model is not None:
+                if _propertiesstr in output_model:
+                    if k in output_model[_propertiesstr]:
+                        sub_output_model = output_model[_propertiesstr][k]
 
             sub_node_descriptor.build(v, sub_input_model, sub_output_model)
             nodes.append(sub_node_descriptor)
