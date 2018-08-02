@@ -1,9 +1,7 @@
 input.model:
-  type: object
-  order_date:
-    type: date
-  items:
-    type: array
+  type: array
+  test:
+    type: integer
 
 output.model:
-
+  type: array

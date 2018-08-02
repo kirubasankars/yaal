@@ -62,10 +62,11 @@ class NodeExecutor:
         try:            
             execution_context.begin()
 
-            if input_type is not None and input_type == "array":                
-                output = execution_context.execute(self, input_shape)
-                # loop on input
-                # output.extend(execution_context.execute(self, input))
+            if input_type is not None and input_type == "array":
+                length = int(input_shape.get_prop("$length"))
+                for i in range(0, length):
+                    sub_output = execution_context.execute(self, input_shape.get_prop("@" + str(i)))
+                    output.extend(sub_output)
             elif input_type is None or input_type == "object":
                 output = execution_context.execute(self, input_shape)
             
@@ -136,21 +137,25 @@ class NodeExecutor:
             _mappedstr = "mapped"
             _propertiesstr = "properties"
             if output_model is not None:
+                prop_count = 0
                 if _propertiesstr in  output_model:
-                    output_model_properties = output_model[_propertiesstr]
+                    output_model_properties = output_model[_propertiesstr]                
                     for k, v in output_model_properties.items():
                         if type(v) == dict and (_typestr in v or _mappedstr in v):
                             if _mappedstr in v:
                                 _mapped = v[_mappedstr]
                                 if _mapped in row:
                                     mapped_row[k] = row[_mapped]
+                                    prop_count = prop_count + 1
                                 else:
                                     raise Exception(_mapped + " _mapped column missing from row")
                             else:
                                 if _typestr in v:
                                     _type = v[_typestr]       
                                     if _type == "array" or _type == "object":
-                                        mapped_row[k] = sub_mapped_nodes[k]                
+                                        mapped_row[k] = sub_mapped_nodes[k]
+                if prop_count == 0:
+                    mapped_row = row                                   
             else:
                 mapped_row = row
 
@@ -166,13 +171,13 @@ class NodeExecutor:
                 mapped_result = {}
         return mapped_result
 
-    def get_result(self, input):        
-        rs = self._execute(input, [], None)
+    def get_result(self, input_shape):        
+        rs = self._execute(input_shape, [], None)
         rs = self.map(rs)        
         return rs
 
-    def get_result_json(self, input):        
-        return json.dumps(self.get_result(input), indent = 4)
+    def get_result_json(self, input_shape):        
+        return json.dumps(self.get_result(input_shape), indent = 4)
 
     def set_nodes(self, nodes):
         self._nodes = nodes

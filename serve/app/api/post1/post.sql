@@ -1,1 +1,3 @@
-SELECT 1 as name;
+--(test integer)--
+
+SELECT {{test}} as name;
