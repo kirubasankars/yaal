@@ -8,7 +8,11 @@ def _dict_factory(cursor, row):
     return d
 
 class SQLiteExecutionContext:
-        
+    
+    def __init__(self, gravity_configuration):
+        self._gravity_configuration = gravity_configuration
+        self._db_path = gravity_configuration.get_root_path() + "/db"
+
     def begin(self):
         pass
 
@@ -27,7 +31,7 @@ class SQLiteExecutionContext:
         
         content = node_descriptor.get_executable_content("?")                    
         
-        con = lite.connect("chinook.db")
+        con = lite.connect(self._db_path + "/chinook.db")
         con.row_factory = _dict_factory    
         with con:
             cur = con.cursor()

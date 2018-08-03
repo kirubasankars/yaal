@@ -1,4 +1,4 @@
---($parent.id)--
+--($parent.id integer)--
 
 select * from (SELECT 1 as item_id, 1 as qty, 1 as product_id, 'Apple' as product_name, 1 as order_id
 union all

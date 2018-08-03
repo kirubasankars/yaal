@@ -16,11 +16,40 @@ class GravityConfiguration:
 
 class Gravity:
 
-    def __init__(self, gravity_configuration):
+    def __init__(self, gravity_configuration, execution_context_name):
+        self._descriptors = {}
+        self._executors = {}        
         self._gravity_configuration = gravity_configuration
-        self._content_reader = FileReader(self._gravity_configuration)
+        self._content_reader = FileReader(gravity_configuration)
+        self._execution_context = self._create_execution_context(execution_context_name)
         self._node_descriptor_builder = NodeDescritporBuilder(self._content_reader)
         self._node_descriptor_factory = NodeDescritporFactory(self._content_reader, self._node_descriptor_builder)
 
-    def create_descriptor(self, method, path):        
-        return self._node_descriptor_factory.create(method, path)
+    def _create_execution_context(self, name):
+        if name == "sqlite3":
+            return SQLiteExecutionContext(self._gravity_configuration)
+        raise Exception("no matching execution context")
+    
+    def create_executor(self, method, path, debug):
+        
+        k = path + "/" + method        
+        if debug == False and  k in self._executors:
+            return self._executors[k]
+        
+        descriptor = self.create_descriptor(method, path, debug)
+        if descriptor is None:
+            return None
+
+        executor = descriptor.create_executor(self._execution_context)
+        self._executors[k] = executor
+        return executor 
+
+    def create_descriptor(self, method, path, debug):
+        
+        k = path + "/" + method        
+        if debug == False and  k in self._descriptors:
+            return self._descriptors[k]            
+        
+        descriptor = self._node_descriptor_factory.create(method, path)
+        self._descriptors[k] = descriptor
+        return descriptor
