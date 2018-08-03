@@ -12,31 +12,6 @@ class NodeExecutor:
         self._execution_context = execution_context        
         self._nodes = {}
 
-        self._input_model = node_descriptor.get_input_model()
-        self._output_model = node_descriptor.get_output_model()
-        
-        self._input_type = None
-        self._output_type = None
-        self._output_partition_by = None
-        self._parent_rows = None
-
-        _typestr = "type"
-        _partitionbystr = "partition_by"
-        _parentrowsstr = "parent_rows"
-        if self._input_model is not None and _typestr in self._input_model:
-            self._input_type = self._input_model[_typestr]
-        
-        if self._output_model is not None and _typestr in self._output_model:
-            self._output_type = self._output_model[_typestr]
-        
-        if self._output_model is not None and _partitionbystr in self._output_model:
-            self._output_partition_by = self._output_model[_partitionbystr]
-
-        if self._output_model is not None and _parentrowsstr in self._output_model:
-            self._parent_rows = self._output_model[_parentrowsstr]
-
-        output_model = self._output_model
-
     def get_node_descritor(self):
         return self._node_descriptor
 
@@ -55,25 +30,42 @@ class NodeExecutor:
     def _execute(self, input_shape, parent_rows, parent_partition_by):
         execution_context =  self._execution_context
         node_descriptor = self.get_node_descritor()
-        input_type = self._input_type
-        output_partition_by = self._output_partition_by
-    
-        output = []        
+        input_type = node_descriptor.get_input_type()        
+        output_partition_by = node_descriptor.get_partition_by()
+        use_parent_rows = node_descriptor.get_use_parent_rows()
+
+        output = []
         try:            
             execution_context.begin()
 
             if input_type is not None and input_type == "array":
+
                 length = int(input_shape.get_prop("$length"))
                 for i in range(0, length):
-                    sub_output = execution_context.execute(self, input_shape.get_prop("@" + str(i)))
-                    output.extend(sub_output)
-            elif input_type is None or input_type == "object":
-                output = execution_context.execute(self, input_shape)
+                    
+                    item_input_shape = input_shape.get_prop("@" + str(i))
+                    sub_output = execution_context.execute(self, item_input_shape)
+                    if len(sub_output) == 1:
+                        output0 = sub_output[0]
+                        if "params" in output0 and output0["params"] == 1:
+                            for k, v in output0.items():
+                                item_input_shape.set_prop(k, v)
+                        else:
+                            output.extend(sub_output)
             
-            if self._parent_rows == True and parent_partition_by is None:
+            elif input_type is None or input_type == "object":
+
+                output = execution_context.execute(self, input_shape)                
+                if len(output) == 1:
+                    output0 = output[0]
+                    if "params" in output0 and output0["params"] == 1:
+                        for k, v in output[0].items():
+                            input_shape.set_prop(k, v)                
+            
+            if use_parent_rows == True and parent_partition_by is None:
                 raise Exception("parent _partition_by is can't be empty when child wanted to use parent rows")
             
-            if self._parent_rows == True:
+            if use_parent_rows == True:
                 output = copy.deepcopy(parent_rows)
 
             nodes = self.get_nodes()
@@ -82,6 +74,7 @@ class NodeExecutor:
                     sub_node_descriptor = sub_node_executor.get_node_descritor()
                     sub_node_name = sub_node_descriptor.get_name()
                     sub_node_value = None
+                    sub_node_shape = None
                     if input_shape is not None:
                         sub_node_shape = input_shape.get_prop(sub_node_name)
                     sub_node_output = sub_node_executor._execute(sub_node_shape, output, output_partition_by)                    
@@ -120,6 +113,9 @@ class NodeExecutor:
     def map(self, result):        
         mapped_result = []        
         
+        output_properties = self._node_descriptor.get_output_properties()
+        output_type = self._node_descriptor.get_output_type()
+
         for row in result:
             mapped_row = {}
             sub_mapped_nodes = {}
@@ -131,29 +127,25 @@ class NodeExecutor:
                     
                     if sub_node_name in row:
                         sub_mapped_nodes[sub_node_name] = sub_node_executor.map(row[sub_node_name])
-
-            output_model = self._output_model
+            
             _typestr = "type"
-            _mappedstr = "mapped"
-            _propertiesstr = "properties"
-            if output_model is not None:
+            _mappedstr = "mapped"                                  
+            if output_properties is not None:
                 prop_count = 0
-                if _propertiesstr in  output_model:
-                    output_model_properties = output_model[_propertiesstr]                
-                    for k, v in output_model_properties.items():
-                        if type(v) == dict and (_typestr in v or _mappedstr in v):
-                            if _mappedstr in v:
-                                _mapped = v[_mappedstr]
-                                if _mapped in row:
-                                    mapped_row[k] = row[_mapped]
-                                    prop_count = prop_count + 1
-                                else:
-                                    raise Exception(_mapped + " _mapped column missing from row")
+                for k, v in output_properties.items():
+                    if type(v) == dict and (_typestr in v or _mappedstr in v):
+                        if _mappedstr in v:
+                            _mapped = v[_mappedstr]
+                            if _mapped in row:
+                                mapped_row[k] = row[_mapped]
+                                prop_count = prop_count + 1
                             else:
-                                if _typestr in v:
-                                    _type = v[_typestr]       
-                                    if _type == "array" or _type == "object":
-                                        mapped_row[k] = sub_mapped_nodes[k]
+                                raise Exception(_mapped + " _mapped column missing from row")
+                        else:
+                            if _typestr in v:
+                                _type = v[_typestr]       
+                                if _type == "array" or _type == "object":
+                                    mapped_row[k] = sub_mapped_nodes[k]
                 if prop_count == 0:
                     mapped_row = row                                   
             else:
@@ -164,7 +156,7 @@ class NodeExecutor:
 
             mapped_result.append(mapped_row)
 
-        if self._output_type == "object":
+        if output_type == "object":
             if len(mapped_result) > 0:
                 mapped_result = mapped_result[0]
             else:
