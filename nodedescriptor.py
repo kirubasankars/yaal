@@ -11,9 +11,17 @@ class NodeDescriptor:
         self._method = method
         self._path = path
         self._root = root
-        self._parameters = None
-        self._positional_parameters = None
+        self._parameters = None    
         self._node_descriptor_builder = node_descriptor_builder
+        self._input_type = None
+        self._output_type = None
+        self._output_model = None
+        self._input_model = None
+        self._output_properties = None
+        self._input_properties = None
+        self._partition_by = None
+        self._nodes = None
+        self._use_parent_rows = None
 
     def build(self, treemap, input_model, output_model):        
         self._node_descriptor_builder.build(self, treemap, input_model, output_model)
@@ -45,11 +53,47 @@ class NodeDescriptor:
     def get_input_model(self):        
         return self._input_model
 
+    def set_input_type(self, input_type):
+        self._input_type = input_type
+    
+    def get_input_type(self):        
+        return self._input_type
+
+    def set_output_type(self, output_type):
+        self._output_type = output_type
+    
+    def get_output_type(self):        
+        return self._output_type
+
+    def set_input_properties(self, input_properties):
+        self._input_properties = input_properties
+    
+    def get_input_properties(self):        
+        return self._input_properties
+
+    def set_output_properties(self, output_properties):
+        self._output_properties = output_properties
+    
+    def get_output_properties(self):        
+        return self._output_properties
+
     def set_output_model(self, output_model):
         self._output_model = output_model
     
     def get_output_model(self):
         return self._output_model
+
+    def set_partition_by(self, partition_by):
+        self._partition_by = partition_by
+    
+    def get_partition_by(self):
+        return self._partition_by
+
+    def set_use_parent_rows(self, use_parent_rows):
+        self._use_parent_rows = use_parent_rows
+    
+    def get_use_parent_rows(self):
+        return self._use_parent_rows
 
     def set_parameters(self, parameters):
         self._parameters = parameters
@@ -138,27 +182,52 @@ class NodeDescritporBuilder:
 
         if content is not None and content is not "":            
             self.parse_clean_parameters(node_descriptor)
-        
-        if input_model is None:
-            input_model = {
-                "type" : "object"
-            }
-        
-        node_descriptor.set_input_model(input_model)        
-        node_descriptor.set_output_model(output_model)
 
         sub_nodes_names = {}
         for k in treemap:            
-            sub_nodes_names[k] = treemap[k]
-        
+            sub_nodes_names[k] = treemap[k]        
+
         _propertiesstr = "properties"
-        output_model = node_descriptor.get_output_model()        
-        if output_model is not None:
-            if _propertiesstr in output_model:
-                for k, v in output_model[_propertiesstr].items():
-                    if type(v) == dict and _propertiesstr in v:                        
-                            sub_nodes_names[k] = {}
+        _typestr = "type"
+        _partitionbystr = "partition_by"
+        _parentrowsstr = "parent_rows"
+        if input_model is None:
+            input_model = {
+                "type" : "object",
+                "properties" : {}
+            }
+        if _propertiesstr not in input_model:
+            input_model["properties"] = {}
         
+        node_descriptor.set_input_type(input_model[_typestr])
+
+        node_descriptor.set_input_model(input_model)        
+        node_descriptor.set_output_model(output_model)
+        
+        input_properties = input_model[_propertiesstr]
+        node_descriptor.set_input_properties(input_properties)
+        
+        output_properties = None        
+        if output_model is not None:
+            if _typestr in output_model:
+                output_type = output_model[_typestr]
+                node_descriptor.set_output_type(output_type)
+                        
+            if _propertiesstr in output_model:
+                output_properties = output_model[_propertiesstr]
+                node_descriptor.set_output_properties(output_properties)
+
+            if _parentrowsstr in output_model:
+                node_descriptor.set_use_parent_rows(output_model[_parentrowsstr])
+
+            if _partitionbystr in output_model:
+                node_descriptor.set_partition_by(output_model[_partitionbystr])
+                   
+            if output_properties is not None:            
+                for k, v in output_properties.items():
+                    if type(v) == dict and _propertiesstr in v:                        
+                        sub_nodes_names[k] = {}
+
         nodes = []
         for k, v in sub_nodes_names.items():
             name = ".".join([method, k])
@@ -166,17 +235,17 @@ class NodeDescritporBuilder:
 
             sub_input_model = None
             sub_output_model = None
-            
-            if k not in input_model:                
-                input_model[k] = {
-                    "type" : "object"
+                        
+            if k not in input_properties:
+                input_properties[k] = {
+                    "type" : "object",
+                    "properties" : {}
                 }
-                sub_input_model = input_model[k]
+                sub_input_model = input_properties[k]
             
-            if output_model is not None:
-                if _propertiesstr in output_model:
-                    if k in output_model[_propertiesstr]:
-                        sub_output_model = output_model[_propertiesstr][k]
+            if output_properties is not None:                
+                if k in output_properties:
+                    sub_output_model = output_properties[k]
 
             sub_node_descriptor.build(v, sub_input_model, sub_output_model)
             nodes.append(sub_node_descriptor)

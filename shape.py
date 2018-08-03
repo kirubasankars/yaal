@@ -29,15 +29,18 @@ class Shape:
                 idx = idx + 1
             input_model[_typestr] = "array"
         else:
-            for k, v in input_model.items():
-                if k != _typestr and type(v) == dict:
-                    if _typestr in v:
-                        _type = v[_typestr]
-                        if _type == "array" or _type == "object":
-                            dvalue = None
-                            if data is not None and k in data:
-                                dvalue = data.get(k)
-                            self.shapes[k] = Shape(v, dvalue, self)
+            _propertiesstr = "properties"
+            if _propertiesstr in input_model:
+                input_model_properties = input_model[_propertiesstr]                
+                if input_model_properties is not None:
+                    for k, v in input_model_properties.items():
+                        if type(v) == dict and _typestr in v:                        
+                            _type = v[_typestr]
+                            if _type == "array" or _type == "object":
+                                dvalue = None
+                                if data is not None and k in data:
+                                    dvalue = data.get(k)
+                                self.shapes[k] = Shape(v, dvalue, self)
 
     def get_prop(self, prop):
         dot = prop.find(".")

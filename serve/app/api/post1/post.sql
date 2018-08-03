@@ -1,3 +1,3 @@
 --(test integer)--
 
-SELECT {{test}} as name;
+SELECT 1 as params, {{test}} as name;
