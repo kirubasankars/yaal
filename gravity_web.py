@@ -7,19 +7,20 @@ from gravity import GravityConfiguration
 from gravity import SQLiteExecutionContext
 
 app = Flask(__name__)
-g = Gravity(GravityConfiguration("serve"))
-execution_context = SQLiteExecutionContext()
+apps = {}
 
 @app.route('/<application>/api/', defaults={'app_name':'','path': ''}, methods=['GET', 'POST', 'PUT', 'DELETE'])
 @app.route('/<application>/api/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE'])
 def hello(application, path):
     try:
-        descriptor = g.create_descriptor(request.method.lower(), application + "/api/" + path)
-        if descriptor is None:
-            return ""
-
-        e = descriptor.create_executor(execution_context)
-
+        g = None
+        if application in apps:
+            g = apps[application]            
+        else:
+            g = Gravity(GravityConfiguration("serve/" + application), "sqlite3")
+            apps[application] = g
+        
+        e = g.create_executor(request.method.lower(), "api/" + path, False)
         input_shape = None
         try:
             ijson = request.get_json()                    
@@ -30,7 +31,7 @@ def hello(application, path):
         for k, v in request.args.items():
             input_shape.set_prop(k, v)
     
-        return e.get_result_json(input_shape)        
+        return e.get_result_json(input_shape)
     except Exception as e:
         print(e)
 

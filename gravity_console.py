@@ -1,7 +1,6 @@
 import argparse
 
 from gravity import Gravity, GravityConfiguration
-from executioncontext import SQLiteExecutionContext
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -11,16 +10,14 @@ if __name__ == '__main__':
     
     if args.path is None or args.method is None:
         parser.print_help()
-        exit() 
+        #exit() 
     
-    #args.path = "app/api/get1"
-    #args.method = "get"
+    args.path = "api/customer"
+    args.method = "get"
 
-    gravity = Gravity(GravityConfiguration("serve"))
-    execution_context = SQLiteExecutionContext()
-    descriptor = gravity.create_descriptor(args.method, args.path)
+    gravity = Gravity(GravityConfiguration("serve/app"), "sqlite3")
+    executor = gravity.create_executor(args.method, args.path, False)
 
-    if descriptor is not None:        
-        executor = descriptor.create_executor(execution_context)
+    if executor is not None:                
         input_shape = executor.create_input_shape(None)
         print(executor.get_result_json(input_shape))
