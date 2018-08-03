@@ -25,7 +25,7 @@ class SQLiteExecutionContext:
         if content is None:
             return []
         
-        content = node_descriptor.get_content_replaced_parameters("?")                    
+        content = node_descriptor.get_executable_content("?")                    
         
         con = lite.connect("chinook.db")
         con.row_factory = _dict_factory    

@@ -126,7 +126,7 @@ class NodeDescriptor:
 
         return values  
 
-    def get_content_replaced_parameters(self, sub_chr):
+    def get_executable_content(self, sub_chr):
         self._parameter_rx = re.compile("\{\{([A-Za-z0-9_.$-]*?)\}\}", re.MULTILINE)
         return self._parameter_rx.sub("?", self._content)
 
