@@ -32,8 +32,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     if args.path is None or args.method is None:
-        args.path = "app/api/product"
-        args.method = "get"
+        args.path = "app/api/post1"
+        args.method = "post"
 
     gravity = Gravity(GravityConfiguration("serve"))
     execution_context = SQLiteExecutionContext()
@@ -41,5 +41,5 @@ if __name__ == '__main__':
 
     if descriptor is not None:        
         executor = descriptor.create_executor(execution_context)
-        input_shape = executor.create_input_shape({ "name" : "dasd"})
+        input_shape = executor.create_input_shape([{ "name" : "dasd"}])
         print(executor.get_result_json(input_shape))

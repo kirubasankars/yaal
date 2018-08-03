@@ -24,7 +24,9 @@ class Shape:
         if self._list and data is not None:            
             idx = 0
             input_model[_typestr] = "object"
-            for item in data:                
+            if type(data) != list:
+                raise TypeError("input expected as array. object is given.")
+            for item in data:
                 self.shapes["@" + str(idx)] = Shape(input_model, item, self)                
                 idx = idx + 1
             input_model[_typestr] = "array"
