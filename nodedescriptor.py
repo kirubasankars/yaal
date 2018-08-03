@@ -127,6 +127,7 @@ class NodeDescriptor:
         return values  
 
 class NodeDescriptorParameter:
+    
     def __init__(self, name, ptype):
         self._name = name
         self._ptype = ptype
@@ -138,6 +139,7 @@ class NodeDescriptorParameter:
         return self._ptype
 
 class NodeDescritporBuilder:
+
     def __init__(self, content_reader):
         self._content_reader = content_reader
         self._parameters_meta_rx = re.compile("--\((.*)\)--")
