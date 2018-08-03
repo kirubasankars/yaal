@@ -24,22 +24,3 @@ class Gravity:
 
     def create_descriptor(self, method, path):        
         return self._node_descriptor_factory.create(method, path)
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--path', help='path')
-    parser.add_argument('--method', help='method')
-    args = parser.parse_args()
-    
-    if args.path is None or args.method is None:
-        args.path = "app/api/post1"
-        args.method = "post"
-
-    gravity = Gravity(GravityConfiguration("serve"))
-    execution_context = SQLiteExecutionContext()
-    descriptor = gravity.create_descriptor(args.method, args.path)
-
-    if descriptor is not None:        
-        executor = descriptor.create_executor(execution_context)
-        input_shape = executor.create_input_shape([{ "name" : "dasd"}])
-        print(executor.get_result_json(input_shape))
