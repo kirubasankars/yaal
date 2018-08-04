@@ -1,15 +1,15 @@
 import re
-import yaml
 
 from nodeexecutor import NodeExecutorBuilder
 from nodeexecutor import NodeExecutor
 
 class NodeDescriptor:
 
-    def __init__(self, name, method, path, root, node_descriptor_builder):
+    def __init__(self, name, method, path, parent_node_descriptor, root, node_descriptor_builder):
         self._name = name
         self._method = method
         self._path = path
+        self._parent_node_descriptor = parent_node_descriptor
         self._root = root
         self._parameters = None    
         self._node_descriptor_builder = node_descriptor_builder
@@ -111,38 +111,71 @@ class NodeDescriptor:
         values = []
         if self._parameters is not None:
             for p in self._parameters:
-                n = p.get_name()
-                t = p.get_type()
+                pname = p.get_name()
+                ptype = p.get_type()
+                prequired = p.get_is_required()
 
-                v = input_shape.get_prop(n)
+                pvalue = input_shape.get_prop(pname)
+                if prequired == True and pvalue is None:
+                    raise Exception("parameter " + pname + " is required. can't be none.")
+
                 try:
-                    if t == "integer":
-                        v = int(v)
-                    elif t == "string":
-                        v = str(v)
+                    if ptype == "integer":
+                        pvalue = int(pvalue)
+                    elif ptype == "string":
+                        pvalue = str(pvalue)
                     else:
-                        v = str(v)
-                    values.append(v)
+                        pvalue = str(pvalue)
+                    values.append(pvalue)
                 except:
-                    raise Exception("parameter " + n + " should be " + t + ", given value is " + str(v))
-        return values  
+                    if prequired == True:
+                        raise Exception("parameter " + pname + " should be " + ptype + ", given value is " + str(pvalue))
+                    else:
+                        pass
+        return values
 
     def get_executable_content(self, sub_chr):
         self._parameter_rx = re.compile("\{\{([A-Za-z0-9_.$-]*?)\}\}", re.MULTILINE)
         return self._parameter_rx.sub("?", self._content)
 
+    def get_input_propery_definition(self, prop):        
+        dot = prop.find(".")
+        if dot > -1:
+            path = prop[:dot]
+            remaining_path = prop[dot+1:]
+            
+            if path == "$parent":
+                return self._parent_node_descriptor.get_input_propery_definition(remaining_path)            
+        else:
+            if prop == "$parent":
+                return self._parent_node_descriptor
+
+            if prop in self._input_properties:
+                return self._input_properties[prop]
+                
+            return None
 
 class NodeDescriptorParameter:
     
-    def __init__(self, name, ptype):
+    def __init__(self, name, ptype, property_def):
         self._name = name
         self._ptype = ptype
+        self._required = False
+        self._prop_def = property_def
+
+        _requiredstr = "required"
+        if _requiredstr in property_def:
+            if property_def[_requiredstr] == True:
+                self._required = True
 
     def get_name(self):
         return self._name
 
     def get_type(self):
         return self._ptype
+
+    def get_is_required(self):
+        return self._required
 
 class NodeDescritporBuilder:
 
@@ -173,8 +206,9 @@ class NodeDescritporBuilder:
                     if len(gm) > 0:
                         parameter_name = gm[0].lower()
                     if len(gm) > 1:
-                        parameter_type = gm[2]                    
-                    node_descriptor_parameter = NodeDescriptorParameter(parameter_name, parameter_type)
+                        parameter_type = gm[2]
+                    prop_def = node_descriptor.get_input_propery_definition(parameter_name)
+                    node_descriptor_parameter = NodeDescriptorParameter(parameter_name, parameter_type, prop_def)
                     meta[parameter_name.lower()] = node_descriptor_parameter
             
             parameters = [meta.get(x.lower()) for x in self._parameter_rx.findall(content)]
@@ -239,7 +273,7 @@ class NodeDescritporBuilder:
         nodes = []
         for k, v in sub_nodes_names.items():
             name = ".".join([method, k])
-            sub_node_descriptor = NodeDescriptor(k, name, path, False, self)
+            sub_node_descriptor = NodeDescriptor(k, name, path, node_descriptor, False, self)
 
             sub_input_model = None
             sub_output_model = None
@@ -314,19 +348,18 @@ class NodeDescritporFactory:
             return None
         treemap = self._build_treemap(ordered_files)
         
-        config_str = self._content_reader.get_config(method, path)
+        config = self._content_reader.get_config(method, path)
         input_model_str = "input.model"
         output_model_str = "output.model"
         input_model = None
         output_model = None        
-        if config_str is not None and config_str != "":
-            config = yaml.load(config_str)
+        if config is not None:
             if input_model_str in config:
                 input_model = config[input_model_str]
             if output_model_str in config:
                 output_model = config[output_model_str]
 
-        node_descriptor = NodeDescriptor(method, method, path, True, self._node_descriptor_builder)
+        node_descriptor = NodeDescriptor(method, method, path, None, True, self._node_descriptor_builder)
         node_descriptor.build(treemap[method], input_model, output_model)
 
         return node_descriptor

@@ -1,5 +1,5 @@
 import os
-
+import yaml
 
 class FileReader:
 
@@ -12,7 +12,11 @@ class FileReader:
     
     def get_config(self, method, path):
         file_path = os.path.join(*[self._gravity_configuration.get_root_path(), path, method + ".yml"])
-        return self._get(file_path)
+        config_str = self._get(file_path)
+        if config_str is not None and config_str != '':
+            return yaml.load(config_str)
+        else:
+            return None 
 
     def _get(self, file_path):        
         try:
