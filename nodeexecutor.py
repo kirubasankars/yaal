@@ -149,8 +149,8 @@ class NodeExecutor:
                                 _type = v[_typestr]       
                                 if _type == "array" or _type == "object":
                                     mapped_row[k] = sub_mapped_nodes[k]
-                #if prop_count == 0:
-                #    mapped_row = row                                   
+                if prop_count == 0:
+                    mapped_row = row                                   
             else:
                 mapped_row = row
 
@@ -172,7 +172,7 @@ class NodeExecutor:
             rs = self.map(rs)        
             return rs
         except Exception as e:
-            return { "errors" : [ e.args[0] ] }
+            return { "errors" : [ { "message" : e.args[0] } ] }
 
     def get_result_json(self, input_shape):        
         return json.dumps(self.get_result(input_shape), indent = 4)

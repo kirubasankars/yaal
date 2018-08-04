@@ -123,8 +123,8 @@ class NodeDescriptor:
                     else:
                         v = str(v)
                     values.append(v)
-                except Exception as e:
-                    raise Exception(n + " should be " + t + ", given value is " + str(v))
+                except:
+                    raise Exception("parameter " + n + " should be " + t + ", given value is " + str(v))
         return values  
 
     def get_executable_content(self, sub_chr):
