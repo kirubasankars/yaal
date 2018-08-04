@@ -1,0 +1,2 @@
+
+select 'kiruba' as name;

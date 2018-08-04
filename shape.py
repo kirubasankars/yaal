@@ -12,6 +12,10 @@ class Shape:
         
         if input_model is None:
             return
+        
+        _propertiesstr = "properties"
+        if _propertiesstr in input_model:
+            self.input_properties = input_model[_propertiesstr]
 
         _typestr = "type"
         if _typestr in input_model:
@@ -31,18 +35,14 @@ class Shape:
                 idx = idx + 1
             input_model[_typestr] = "array"
         else:
-            _propertiesstr = "properties"
-            if _propertiesstr in input_model:
-                input_model_properties = input_model[_propertiesstr]                
-                if input_model_properties is not None:
-                    for k, v in input_model_properties.items():
-                        if type(v) == dict and _typestr in v:                        
-                            _type = v[_typestr]
-                            if _type == "array" or _type == "object":
-                                dvalue = None
-                                if data is not None and k in data:
-                                    dvalue = data.get(k)
-                                self.shapes[k] = Shape(v, dvalue, self)
+            input_properties = self.input_properties
+            if input_properties is not None:
+                for k, v in input_properties.items():
+                    if type(v) == dict and _propertiesstr in v:                            
+                        dvalue = None
+                        if data is not None and k in data:
+                            dvalue = data.get(k)
+                        self.shapes[k] = Shape(v, dvalue, self)
 
     def get_prop(self, prop):
         dot = prop.find(".")
@@ -67,7 +67,13 @@ class Shape:
 
             if prop in self.data:
                 return self.data[prop]
-            
+                        
+            if prop in self.input_properties:
+                prop_type = self.input_properties[prop]
+                _defaultstr = "default_value"
+                if _defaultstr in prop_type:
+                    return prop_type[_defaultstr]
+
             return None
 
     def set_prop(self, prop, value):

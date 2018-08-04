@@ -115,15 +115,16 @@ class NodeDescriptor:
                 t = p.get_type()
 
                 v = input_shape.get_prop(n)
-                if v is not None:
+                try:
                     if t == "integer":
                         v = int(v)
                     elif t == "string":
                         v = str(v)
                     else:
-                        v = str(v)    
-                values.append(v)
-
+                        v = str(v)
+                    values.append(v)
+                except Exception as e:
+                    raise Exception(n + " should be " + t + ", given value is " + str(v))
         return values  
 
     def get_executable_content(self, sub_chr):
@@ -148,7 +149,7 @@ class NodeDescritporBuilder:
     def __init__(self, content_reader):
         self._content_reader = content_reader
         self._parameters_meta_rx = re.compile("--\((.*)\)--")
-        self._parameter_meta_rx = re.compile("([A-Za-z0-9_.$-]+)(\s+(\w+))?")
+        self._parameter_meta_rx = re.compile("\s*([A-Za-z0-9_.$-]+)(\s+(\w+))?\s*")
         self._parameter_rx = re.compile("\{\{([A-Za-z0-9_.$-]*?)\}\}", re.MULTILINE)
 
     def parse_clean_parameters(self, node_descriptor):

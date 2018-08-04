@@ -4,12 +4,11 @@ from flask import abort
 
 from gravity import Gravity
 from gravity import GravityConfiguration
-from gravity import SQLiteExecutionContext
 
 app = Flask(__name__)
 apps = {}
 
-@app.route('/<application>/api/', defaults={'app_name':'','path': ''}, methods=['GET', 'POST', 'PUT', 'DELETE'])
+#@app.route('/<application>/api/', defaults={'path': ''}, methods=['GET', 'POST', 'PUT', 'DELETE'])
 @app.route('/<application>/api/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE'])
 def hello(application, path):
     try:
@@ -20,7 +19,11 @@ def hello(application, path):
             g = Gravity(GravityConfiguration("serve/" + application), "sqlite3")
             apps[application] = g
         
-        e = g.create_executor(request.method.lower(), "api/" + path, False)
+        method = request.method.lower()
+        if path != "":
+            path = "api/" + path
+            
+        e = g.create_executor(method, path, True)
         input_shape = None
         try:
             ijson = request.get_json()                    
