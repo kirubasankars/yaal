@@ -1,0 +1,14 @@
+input.model:
+  type: object
+  properties:
+    page:
+      type: integer
+      default_value: 1
+      required: true
+output.model:
+  type: object
+  properties:
+    data:
+      type: array
+    paging:
+      type: object

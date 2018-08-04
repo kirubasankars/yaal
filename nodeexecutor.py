@@ -78,7 +78,10 @@ class NodeExecutor:
                     if input_shape is not None:
                         sub_node_shape = input_shape.get_prop(sub_node_name)
                     sub_node_output = sub_node_executor._execute(sub_node_shape, output, output_partition_by)                    
-        
+
+                    if len(output) == 0:
+                        output.append({})
+                        
                     if output_partition_by is None:
                         for row in output:
                             row[sub_node_name] = sub_node_output                        
@@ -146,8 +149,8 @@ class NodeExecutor:
                                 _type = v[_typestr]       
                                 if _type == "array" or _type == "object":
                                     mapped_row[k] = sub_mapped_nodes[k]
-                if prop_count == 0:
-                    mapped_row = row                                   
+                #if prop_count == 0:
+                #    mapped_row = row                                   
             else:
                 mapped_row = row
 
@@ -163,10 +166,13 @@ class NodeExecutor:
                 mapped_result = {}
         return mapped_result
 
-    def get_result(self, input_shape):        
-        rs = self._execute(input_shape, [], None)
-        rs = self.map(rs)        
-        return rs
+    def get_result(self, input_shape):
+        try:
+            rs = self._execute(input_shape, [], None)
+            rs = self.map(rs)        
+            return rs
+        except Exception as e:
+            return { "errors" : [ e.args[0] ] }
 
     def get_result_json(self, input_shape):        
         return json.dumps(self.get_result(input_shape), indent = 4)
