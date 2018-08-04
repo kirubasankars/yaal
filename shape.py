@@ -70,7 +70,7 @@ class Shape:
                         
             if prop in self.input_properties:
                 prop_type = self.input_properties[prop]
-                _defaultstr = "default_value"
+                _defaultstr = "default"
                 if _defaultstr in prop_type:
                     return prop_type[_defaultstr]
 

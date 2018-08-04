@@ -19,5 +19,5 @@ if __name__ == '__main__':
     executor = gravity.create_executor(args.method, args.path, False)
 
     if executor is not None:                
-        input_shape = executor.create_input_shape()
+        input_shape = executor.create_input_shape(None)
         print(executor.get_result_json(input_shape))

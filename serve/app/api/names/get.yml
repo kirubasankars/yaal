@@ -3,8 +3,8 @@ input.model:
   properties:
     page:
       type: integer
-      default_value: 1
-      required: true
+      default: 1
+      
 output.model:
   type: object
   properties:
