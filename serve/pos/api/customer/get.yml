@@ -10,22 +10,4 @@ output.model:
         paging:
             type: object        
         data:
-            type: array
-            partition_by: CustomerId
-            properties:
-                FirstName:
-                    mapped: FirstName
-                LastName:
-                    mapped: LastName
-                Phone:
-                    mapped: Phone
-                Email:
-                    mapped: Email
-                SupportRep:
-                    type: object
-                    parent_rows: true
-                    properties:
-                        FirstName:
-                            mapped: SupportRep_FirstName
-                        LastName:
-                            mapped: SupportRep_LastName
+            type: array            

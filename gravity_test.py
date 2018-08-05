@@ -1,5 +1,4 @@
 import unittest
-from gravity
 
 class GravityTest(unittest.TestCase):
 
