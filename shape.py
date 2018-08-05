@@ -5,44 +5,55 @@ class Shape:
         self._list = False
         self._object = False
 
-        self.data = data or {}
-        self.shapes = {}
+        self._data = data or {}    
+        self._shapes = {}
+        shapes = self._shapes
         self._parent = parent_shape
-        self._input_model = input_model
+        self._input_model = input_model        
+        self._input_properties = None
+        input_properties = None
         
+        if data is not None and ("$parent" in data or "$length" in data):
+            raise Exception("$parent or $length is reversed keywords. You can't use them.")
+
         if input_model is None:
             return
         
         _propertiesstr = "properties"
         if _propertiesstr in input_model:
-            self.input_properties = input_model[_propertiesstr]
+            input_properties = input_model[_propertiesstr]
+            self._input_properties = input_properties
+
 
         _typestr = "type"
         if _typestr in input_model:
             _type = input_model[_typestr]
             if _type == "array":
                 self._list = True                
+                if data is not None:
+                    if type(data) != list:
+                        raise TypeError("input expected as array. object is given.")
             else:
                 self._object = True
+                if data is not None:
+                    if type(data) != dict:
+                        raise TypeError("input expected as object. array is given.")
         
-        if self._list and data is not None:            
+        if self._list:                
             idx = 0
-            input_model[_typestr] = "object"
-            if type(data) != list:
-                raise TypeError("input expected as array. object is given.")
-            for item in data:
-                self.shapes["@" + str(idx)] = Shape(input_model, item, self)                
+            input_model[_typestr] = "object"                
+            for item in self._data:
+                self._shapes["@" + str(idx)] = Shape(input_model, item, self)                
                 idx = idx + 1
             input_model[_typestr] = "array"
-        else:
-            input_properties = self.input_properties
+        else:            
             if input_properties is not None:
                 for k, v in input_properties.items():
                     if type(v) == dict and _propertiesstr in v:                            
                         dvalue = None
-                        if data is not None and k in data:
+                        if k in self._data:
                             dvalue = data.get(k)
-                        self.shapes[k] = Shape(v, dvalue, self)
+                        shapes[k] = Shape(v, dvalue, self)            
 
     def get_prop(self, prop):
         dot = prop.find(".")
@@ -53,27 +64,23 @@ class Shape:
             if path == "$parent":
                 return self._parent.get_prop(remaining_path)
 
-            if path in self.shapes:
-                return self.shapes[path].get_prop(remaining_path)
+            if path in self._shapes:
+                return self._shapes[path].get_prop(remaining_path)
         else:
-            if prop == "$parent":
-                return self._parent
 
-            if prop == "$length":
-                return len(self.data)
+            if prop[0] == "$":
+                if prop == "$parent":
+                    return self._parent
 
-            if prop in self.shapes:
-                return self.shapes[prop]
+                if prop == "$length":
+                    return len(self._data)
 
-            if prop in self.data:
-                return self.data[prop]
-                        
-            if prop in self.input_properties:
-                prop_type = self.input_properties[prop]
-                _defaultstr = "default"
-                if _defaultstr in prop_type:
-                    return prop_type[_defaultstr]
+            if prop in self._shapes:
+                return self._shapes[prop]
 
+            if prop in self._data:
+                return self._data[prop]
+            
             return None
 
     def set_prop(self, prop, value):
@@ -85,7 +92,7 @@ class Shape:
             if path == "$parent":
                 return self._parent.set_prop(remaining_path, value)
 
-            if path in self.shapes:
-                return self.shapes[path].set_prop(remaining_path, value)
-        else:                       
-            self.data[prop] = value
+            if path in self._shapes:
+                return self._shapes[path].set_prop(remaining_path, value)
+        else:                                   
+            self._data[prop] = value

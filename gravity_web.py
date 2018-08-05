@@ -8,7 +8,6 @@ from gravity import GravityConfiguration
 app = Flask(__name__)
 apps = {}
 
-#@app.route('/<application>/api/', defaults={'path': ''}, methods=['GET', 'POST', 'PUT', 'DELETE'])
 @app.route('/<application>/api/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE'])
 def hello(application, path):
     try:
@@ -35,8 +34,8 @@ def hello(application, path):
             input_shape.set_prop(k, v)
     
         return e.get_result_json(input_shape)
-    except Exception as e:
-        print(e)
+    except Exception as e:        
+        raise e
 
 if __name__ == '__main__':
     app.run()
