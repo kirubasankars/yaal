@@ -4,6 +4,8 @@ from flask import abort
 
 from gravity import Gravity
 from gravity import GravityConfiguration
+from executioncontext import SQLiteExecutionContext
+from contentreader import FileReader
 
 app = Flask(__name__)
 apps = {}
@@ -15,7 +17,8 @@ def hello(application, path):
         if application in apps:
             g = apps[application]            
         else:
-            g = Gravity(GravityConfiguration("serve/" + application), "sqlite3")
+            gc = GravityConfiguration("serve/" + application)
+            g = Gravity(gc, SQLiteExecutionContext(gc), FileReader(gc))
             apps[application] = g
         
         method = request.method.lower()

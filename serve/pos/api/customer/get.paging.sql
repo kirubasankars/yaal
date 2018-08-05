@@ -9,4 +9,4 @@ SELECT
     END) as total_pages, 
     {{$parent.page}} as current_page
 FROM 
-    (SELECT (count(*) / 10.00) as total_pages FROM Customers) t
+    (SELECT (count(*) / 10.00) as total_pages FROM Customer) t

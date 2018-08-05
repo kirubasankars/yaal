@@ -31,7 +31,7 @@ class SQLiteExecutionContext:
         
         content = node_descriptor.get_executable_content("?")                    
         
-        con = lite.connect(self._db_path + "/chinook.db")
+        con = lite.connect(self._db_path + "/northwind.db")
         con.row_factory = _dict_factory    
         with con:
             cur = con.cursor()

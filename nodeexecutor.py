@@ -22,9 +22,6 @@ class NodeExecutor:
     def get_output_type(self):
         return self._output_type
 
-    def build_parameters_values(self):
-        pass
-
     def _execute(self, input_shape, parent_rows, parent_partition_by):
         execution_context =  self._execution_context
         node_descriptor = self.get_node_descritor()
