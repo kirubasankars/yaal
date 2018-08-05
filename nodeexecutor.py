@@ -11,6 +11,7 @@ class NodeExecutor:
         self._node_execution_builder = node_execution_builder
         self._execution_context = execution_context        
         self._nodes = {}
+        self._output_type = None
 
     def get_node_descritor(self):
         return self._node_descriptor
@@ -20,9 +21,6 @@ class NodeExecutor:
 
     def get_output_type(self):
         return self._output_type
-
-    def get_nodes(self):
-        return self._nodes
 
     def build_parameters_values(self):
         pass
@@ -72,14 +70,14 @@ class NodeExecutor:
             if len(nodes) > 0:
                 for sub_node_executor in nodes:
                     sub_node_descriptor = sub_node_executor.get_node_descritor()
-                    sub_node_name = sub_node_descriptor.get_name()
-                    sub_node_value = None
+                    sub_node_name = sub_node_descriptor.get_name()                    
                     sub_node_shape = None
                     if input_shape is not None:
                         sub_node_shape = input_shape.get_prop(sub_node_name)
                     sub_node_output = sub_node_executor._execute(sub_node_shape, output, output_partition_by)                    
 
-                    if len(output) == 0:
+                    content = node_descriptor.get_content()
+                    if (content is None or content == '') and len(output) == 0:
                         output.append({})
                         
                     if output_partition_by is None:
@@ -172,8 +170,9 @@ class NodeExecutor:
             rs = self.map(rs)        
             return rs
         except Exception as e:
+            #raise e
             return { "errors" : [ { "message" : e.args[0] } ] }
-
+            
     def get_result_json(self, input_shape):        
         return json.dumps(self.get_result(input_shape), indent = 4)
 

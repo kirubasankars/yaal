@@ -131,7 +131,7 @@ class NodeDescriptor:
                     if prequired == True:
                         raise Exception("parameter " + pname + " should be " + ptype + ", given value is " + str(pvalue))
                     else:
-                        pass
+                        values.append(pvalue)
         return values
 
     def get_executable_content(self, sub_chr):
@@ -150,7 +150,7 @@ class NodeDescriptor:
             if prop == "$parent":
                 return self._parent_node_descriptor
 
-            if prop in self._input_properties:
+            if self._input_properties and prop in self._input_properties:
                 return self._input_properties[prop]
                 
             return None
@@ -164,7 +164,7 @@ class NodeDescriptorParameter:
         self._prop_def = property_def
 
         _requiredstr = "required"
-        if _requiredstr in property_def:
+        if property_def and _requiredstr in property_def:
             if property_def[_requiredstr] == True:
                 self._required = True
 
@@ -226,9 +226,7 @@ class NodeDescritporBuilder:
             self.parse_clean_parameters(node_descriptor)
 
         sub_nodes_names = {}
-        for k in treemap:            
-            sub_nodes_names[k] = treemap[k]        
-
+        
         _propertiesstr = "properties"
         _typestr = "type"
         _partitionbystr = "partition_by"
@@ -265,13 +263,21 @@ class NodeDescritporBuilder:
             if _partitionbystr in output_model:
                 node_descriptor.set_partition_by(output_model[_partitionbystr])
                    
-            if output_properties is not None:            
-                for k, v in output_properties.items():
-                    if type(v) == dict and _propertiesstr in v:                        
-                        sub_nodes_names[k] = {}
+            if output_properties is not None:
+                for k in output_properties:
+                    v = output_properties[k]
+                    if type(v) == dict and _typestr in v:
+                        _type = v[_typestr]
+                        if _type == "object" or _type == "array":                      
+                            sub_nodes_names[k] = {}
+
+        for k in treemap:
+            if k not in sub_nodes_names:
+                sub_nodes_names[k] = treemap[k]
 
         nodes = []
-        for k, v in sub_nodes_names.items():
+        for k in sub_nodes_names:
+            v = sub_nodes_names[k]
             name = ".".join([method, k])
             sub_node_descriptor = NodeDescriptor(k, name, path, node_descriptor, False, self)
 
