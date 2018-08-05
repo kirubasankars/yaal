@@ -1,0 +1,24 @@
+input.model:
+    type: object
+    properties:
+        page:
+            type: integer
+
+output.model:
+    type: object
+    properties:
+        paging:
+            type: object
+        data:
+            type: array
+            partition_by: PlaylistId
+            properties:                
+                TrackId:
+                    mapped: TrackId
+                TrackName:
+                    mapped: TrackName
+                PlayListId:
+                    mapped: PlaylistId
+                PlayListName:
+                    mapped: PlayListName
+            
