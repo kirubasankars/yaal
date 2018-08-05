@@ -1,15 +1,13 @@
---($parent.page integer)--
+--($parent.page integer, $parent.playlistid integer)--
 
-SELECT 
-    p.Playlistid, p.Name as PlayListName,t.TrackId, t.Name as TrackName
+SELECT
+    t.*, p.Name as PlayListName
 FROM 
     playlist_track pt
 JOIN 
-    playlists p ON p.playlistid = pt.playlistid
-JOIN
-    tracks t ON t.trackid = pt.trackid
-ORDER BY
-    t.trackid
-LIMIT ({{$parent.page}} - 1) * 10, 10
-
+    playlists p on p.playlistid = pt.playlistid
+JOIN 
+    tracks t on pt.trackid = t.trackid
+WHERE 
+    pt.trackid= 3500 
     

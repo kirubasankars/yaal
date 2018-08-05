@@ -11,14 +11,3 @@ output.model:
             type: object
         data:
             type: array
-            partition_by: PlaylistId
-            properties:                
-                TrackId:
-                    mapped: TrackId
-                TrackName:
-                    mapped: TrackName
-                PlayListId:
-                    mapped: PlaylistId
-                PlayListName:
-                    mapped: PlayListName
-            

@@ -1,14 +1,11 @@
 --($parent.page integer)--
 
 SELECT 
-    c.*,
-    e.FirstName AS SupportRep_FirstName,
-    e.LastName AS SupportRep_LastName
+    c.*
 FROM 
-    Customers c 
-JOIN 
-    Employees e ON c.SupportRepId = e.EmployeeId 
+    Customer c 
+
 ORDER BY
-    c.CustomerId
-LIMIT ({{$parent.page}} - 1) * 10, 10
+    c.Id
+LIMIT ({{$parent.page}} - 1) * 10, {{pageSize}}
     

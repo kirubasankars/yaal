@@ -289,7 +289,7 @@ class NodeDescritporBuilder:
                     "type" : "object",
                     "properties" : {}
                 }
-                sub_input_model = input_properties[k]
+            sub_input_model = input_properties[k]
             
             if output_properties is not None:                
                 if k in output_properties:
@@ -327,10 +327,11 @@ class NodeDescritporFactory:
                     break
         return ordered
 
-    def _build_treemap(self, list):        
+    def _build_treemap(self, filelist):        
         map = {}
-        for item in list:
-            self._treemap(map, item)
+        if filelist is not None:
+            for item in filelist:
+                self._treemap(map, item)
         return map
 
     def _treemap(self, map, item):        
@@ -349,11 +350,11 @@ class NodeDescritporFactory:
                map[item] = {}
 
     def create(self, method, path):        
-        ordered_files = self._order_list_by_dots(self._content_reader.list_sql(method, path))
-        if len(ordered_files) == 0:
-            return None
-        treemap = self._build_treemap(ordered_files)
-        
+        ordered_files = self._order_list_by_dots(self._content_reader.list_sql(method, path))       
+        if len(ordered_files) == 0: 
+            return None # found zero sql files, then return no api available
+
+        treemap = self._build_treemap(ordered_files)        
         config = self._content_reader.get_config(method, path)
         input_model_str = "input.model"
         output_model_str = "output.model"
