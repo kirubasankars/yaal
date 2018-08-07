@@ -30,7 +30,7 @@ class NodeExecutor:
         use_parent_rows = node_descriptor.get_use_parent_rows()
         node_queries = node_descriptor.get_node_queries()
         paramsstr = "$params"
-        errorstr = "$error"
+        errorstr = "$error"        
 
         output = []
         try:            
@@ -43,16 +43,17 @@ class NodeExecutor:
                     if node_queries is not None:                
                         for node_query in node_descriptor.get_node_queries():
                             item_input_shape = input_shape.get_prop("@" + str(i))
-                            sub_output = execution_context.execute(node_query, item_input_shape)
-                            if len(sub_output) == 1:
+                            sub_output, sub_output_last_inserted_id = execution_context.execute(node_query, item_input_shape)
+                                                        
+                            item_input_shape.set_prop("$last_inserted_id", sub_output_last_inserted_id)
+
+                            if len(sub_output) >= 1:
                                 output0 = sub_output[0]
                                 if errorstr in output0 and output0[errorstr] == 1:
-                                    if "message" in output0:
-                                        raise Exception(output0["message"])
-                                    else:
-                                        raise Exception("You missing message column")
-
-                                if paramsstr in output0 and output0[paramsstr] == 1:
+                                    for o in output:
+                                        del o[errorstr] 
+                                    raise Exception(output)
+                                elif paramsstr in output0 and output0[paramsstr] == 1:
                                     for k, v in output0.items():
                                         item_input_shape.set_prop(k, v)
                                 else:
@@ -61,16 +62,17 @@ class NodeExecutor:
             elif input_type is None or input_type == "object":
                 if node_queries is not None:
                     for node_query in node_descriptor.get_node_queries():
-                        output = execution_context.execute(node_query, input_shape)                
-                        if len(output) == 1:
+                        output, last_inserted_id = execution_context.execute(node_query, input_shape)
+
+                        input_shape.set_prop("$last_inserted_id", last_inserted_id)
+
+                        if len(output) >= 1:
                             output0 = output[0]
                             if errorstr in output0 and output0[errorstr] == 1:
-                                if "message" in output0:
-                                    raise Exception(output0["message"])
-                                else:
-                                    raise Exception("You missing message column")
-
-                            if paramsstr in output0 and output0[paramsstr] == 1:
+                                for o in output:
+                                    del o[errorstr] 
+                                raise Exception(output)
+                            elif paramsstr in output0 and output0[paramsstr] == 1:
                                 for k, v in output[0].items():
                                     input_shape.set_prop(k, v)
                 
@@ -89,6 +91,11 @@ class NodeExecutor:
                     if input_shape is not None:
                         sub_node_shape = input_shape.get_prop(sub_node_name)
                     sub_node_output = sub_node_executor._execute(sub_node_shape, output, output_partition_by)                    
+
+                    if len(sub_node_output) >= 1:
+                        output0 = sub_node_output[0]
+                        if errorstr in output0 and output0[errorstr] == 1:
+                            return sub_node_output
 
                     content = node_descriptor.get_content()
                     if (content is None or content == '') and len(output) == 0:
@@ -117,7 +124,6 @@ class NodeExecutor:
                 pass
 
         except Exception as e:
-            print(e)
             execution_context.error()  
             raise e
         finally:
@@ -180,12 +186,13 @@ class NodeExecutor:
 
     def get_result(self, input_shape):
         try:
-            rs = self._execute(input_shape, [], None)
-            rs = self.map(rs)        
+            rs = self._execute(input_shape, [], None)           
+            rs = self.map(rs)
+            
             return rs
         except Exception as e:
             #raise e
-            return { "errors" : [ { "message" : e.args[0] } ] }
+            return { "errors" : e.args[0] }
             
     def get_result_json(self, input_shape):        
         return json.dumps(self.get_result(input_shape), indent = 4)

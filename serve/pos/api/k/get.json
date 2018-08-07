@@ -1,13 +1,4 @@
 {
-    "input.model" : {
-        "type" : "object",
-        "properties" : {
-            "page" : {
-                "type" : "integer",
-                "default" : 1
-            }
-        }
-    },
     "output.model" : {
         "type" : "object",
         "properties" : {

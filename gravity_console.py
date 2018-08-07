@@ -10,7 +10,7 @@ if __name__ == '__main__':
     parser.add_argument('--method', help='method')
     args = parser.parse_args()
 
-    args.path = "api/customer"
+    args.path = "api/test"
     args.method = "get"
 
     if args.path is None or args.method is None:
@@ -22,5 +22,5 @@ if __name__ == '__main__':
     executor = gravity.create_executor(args.method, args.path, False)
 
     if executor is not None:                
-        input_shape = executor.create_input_shape({"page":6})
+        input_shape = executor.create_input_shape({"page":0})
         print(executor.get_result_json(input_shape))

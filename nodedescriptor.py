@@ -120,8 +120,13 @@ class NodeDescriptor:
             path = prop[:dot]
             remaining_path = prop[dot+1:]
             
+            if self._input_type == "array" and path == "$parent" and remaining_path.startswith("$parent"):
+                remaining_path = remaining_path[remaining_path.find(".")+1:]
+
             if path == "$parent":
-                return self._parent_node_descriptor.get_input_propery_definition(remaining_path)            
+                return self._parent_node_descriptor.get_input_propery_definition(remaining_path)
+            else:
+                return None
         else:
             if prop == "$parent":
                 return self._parent_node_descriptor
@@ -328,8 +333,6 @@ class NodeDescritporBuilder:
         content = self._content_reader.get_sql(method, path)
         node_descriptor.set_content(content)
         
-        self.build_node_quries(node_descriptor)
-
         #if content is not None and content is not "":            
         #    self.parse_clean_parameters(node_descriptor)
 
@@ -355,6 +358,8 @@ class NodeDescritporBuilder:
         input_properties = input_model[_propertiesstr]
         node_descriptor.set_input_properties(input_properties)
         
+        self.build_node_quries(node_descriptor)
+
         output_properties = None        
         if output_model is not None:
             if _typestr in output_model:
