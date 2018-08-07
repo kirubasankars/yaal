@@ -1,0 +1,55 @@
+{
+    "output.model" : {
+        "type" : "object",
+        "properties" : {
+            "paging" : {
+                "type" : "object"
+            },
+            "data" : {
+                "type" : "array",
+                "partition_by" : "Id",
+                "properties" : {
+                    "Id" : {
+                        "mapped" : "Id"
+                    },
+                    "Company" : {
+                        "mapped" : "CompanyName"
+                    },
+                    "ContactName" : {
+                        "mapped" : "ContactName"
+                    },
+                    "ContactTitle" : {
+                        "mapped" : "ContactTitle"
+                    },
+                    "Phone" : {
+                        "mapped" : "Phone"
+                    },
+                    "Fax" : {
+                        "mapped" : "Fax"
+                    },
+                    "Address" : {
+                        "type" : "object",
+                        "parent_rows": true,
+                        "properties" : {
+                            "Line1" : {
+                                "mapped" : "Address"
+                            },
+                            "City" : {
+                                "mapped" : "City"
+                            },
+                            "Region" : {
+                                "mapped" : "Region"
+                            },
+                            "PostalCode" : {
+                                "mapped" : "PostalCode"
+                            },
+                            "Country" : {
+                                "mapped" : "Country"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

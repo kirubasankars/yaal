@@ -22,20 +22,19 @@ class SQLiteExecutionContext:
     def error(self):
         pass
 
-    def execute(self, node_executor, input_shape):        
-        node_descriptor = node_executor.get_node_descritor()
+    def execute(self, node_query, input_shape):        
         
-        content = node_descriptor.get_content()
+        content = node_query.get_content()
         if content is None:
             return []
         
-        content = node_descriptor.get_executable_content("?")                    
+        content = node_query.get_executable_content("?")                    
         
         con = lite.connect(self._db_path + "/northwind.db")
         con.row_factory = _dict_factory    
         with con:
             cur = con.cursor()
-            args = node_descriptor.build_parameter_values(input_shape)
+            args = node_query.build_parameter_values(input_shape)
             cur.execute(content, args)
             rows = cur.fetchall()
 
