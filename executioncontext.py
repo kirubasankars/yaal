@@ -30,12 +30,12 @@ class SQLiteExecutionContext:
         
         content = node_query.get_executable_content("?")                    
         
-        con = lite.connect(self._db_path + "/northwind.db")
+        con = lite.connect(self._db_path + "/app.db")
         con.row_factory = _dict_factory    
         with con:
             cur = con.cursor()
             args = node_query.build_parameter_values(input_shape)
             cur.execute(content, args)
             rows = cur.fetchall()
-
-        return rows        
+            
+        return rows, cur.lastrowid        

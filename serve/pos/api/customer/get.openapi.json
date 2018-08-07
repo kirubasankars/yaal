@@ -1,9 +1,0 @@
-{
-    "paths" : {
-        "/customer/{customerId}": {
-            "get" : {
-                
-            }
-        }
-    }
-}
