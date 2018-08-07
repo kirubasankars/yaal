@@ -1,6 +1,8 @@
 import argparse
 
 from gravity import Gravity, GravityConfiguration
+from executioncontext import SQLiteExecutionContext
+from contentreader import FileReader
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -15,7 +17,8 @@ if __name__ == '__main__':
         parser.print_help()
         #exit() 
     
-    gravity = Gravity(GravityConfiguration("serve/pos"), "sqlite3")
+    gravity_configuration = GravityConfiguration("serve/pos")
+    gravity = Gravity(gravity_configuration, SQLiteExecutionContext(gravity_configuration), FileReader(gravity_configuration))
     executor = gravity.create_executor(args.method, args.path, False)
 
     if executor is not None:                

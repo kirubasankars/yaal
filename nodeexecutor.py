@@ -28,6 +28,9 @@ class NodeExecutor:
         input_type = node_descriptor.get_input_type()        
         output_partition_by = node_descriptor.get_partition_by()
         use_parent_rows = node_descriptor.get_use_parent_rows()
+        node_queries = node_descriptor.get_node_queries()
+        paramsstr = "$params"
+        errorstr = "$error"
 
         output = []
         try:            
@@ -37,26 +40,40 @@ class NodeExecutor:
 
                 length = int(input_shape.get_prop("$length"))
                 for i in range(0, length):
-                    
-                    item_input_shape = input_shape.get_prop("@" + str(i))
-                    sub_output = execution_context.execute(self, item_input_shape)
-                    if len(sub_output) == 1:
-                        output0 = sub_output[0]
-                        if "params" in output0 and output0["params"] == 1:
-                            for k, v in output0.items():
-                                item_input_shape.set_prop(k, v)
-                        else:
-                            output.extend(sub_output)
+                    if node_queries is not None:                
+                        for node_query in node_descriptor.get_node_queries():
+                            item_input_shape = input_shape.get_prop("@" + str(i))
+                            sub_output = execution_context.execute(node_query, item_input_shape)
+                            if len(sub_output) == 1:
+                                output0 = sub_output[0]
+                                if errorstr in output0 and output0[errorstr] == 1:
+                                    if "message" in output0:
+                                        raise Exception(output0["message"])
+                                    else:
+                                        raise Exception("You missing message column")
+
+                                if paramsstr in output0 and output0[paramsstr] == 1:
+                                    for k, v in output0.items():
+                                        item_input_shape.set_prop(k, v)
+                                else:
+                                    output.extend(sub_output)
             
             elif input_type is None or input_type == "object":
+                if node_queries is not None:
+                    for node_query in node_descriptor.get_node_queries():
+                        output = execution_context.execute(node_query, input_shape)                
+                        if len(output) == 1:
+                            output0 = output[0]
+                            if errorstr in output0 and output0[errorstr] == 1:
+                                if "message" in output0:
+                                    raise Exception(output0["message"])
+                                else:
+                                    raise Exception("You missing message column")
 
-                output = execution_context.execute(self, input_shape)                
-                if len(output) == 1:
-                    output0 = output[0]
-                    if "params" in output0 and output0["params"] == 1:
-                        for k, v in output[0].items():
-                            input_shape.set_prop(k, v)                
-            
+                            if paramsstr in output0 and output0[paramsstr] == 1:
+                                for k, v in output[0].items():
+                                    input_shape.set_prop(k, v)
+                
             if use_parent_rows == True and parent_partition_by is None:
                 raise Exception("parent _partition_by is can't be empty when child wanted to use parent rows")
             

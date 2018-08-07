@@ -21,6 +21,7 @@ class NodeDescriptor:
         self._input_properties = None
         self._partition_by = None
         self._nodes = None
+        self._node_queries = None
         self._use_parent_rows = None
 
     def build(self, treemap, input_model, output_model):        
@@ -101,12 +102,76 @@ class NodeDescriptor:
     def get_parameters(self):
         return self._parameters
 
+    def get_node_queries(self):
+        return self._node_queries
+
+    def set_node_queries(self, queries):
+        self._node_queries = queries
+
     def create_executor(self, execution_context):
         node_execution_builder = NodeExecutorBuilder()
         node_executor = NodeExecutor(self, node_execution_builder, execution_context)
         node_executor.build()
         return node_executor
 
+    def get_input_propery_definition(self, prop):
+        dot = prop.find(".")
+        if dot > -1:
+            path = prop[:dot]
+            remaining_path = prop[dot+1:]
+            
+            if path == "$parent":
+                return self._parent_node_descriptor.get_input_propery_definition(remaining_path)            
+        else:
+            if prop == "$parent":
+                return self._parent_node_descriptor
+
+            if self._input_properties and prop in self._input_properties:
+                return self._input_properties[prop]
+                
+            return None
+
+class NodeQuery:
+    
+    def __init__(self, content, node_parameter_rx, node_descriptor):
+        self._content = content
+        self._executable_content = content
+        self._node_descriptor = node_descriptor
+        self._parameters = None
+        self._node_parameter_rx = node_parameter_rx
+    
+    def get_parameters(self):
+        return self._parameters
+    
+    def set_parameters(self, parameters):
+        self._parameters = parameters
+
+    def get_content(self):
+        return self._content
+
+    def get_node_descriptor(self):
+        return self._node_descriptor
+    
+    def get_executable_content(self, chr):
+        return self._node_parameter_rx.sub(chr, self.get_content())
+
+    def build(self):
+        
+        parameter_names = [x.lower() for x in self._node_parameter_rx.findall(self._content)]
+        node_descriptor_parameters = self._node_descriptor.get_parameters()
+
+        params = []
+        for p in parameter_names:
+            node_query_parameter = None
+            if node_descriptor_parameters is not None and p in node_descriptor_parameters:
+                node_descriptor_parameter = node_descriptor_parameters[p]
+                node_query_parameter = NodeQueryParameter(p, node_descriptor_parameter.get_type(), node_descriptor_parameter.get_property_def())
+                params.append(node_query_parameter)                            
+            else:
+                raise TypeError("type missing for {{" + p + "}} in the " + self._node_descriptor.get_method() + ".sql")
+
+        self.set_parameters(params)
+    
     def build_parameter_values(self, input_shape):
         values = []
         if self._parameters is not None:
@@ -133,27 +198,31 @@ class NodeDescriptor:
                     else:
                         values.append(pvalue)
         return values
+        
+class NodeQueryParameter:
+    
+    def __init__(self, name, ptype, property_def):
+        self._name = name
+        self._ptype = ptype
+        self._required = False
+        self._prop_def = property_def
 
-    def get_executable_content(self, sub_chr):
-        self._parameter_rx = re.compile("\{\{([A-Za-z0-9_.$-]*?)\}\}", re.MULTILINE)
-        return self._parameter_rx.sub("?", self._content)
+        _requiredstr = "required"
+        if property_def and _requiredstr in property_def:
+            if property_def[_requiredstr] == True:
+                self._required = True
 
-    def get_input_propery_definition(self, prop):        
-        dot = prop.find(".")
-        if dot > -1:
-            path = prop[:dot]
-            remaining_path = prop[dot+1:]
-            
-            if path == "$parent":
-                return self._parent_node_descriptor.get_input_propery_definition(remaining_path)            
-        else:
-            if prop == "$parent":
-                return self._parent_node_descriptor
+    def get_name(self):
+        return self._name
 
-            if self._input_properties and prop in self._input_properties:
-                return self._input_properties[prop]
-                
-            return None
+    def get_type(self):
+        return self._ptype
+
+    def get_property_def(self):
+        return self._prop_def
+
+    def get_is_required(self):
+        return self._required
 
 class NodeDescriptorParameter:
     
@@ -173,33 +242,45 @@ class NodeDescriptorParameter:
 
     def get_type(self):
         return self._ptype
+    
+    def get_property_def(self):
+        return self._prop_def
 
     def get_is_required(self):
         return self._required
+
+parameters_meta_rx = re.compile("--params\((.*)\)--")
+parameter_meta_rx = re.compile("\s*([A-Za-z0-9_.$-]+)(\s+(\w+))?\s*")
+parameter_rx = re.compile("\{\{([A-Za-z0-9_.$-]*?)\}\}", re.MULTILINE)
 
 class NodeDescritporBuilder:
 
     def __init__(self, content_reader):
         self._content_reader = content_reader
-        self._parameters_meta_rx = re.compile("--\((.*)\)--")
-        self._parameter_meta_rx = re.compile("\s*([A-Za-z0-9_.$-]+)(\s+(\w+))?\s*")
-        self._parameter_rx = re.compile("\{\{([A-Za-z0-9_.$-]*?)\}\}", re.MULTILINE)
 
-    def parse_clean_parameters(self, node_descriptor):
-        content = node_descriptor.get_content()
+    def build_node_quries(self, node_descriptor):
+        
+        global parameters_meta_rx
+        global parameter_meta_rx
+        global parameter_rx
+
+        content = node_descriptor.get_content()        
+        if content is None or content == '':
+            return
+
         lines = content.splitlines()
 
         if len(lines) == 0:
             return
 
         first_line = lines[0]
-        parameters_meta_m = self._parameters_meta_rx.match(first_line)
+        parameters_first_line_m = parameters_meta_rx.match(first_line)
 
         meta = {}
-        if parameters_meta_m is not None:
-            params_meta = parameters_meta_m.groups(1)[0].split(",")
+        if parameters_first_line_m is not None:
+            params_meta = parameters_first_line_m.groups(1)[0].split(",")
             for p in params_meta:
-                parameter_meta_m = self._parameter_meta_rx.match(p)
+                parameter_meta_m = parameter_meta_rx.match(p)
 
                 if parameter_meta_m is not None:
                     gm = parameter_meta_m.groups(1)
@@ -209,11 +290,36 @@ class NodeDescritporBuilder:
                         parameter_type = gm[2]
                     prop_def = node_descriptor.get_input_propery_definition(parameter_name)
                     node_descriptor_parameter = NodeDescriptorParameter(parameter_name, parameter_type, prop_def)
-                    meta[parameter_name.lower()] = node_descriptor_parameter
+                    meta[parameter_name] = node_descriptor_parameter
             
-            parameters = [meta.get(x.lower()) for x in self._parameter_rx.findall(content)]
-            node_descriptor.set_parameters(parameters)            
-            node_descriptor.set_content("\r\n".join(lines[1:]))
+            node_descriptor.set_parameters(meta)
+
+        contents = []
+        content = ""        
+
+        for idx, line in enumerate(lines):
+            if idx == 0 and parameters_first_line_m is not None:
+                continue
+            
+            if line == "--query()--":
+                contents.append(content)
+                content = ""
+            else:
+                content = "\r\n".join([content, line])
+
+        contents.append(content)
+
+        node_queries = []        
+        for query_content in contents:
+            
+            if query_content.lstrip().rstrip() == "":
+                continue
+
+            node_query = NodeQuery(query_content, parameter_rx, node_descriptor)
+            node_query.build()
+            node_queries.append(node_query)
+        
+        node_descriptor.set_node_queries(node_queries)
 
     def build(self, node_descriptor, treemap, input_model, output_model):
         path = node_descriptor.get_path()
@@ -221,9 +327,11 @@ class NodeDescritporBuilder:
 
         content = self._content_reader.get_sql(method, path)
         node_descriptor.set_content(content)
+        
+        self.build_node_quries(node_descriptor)
 
-        if content is not None and content is not "":            
-            self.parse_clean_parameters(node_descriptor)
+        #if content is not None and content is not "":            
+        #    self.parse_clean_parameters(node_descriptor)
 
         sub_nodes_names = {}
         

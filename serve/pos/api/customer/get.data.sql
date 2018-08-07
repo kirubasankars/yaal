@@ -1,11 +1,8 @@
---($parent.page integer)--
+--params($parent.page integer, name string)--
 
-SELECT 
-    c.*
-FROM 
-    Customer c 
+SELECT 1 as "$params", "Kiruba" as name;
 
-ORDER BY
-    c.Id
-LIMIT ({{$parent.page}} - 1) * 10, {{pageSize}}
-    
+--query()--
+
+SELECT *, {{name}} as name FROM Customer Order by ID 
+LIMIT ({{$parent.page}} - 1) * 10, 10 

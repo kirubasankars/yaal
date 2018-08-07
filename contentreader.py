@@ -22,7 +22,7 @@ class FileReader:
         if os.path.exists(json_path):
             config_str = self._get(json_path)
             if config_str is not None and config_str != '':
-                return json.load(config_str)
+                return json.loads(config_str)
         
         return None
         

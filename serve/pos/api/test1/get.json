@@ -1,0 +1,13 @@
+{
+    "output.model" : {
+        "type" : "object",
+        "properties"  :{ 
+            "paging" : {
+                "type" : "object"
+            },
+            "data" : {
+                "type" : "array"
+            }
+        }
+    }
+}
