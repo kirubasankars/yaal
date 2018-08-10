@@ -6,31 +6,28 @@ from shape import Shape
 
 class NodeExecutor:
 
-    def __init__(self, node_descriptor, node_execution_builder, execution_context):
+    def __init__(self, node_descriptor, node_execution_builder):
         self._node_descriptor = node_descriptor
-        self._node_execution_builder = node_execution_builder
-        self._execution_context = execution_context        
+        self._node_execution_builder = node_execution_builder        
         self._nodes = {}
         self._output_type = None
 
     def get_node_descritor(self):
         return self._node_descriptor
 
-    def get_execution_context(self):
-        return self._execution_context
-
     def get_output_type(self):
         return self._output_type
 
-    def _execute(self, input_shape, parent_rows, parent_partition_by):
-        execution_context =  self._execution_context
+    def _execute(self, execution_contexts, input_shape, parent_rows, parent_partition_by):
+        execution_context =  execution_contexts["db"]
         node_descriptor = self.get_node_descritor()
-        input_type = node_descriptor.get_input_type()        
+        input_type = node_descriptor.get_input_type()
         output_partition_by = node_descriptor.get_partition_by()
         use_parent_rows = node_descriptor.get_use_parent_rows()
         node_queries = node_descriptor.get_node_queries()
         paramsstr = "$params"
         errorstr = "$error"        
+        breakstr = "$break"
 
         output = []
         try:            
@@ -43,8 +40,15 @@ class NodeExecutor:
                     if node_queries is not None:                
                         for node_query in node_descriptor.get_node_queries():
                             item_input_shape = input_shape.get_prop("@" + str(i))
-                            sub_output, sub_output_last_inserted_id = execution_context.execute(node_query, item_input_shape)
-                                                        
+                            query_connection = node_query.get_connection_name()
+                            if query_connection is not None:
+                                if query_connection in execution_contexts:
+                                    sub_output, sub_output_last_inserted_id = execution_contexts[query_connection].execute(node_query, item_input_shape)
+                                else:
+                                    raise Exception("connection string " + query_connection + " missing")
+                            else:
+                                sub_output, sub_output_last_inserted_id = execution_context.execute(node_query, item_input_shape)
+                                            
                             item_input_shape.set_prop("$last_inserted_id", sub_output_last_inserted_id)
 
                             if len(sub_output) >= 1:
@@ -56,13 +60,24 @@ class NodeExecutor:
                                 elif paramsstr in output0 and output0[paramsstr] == 1:
                                     for k, v in output0.items():
                                         item_input_shape.set_prop(k, v)
+                                elif breakstr in output0 and output0[breakstr] == 1:
+                                    for o in output:
+                                        del o[breakstr] 
+                                    break
                                 else:
                                     output.extend(sub_output)
             
             elif input_type is None or input_type == "object":
                 if node_queries is not None:
                     for node_query in node_descriptor.get_node_queries():
-                        output, last_inserted_id = execution_context.execute(node_query, input_shape)
+                        query_connection = node_query.get_connection_name()
+                        if query_connection is not None:
+                            if query_connection in execution_contexts:
+                                output, last_inserted_id = execution_contexts[query_connection].execute(node_query, input_shape)
+                            else:
+                                raise Exception("connection string " + query_connection + " missing")
+                        else:
+                            output, last_inserted_id = execution_context.execute(node_query, input_shape)
 
                         input_shape.set_prop("$last_inserted_id", last_inserted_id)
 
@@ -75,6 +90,10 @@ class NodeExecutor:
                             elif paramsstr in output0 and output0[paramsstr] == 1:
                                 for k, v in output[0].items():
                                     input_shape.set_prop(k, v)
+                            elif breakstr in output0 and output0[breakstr] == 1:
+                                for o in output:
+                                    del o[breakstr] 
+                                break
                 
             if use_parent_rows == True and parent_partition_by is None:
                 raise Exception("parent _partition_by is can't be empty when child wanted to use parent rows")
@@ -90,12 +109,7 @@ class NodeExecutor:
                     sub_node_shape = None
                     if input_shape is not None:
                         sub_node_shape = input_shape.get_prop(sub_node_name)
-                    sub_node_output = sub_node_executor._execute(sub_node_shape, output, output_partition_by)                    
-
-                    if len(sub_node_output) >= 1:
-                        output0 = sub_node_output[0]
-                        if errorstr in output0 and output0[errorstr] == 1:
-                            return sub_node_output
+                    sub_node_output = sub_node_executor._execute(execution_contexts, sub_node_shape, output, output_partition_by)                    
 
                     content = node_descriptor.get_content()
                     if (content is None or content == '') and len(output) == 0:
@@ -184,18 +198,21 @@ class NodeExecutor:
                 mapped_result = {}
         return mapped_result
 
-    def get_result(self, input_shape):
+    def get_result(self, execution_contexts, input_shape):
+        if "db" not in execution_contexts:
+            raise Exception("default connection string name db is missing")
+        
         try:
-            rs = self._execute(input_shape, [], None)           
+            rs = self._execute(execution_contexts, input_shape, [], None)           
             rs = self.map(rs)
             
             return rs
         except Exception as e:
-            #raise e
-            return { "errors" : e.args[0] }
+            raise e
+            #return { "errors" : e.args[0] }
             
-    def get_result_json(self, input_shape):        
-        return json.dumps(self.get_result(input_shape), indent = 4)
+    def get_result_json(self, execution_contexts, input_shape):        
+        return json.dumps(self.get_result(execution_contexts, input_shape), indent = 4)
 
     def set_nodes(self, nodes):
         self._nodes = nodes
@@ -214,13 +231,12 @@ class NodeExecutorBuilder:
 
     def build(self, node_executor):
         node_descriptor = node_executor.get_node_descritor()
-        execution_context = node_executor.get_execution_context()
 
         node_descriptor_nodes = node_descriptor.get_nodes()
         if node_descriptor_nodes is not None:
             nodes = []
             for sub_node_descriptor in node_descriptor_nodes:
-                sub_node_executor = NodeExecutor(sub_node_descriptor, self, execution_context)
+                sub_node_executor = NodeExecutor(sub_node_descriptor, self)
                 sub_node_executor.build()
                 nodes.append(sub_node_executor)
 

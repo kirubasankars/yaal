@@ -1,8 +1,5 @@
---params($parent.page integer, name string)--
+--params($parent.page integer)--
 
-SELECT 1 as "$params", "Kiruba" as name;
+--query()(sqlite3)--
 
---query()--
-
-SELECT *, {{name}} as name FROM Customer Order by ID 
-LIMIT ({{$parent.page}} - 1) * 10, 10 
+select * from sqlite_master;

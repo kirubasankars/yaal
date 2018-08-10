@@ -108,9 +108,9 @@ class NodeDescriptor:
     def set_node_queries(self, queries):
         self._node_queries = queries
 
-    def create_executor(self, execution_context):
+    def create_executor(self):
         node_execution_builder = NodeExecutorBuilder()
-        node_executor = NodeExecutor(self, node_execution_builder, execution_context)
+        node_executor = NodeExecutor(self, node_execution_builder)
         node_executor.build()
         return node_executor
 
@@ -138,13 +138,17 @@ class NodeDescriptor:
 
 class NodeQuery:
     
-    def __init__(self, content, node_parameter_rx, node_descriptor):
+    def __init__(self, content, node_parameter_rx, node_descriptor, connection_name, notnullable):
         self._content = content
         self._executable_content = content
         self._node_descriptor = node_descriptor
         self._parameters = None
+        self._connection_name = connection_name
         self._node_parameter_rx = node_parameter_rx
     
+    def get_connection_name(self):
+        return self._connection_name
+
     def get_parameters(self):
         return self._parameters
     
@@ -161,7 +165,7 @@ class NodeQuery:
         return self._node_parameter_rx.sub(chr, self.get_content())
 
     def build(self):
-        
+
         parameter_names = [x.lower() for x in self._node_parameter_rx.findall(self._content)]
         node_descriptor_parameters = self._node_descriptor.get_parameters()
 
@@ -257,6 +261,7 @@ class NodeDescriptorParameter:
 parameters_meta_rx = re.compile("--params\((.*)\)--")
 parameter_meta_rx = re.compile("\s*([A-Za-z0-9_.$-]+)(\s+(\w+))?\s*")
 parameter_rx = re.compile("\{\{([A-Za-z0-9_.$-]*?)\}\}", re.MULTILINE)
+query_rx = re.compile("--query\(([a-zA-Z0-9.$_,]*?)\)\(([a-zA-Z0-9.$_]*?)\)--")
 
 class NodeDescritporBuilder:
 
@@ -268,6 +273,7 @@ class NodeDescritporBuilder:
         global parameters_meta_rx
         global parameter_meta_rx
         global parameter_rx
+        global query_rx
 
         content = node_descriptor.get_content()        
         if content is None or content == '':
@@ -299,28 +305,33 @@ class NodeDescritporBuilder:
             
             node_descriptor.set_parameters(meta)
 
-        contents = []
+        node_queries = []
         content = ""        
+        connection_name = None
+        notnullable = None
 
         for idx, line in enumerate(lines):
             if idx == 0 and parameters_first_line_m is not None:
                 continue
             
-            if line == "--query()--":
-                contents.append(content)
+            query_match = query_rx.match(line)
+            if query_match is not None:                
+                if content.lstrip().rstrip() is not "":        
+                    node_query = NodeQuery(content, parameter_rx, node_descriptor, connection_name, notnullable)
+                    node_query.build()
+                    node_queries.append(node_query)
+                
+                connection_name = query_match.groups(0)[1].lstrip().rstrip()
+                notnullable = query_match.groups(0)[0].lstrip().rstrip().split(",")
+                if connection_name == "":
+                    connection_name = None
+
                 content = ""
             else:
-                content = "\r\n".join([content, line])
-
-        contents.append(content)
-
-        node_queries = []        
-        for query_content in contents:
-            
-            if query_content.lstrip().rstrip() == "":
-                continue
-
-            node_query = NodeQuery(query_content, parameter_rx, node_descriptor)
+                content = "\r\n".join([content, line])            
+        
+        if content.lstrip().rstrip() is not "":        
+            node_query = NodeQuery(content, parameter_rx, node_descriptor, connection_name, notnullable)
             node_query.build()
             node_queries.append(node_query)
         
@@ -331,10 +342,7 @@ class NodeDescritporBuilder:
         method = node_descriptor.get_method()
 
         content = self._content_reader.get_sql(method, path)
-        node_descriptor.set_content(content)
-        
-        #if content is not None and content is not "":            
-        #    self.parse_clean_parameters(node_descriptor)
+        node_descriptor.set_content(content)    
 
         sub_nodes_names = {}
         

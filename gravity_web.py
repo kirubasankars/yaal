@@ -18,7 +18,7 @@ def hello(application, path):
             g = apps[application]            
         else:
             gc = GravityConfiguration("serve/" + application)
-            g = Gravity(gc, SQLiteExecutionContext(gc), FileReader(gc))
+            g = Gravity(gc, FileReader(gc))
             apps[application] = g
         
         method = request.method.lower()
@@ -35,10 +35,10 @@ def hello(application, path):
 
         for k, v in request.args.items():
             input_shape.set_prop(k, v)
-    
-        return e.get_result_json(input_shape)
+        execution_contexts = g.create_execution_contexts()
+        return e.get_result_json(execution_contexts, input_shape)
     except Exception as e:        
         raise e
 
 if __name__ == '__main__':
-    app.run()
+    app.run(debug=True)

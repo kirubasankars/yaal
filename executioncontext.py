@@ -9,9 +9,11 @@ def _dict_factory(cursor, row):
 
 class SQLiteExecutionContext:
     
-    def __init__(self, gravity_configuration):
+    def __init__(self, gravity_configuration, db_name):        
         self._gravity_configuration = gravity_configuration
-        self._db_path = gravity_configuration.get_root_path() + "/db"
+
+        db_path = gravity_configuration.get_root_path() + "/db"
+        self._con = lite.connect(db_path + "/" + db_name)
 
     def begin(self):
         pass
@@ -23,14 +25,9 @@ class SQLiteExecutionContext:
         pass
 
     def execute(self, node_query, input_shape):        
+        con = self._con
         
-        content = node_query.get_content()
-        if content is None:
-            return []
-        
-        content = node_query.get_executable_content("?")                    
-        
-        con = lite.connect(self._db_path + "/app.db")
+        content = node_query.get_executable_content("?")                            
         con.row_factory = _dict_factory    
         with con:
             cur = con.cursor()
