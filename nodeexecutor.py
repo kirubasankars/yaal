@@ -1,5 +1,6 @@
 import json
 import copy
+import datetime
 from collections import defaultdict
 
 from shape import Shape
@@ -210,9 +211,13 @@ class NodeExecutor:
         except Exception as e:
             raise e
             #return { "errors" : e.args[0] }
-            
+    
+    def _default_date_time_converter(self, o):
+        if isinstance(o, datetime.datetime):
+            return o.__str__()
+
     def get_result_json(self, execution_contexts, input_shape):        
-        return json.dumps(self.get_result(execution_contexts, input_shape), indent = 4)
+        return json.dumps(self.get_result(execution_contexts, input_shape), default= self._default_date_time_converter)
 
     def set_nodes(self, nodes):
         self._nodes = nodes
