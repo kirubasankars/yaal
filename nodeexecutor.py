@@ -209,8 +209,8 @@ class NodeExecutor:
             
             return rs
         except Exception as e:
-            raise e
-            #return { "errors" : e.args[0] }
+            #raise e
+            return { "errors" : e.args[0] }
     
     def _default_date_time_converter(self, o):
         if isinstance(o, datetime.datetime):
