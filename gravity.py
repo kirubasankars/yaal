@@ -4,6 +4,7 @@ from nodedescriptor import NodeDescriptor
 from nodedescriptor import NodeDescritporBuilder
 from nodedescriptor import NodeDescritporFactory
 from executioncontext import SQLiteExecutionContext
+from executioncontext import PostgresExecutionContext
 from contentreader import FileReader
 
 class GravityConfiguration:
@@ -40,8 +41,8 @@ class Gravity:
         self._node_descriptor_factory = NodeDescritporFactory(self._content_reader, self._node_descriptor_builder)
 
     def create_execution_contexts(self):
-        e1 = ExecutionContext("db", SQLiteExecutionContext(self._gravity_configuration, "app.db"))
-        e2 = ExecutionContext("sqlite3", SQLiteExecutionContext(self._gravity_configuration, "chinook.db"))
+        e1 = ExecutionContext("db", PostgresExecutionContext(self._gravity_configuration, "dvdrental"))
+        e2 = ExecutionContext("sqlite3", SQLiteExecutionContext(self._gravity_configuration, "app.db"))
         
         execution_contexts = {}
         for e in [ e1, e2 ]:

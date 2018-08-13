@@ -31,7 +31,7 @@ class TestGravity(unittest.TestCase):
     
     def setUp(self):
         self._gravity_config = GravityConfiguration("/path")
-        self._gravity = Gravity(self._gravity_config, FakeExecutionContext(), FakeContentReader())        
+        self._gravity = Gravity(self._gravity_config, FakeContentReader())        
 
     def tearDown(self):
         pass
@@ -69,7 +69,7 @@ class TestGravity(unittest.TestCase):
         
     def test_simple_get_executor_check(self):
         descriptor_get = self._gravity.create_descriptor("get", "get1", True)
-        executor_get = descriptor_get.create_executor(FakeExecutionContext())
+        executor_get = descriptor_get.create_executor()
         
         self.assertTrue(executor_get.get_node_descritor().get_name() == "get")
 
@@ -96,7 +96,7 @@ class TestGravity(unittest.TestCase):
 
     def test_simple_get_shape_check(self):
         descriptor_get = self._gravity.create_descriptor("get", "get1", True)
-        executor_get = descriptor_get.create_executor(FakeExecutionContext())
+        executor_get = descriptor_get.create_executor()
         input_shape = executor_get.create_input_shape(None)
         
         self.assertIsNotNone(input_shape._shapes["data"])
