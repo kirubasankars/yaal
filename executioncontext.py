@@ -1,8 +1,8 @@
 import re
 import sqlite3 as lite
 
-#import psycopg2
-#from psycopg2.extras import RealDictCursor
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
 def _dict_factory(cursor, row):
     d = {}
@@ -59,7 +59,7 @@ class PostgresExecutionContext:
     
     def execute(self, node_query, input_shape):
         con = self._conn
-        content = node_query.get_executable_content("?")                            
+        content = node_query.get_executable_content("%s")                            
         
         with con:
             cur = con.cursor(cursor_factory = RealDictCursor)

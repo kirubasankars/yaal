@@ -37,7 +37,7 @@ def serve_api(application, path):
         if path != "":
             path = "api/" + path
             
-        e = g.create_executor(method, path, True)
+        e = g.create_executor(method, path, False)
         input_shape = None
         try:
             ijson = request.get_json()                    
