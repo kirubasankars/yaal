@@ -19,6 +19,48 @@ class NodeExecutor:
     def get_output_type(self):
         return self._output_type
 
+    def e(self, input_type, node_descriptor, execution_contexts, input_shape):        
+        node_queries = node_descriptor.get_node_queries()
+        execution_context = execution_contexts["db"]
+        paramsstr = "$params"
+        errorstr = "$error"
+        breakstr = "$break"
+        rs = []
+        if node_queries is not None: 
+            for node_query in node_descriptor.get_node_queries():                            
+                query_connection = node_query.get_connection_name()
+                if query_connection is not None:
+                    if query_connection in execution_contexts:
+                        output, output_last_inserted_id = execution_contexts[query_connection].execute(node_query, input_shape)
+                    else:
+                        raise Exception("connection string " + query_connection + " missing")
+                else:
+                    output, output_last_inserted_id = execution_context.execute(node_query, input_shape)
+
+                input_shape.set_prop("$last_inserted_id", output_last_inserted_id)
+
+                if len(output) >= 1:
+                    output0 = output[0]
+                    if errorstr in output0 and output0[errorstr] == 1:
+                        for o in output:
+                            del o[errorstr] 
+                        raise Exception(output)
+                    elif paramsstr in output0 and output0[paramsstr] == 1:
+                        for k, v in output0.items():
+                            input_shape.set_prop(k, v)
+                    elif breakstr in output0 and output0[breakstr] == 1:
+                        for o in output:
+                            del o[breakstr] 
+                        break
+                    else:
+                        if input_type is not None:
+                            if input_type == "array":
+                                rs.extend(output)
+                            elif input_type == "object":
+                                rs = output
+        return rs
+                    
+
     def _execute(self, execution_contexts, input_shape, parent_rows, parent_partition_by):
         execution_context =  execution_contexts["db"]
         node_descriptor = self.get_node_descritor()
@@ -38,9 +80,9 @@ class NodeExecutor:
 
                 length = int(input_shape.get_prop("$length"))
                 for i in range(0, length):
+                    item_input_shape = input_shape.get_prop("@" + str(i))
                     if node_queries is not None:                
-                        for node_query in node_descriptor.get_node_queries():
-                            item_input_shape = input_shape.get_prop("@" + str(i))
+                        for node_query in node_descriptor.get_node_queries():                            
                             query_connection = node_query.get_connection_name()
                             if query_connection is not None:
                                 if query_connection in execution_contexts:
