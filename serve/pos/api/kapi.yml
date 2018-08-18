@@ -1,0 +1,10 @@
+paths:
+  /address:
+    get:
+      parameters:
+        -
+          name: page
+          in: query
+          schema:
+            type: integer
+                    

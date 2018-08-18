@@ -96,7 +96,10 @@ class TestGravity(unittest.TestCase):
         query1 = queries[1]
         query1_parameters = query1.get_parameters()    
         self.assertEqual(1, len(query1_parameters))
-        self.assertEqual("bool", query1_parameters[0].get_type())        
+        self.assertEqual("bool", query1_parameters[0].get_type())
+
+        e = descriptor_get.create_executor()        
+        s = e.create_input_shape(None)
 
 if __name__ == "__main__":
     unittest.main()

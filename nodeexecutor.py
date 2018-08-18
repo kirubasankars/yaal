@@ -60,7 +60,6 @@ class NodeExecutor:
                                 rs = output
         return rs
                     
-
     def _execute(self, execution_contexts, input_shape, parent_rows, parent_partition_by):
         execution_context =  execution_contexts["db"]
         node_descriptor = self.get_node_descritor()
@@ -92,7 +91,7 @@ class NodeExecutor:
                             else:
                                 sub_output, sub_output_last_inserted_id = execution_context.execute(node_query, item_input_shape)
                                             
-                            item_input_shape.set_prop("$last_inserted_id", sub_output_last_inserted_id)
+                            item_input_shape.set_prop("$params.$last_inserted_id", sub_output_last_inserted_id)
 
                             if len(sub_output) >= 1:
                                 output0 = sub_output[0]
@@ -102,7 +101,7 @@ class NodeExecutor:
                                     raise Exception(output)
                                 elif paramsstr in output0 and output0[paramsstr] == 1:
                                     for k, v in output0.items():
-                                        item_input_shape.set_prop(k, v)
+                                        item_input_shape.set_prop("$params." + k, v)
                                 elif breakstr in output0 and output0[breakstr] == 1:
                                     for o in output:
                                         del o[breakstr] 
@@ -122,7 +121,7 @@ class NodeExecutor:
                         else:
                             output, last_inserted_id = execution_context.execute(node_query, input_shape)
 
-                        input_shape.set_prop("$last_inserted_id", last_inserted_id)
+                        input_shape.set_prop("$params.$last_inserted_id", last_inserted_id)
 
                         if len(output) >= 1:
                             output0 = output[0]
@@ -132,7 +131,7 @@ class NodeExecutor:
                                 raise Exception(output)
                             elif paramsstr in output0 and output0[paramsstr] == 1:
                                 for k, v in output[0].items():
-                                    input_shape.set_prop(k, v)
+                                    input_shape.set_prop("$params." + k, v)
                             elif breakstr in output0 and output0[breakstr] == 1:
                                 for o in output:
                                     del o[breakstr] 
@@ -267,9 +266,21 @@ class NodeExecutor:
     def get_nodes(self):
         return self._nodes
     
-    def create_input_shape(self, data):
-        input_model = self._node_descriptor.get_input_model()
-        return Shape(input_model, data, None) 
+    def create_input_shape(self, request_body, params, query, path):        
+        params_shape = Shape({}, None, None, None, None, None)
+        for k, v in params.items():
+            params_shape.set_prop(k, v)
+
+        query_shape = Shape({}, None, None, None, None, None)
+        for k, v in query.items():
+            query_shape.set_prop(k, v)        
+
+        path_shape = Shape({}, None, None, None, None, None)
+        for k, v in path.items():
+            path_shape.set_prop(k, v)
+
+        input_model = self._node_descriptor.get_input_model()    
+        return Shape(input_model, request_body, None, params_shape, query_shape, path_shape)
 
     def build(self):
         self._node_execution_builder.build(self)

@@ -3,8 +3,8 @@ from flask import Flask, request, abort, send_from_directory
 
 from gravity import Gravity
 from gravity import GravityConfiguration
-from executioncontext import SQLiteExecutionContext
 from contentreader import FileReader
+from shape import Shape
 
 app = Flask(__name__)
 apps = {}
@@ -37,16 +37,21 @@ def serve_api(application, path):
         if path != "":
             path = "api/" + path
             
-        e = g.create_executor(method, path, False)
+        e = g.create_executor(method, path, True)
         input_shape = None
+        request_body = None
         try:
-            ijson = request.get_json()                    
-            input_shape = e.create_input_shape(ijson)
+            request_body = request.get_json()                                
         except:
-            input_shape = e.create_input_shape(None)
+            pass
 
+        query = {}
         for k, v in request.args.items():
-            input_shape.set_prop(k, v)
+            query[k] = v
+
+        params = {}
+
+        input_shape = e.create_input_shape(request_body, params, query, query)
         execution_contexts = g.create_execution_contexts()
         return e.get_result_json(execution_contexts, input_shape)
     except Exception as e:        
