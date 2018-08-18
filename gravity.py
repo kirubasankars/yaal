@@ -4,7 +4,7 @@ from nodedescriptor import NodeDescriptor
 from nodedescriptor import NodeDescritporBuilder
 from nodedescriptor import NodeDescritporFactory
 from executioncontext import SQLiteExecutionContext
-from executioncontext import PostgresExecutionContext
+from postgresqlexeuctioncontext import PostgresExecutionContext
 from contentreader import FileReader
 
 class GravityConfiguration:
@@ -36,7 +36,7 @@ class Gravity:
         if content_reader is None:
             self._content_reader = FileReader(gravity_configuration)
         else:
-            self._content_reader = content_reader        
+            self._content_reader = content_reader
         self._node_descriptor_builder = NodeDescritporBuilder(self._content_reader)
         self._node_descriptor_factory = NodeDescritporFactory(self._content_reader, self._node_descriptor_builder)
 

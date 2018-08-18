@@ -1,3 +1,3 @@
---params($parent.page integer)--
+--params($query.page integer)--
 
-SELECT * FROM category limit 10 offset ({{$parent.page}} - 1) * 10
+SELECT * FROM category limit 10 offset ({{$query.page}} - 1) * 10

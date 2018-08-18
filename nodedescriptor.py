@@ -183,13 +183,19 @@ class NodeQuery:
     
     def build_parameter_values(self, input_shape):
         values = []
+        _cache = {}
         if self._parameters is not None:
             for p in self._parameters:
                 pname = p.get_name()
                 ptype = p.get_type()
                 prequired = p.get_is_required()
 
-                pvalue = input_shape.get_prop(pname)
+                if pname in _cache:
+                    pvalue = _cache[pname]
+                else:
+                    pvalue = input_shape.get_prop(pname)
+                    _cache[pname] = pvalue
+                    
                 if prequired == True and pvalue is None:
                     raise Exception("parameter " + pname + " is required. can't be none.")
 
@@ -258,7 +264,7 @@ class NodeDescriptorParameter:
     def get_is_required(self):
         return self._required
 
-parameters_meta_rx = re.compile("--params\((.*)\)--")
+parameters_meta_rx = re.compile("--\((.*)\)--")
 parameter_meta_rx = re.compile("\s*([A-Za-z0-9_.$-]+)(\s+(\w+))?\s*")
 parameter_rx = re.compile("\{\{([A-Za-z0-9_.$-]*?)\}\}", re.MULTILINE)
 query_rx = re.compile("--query\(([a-zA-Z0-9.$_,]*?)\)\(([a-zA-Z0-9.$_]*?)\)--")

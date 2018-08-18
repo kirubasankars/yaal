@@ -1,17 +1,21 @@
 
 
 class Shape:
-    def __init__(self, input_model, data, parent_shape):        
+    def __init__(self, input_model, data, parent_shape, params_shape, query_shape, path_shape):        
         self._list = False
         self._object = False
 
-        self._data = data or {}    
+        self._data = data or {}
         self._shapes = {}
         shapes = self._shapes
-        self._parent = parent_shape
+        self._parent = parent_shape        
         self._input_model = input_model        
         self._input_properties = None
         input_properties = None
+        
+        self._params = params_shape
+        self._query = query_shape
+        self._path = path_shape
         
         if data is not None and ("$parent" in data or "$length" in data):
             raise Exception("$parent or $length is reversed keywords. You can't use them.")
@@ -43,7 +47,7 @@ class Shape:
             idx = 0
             input_model[_typestr] = "object"                
             for item in self._data:
-                self._shapes["@" + str(idx)] = Shape(input_model, item, self)                
+                self._shapes["@" + str(idx)] = Shape(input_model, item, self, self._params, self._query, self._path)
                 idx = idx + 1
             input_model[_typestr] = "array"
         else:            
@@ -53,7 +57,13 @@ class Shape:
                         dvalue = None
                         if k in self._data:
                             dvalue = data.get(k)
-                        shapes[k] = Shape(v, dvalue, self)            
+                        shapes[k] = Shape(v, dvalue, self, self._params, self._query, self._path)            
+
+    def set_query(self, query_shape):
+        self._query = query_shape
+
+    def set_path(self, path_shape):
+        self._path = path_shape
 
     def get_prop(self, prop):
         dot = prop.find(".")
@@ -61,8 +71,18 @@ class Shape:
             path = prop[:dot]
             remaining_path = prop[dot+1:]
             
-            if path == "$parent":
-                return self._parent.get_prop(remaining_path)
+            if path[0] == "$":
+                if path == "$parent":
+                    return self._parent.get_prop(remaining_path)
+
+                if path == "$params":
+                    return self._params.get_prop(remaining_path)
+
+                if path == "$query":
+                    return self._query.get_prop(remaining_path)
+
+                if path == "$path":
+                    return self._path.get_prop(remaining_path)
 
             if path in self._shapes:
                 return self._shapes[path].get_prop(remaining_path)
@@ -72,8 +92,18 @@ class Shape:
                 if prop == "$parent":
                     return self._parent
 
+                if prop == "$params":
+                    return self._params
+
+                if prop == "$query":
+                    return self._query
+
+                if prop == "$path":
+                    return self._path
+
                 if prop == "$length":
                     return len(self._data)
+                                
 
             if prop in self._shapes:
                 return self._shapes[prop]
@@ -95,8 +125,9 @@ class Shape:
             path = prop[:dot]
             remaining_path = prop[dot+1:]
             
-            if path == "$parent":
-                return self._parent.set_prop(remaining_path, value)
+            if path[0] == "$":
+                if path == "$params":
+                    return self._params.set_prop(remaining_path, value)
 
             if path in self._shapes:
                 return self._shapes[path].set_prop(remaining_path, value)
