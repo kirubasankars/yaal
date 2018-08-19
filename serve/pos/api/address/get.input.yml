@@ -1,0 +1,9 @@
+query:
+  page:
+    type: integer
+    default: 1
+
+path:
+  userId:
+    type: integer
+    

@@ -9,29 +9,29 @@ from shape import Shape
 app = Flask(__name__)
 apps = {}
 
-@app.route('/<application>', methods=['GET'])
-def root(application):
-    static_file_dir = os.path.join("serve", application, 'app')
+@app.route('/<namespace>', methods=['GET'])
+def root(namespace):
+    static_file_dir = os.path.join("serve", namespace, 'app')
     return send_from_directory(static_file_dir, 'index.html')
  
-@app.route('/<application>/<path:path>', methods=['GET'])
-def serve_app(application, path):
-    static_file_dir = os.path.join("serve", application, 'app')
+@app.route('/<namespace>/<path:path>', methods=['GET'])
+def serve_app(namespace, path):
+    static_file_dir = os.path.join("serve", namespace, 'app')
     if not os.path.isfile(os.path.join(static_file_dir, path)):
         path = os.path.join(path, 'index.html')
  
     return send_from_directory(static_file_dir, path)
 
-@app.route('/<application>/api/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE'])
-def serve_api(application, path):
+@app.route('/<namespace>/api/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE'])
+def serve_api(namespace, path):
     try:
         g = None
-        if application in apps:
-            g = apps[application]            
+        if namespace in apps:
+            g = apps[namespace]            
         else:
-            gc = GravityConfiguration("serve/" + application)
+            gc = GravityConfiguration("serve/" + namespace)
             g = Gravity(gc, FileReader(gc))
-            apps[application] = g
+            apps[namespace] = g
         
         method = request.method.lower()
         if path != "":
@@ -49,7 +49,10 @@ def serve_api(application, path):
         for k, v in request.args.items():
             query[k] = v
 
-        params = {}
+        params = {
+            "namespace": namespace,
+            "path": path            
+        }
 
         input_shape = e.create_input_shape(request_body, params, query, query)
         execution_contexts = g.create_execution_contexts()

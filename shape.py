@@ -111,7 +111,7 @@ class Shape:
             if prop in self._data:
                 return self._data[prop]
 
-            if prop in self._input_properties:
+            if self._input_properties is not None and prop in self._input_properties:
                 defaultstr = "default"
                 input_type = self._input_properties[prop]
                 if defaultstr in input_type:
