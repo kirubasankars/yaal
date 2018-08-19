@@ -1,4 +1,4 @@
---params($query.page integer)--
+--($query.page integer)--
 
 --query()(sqlite3)--
 

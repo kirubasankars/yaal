@@ -1,0 +1,21 @@
+type: object
+properties:
+    paging:
+      type: object
+    data:
+      type: array
+      partition_by: address_id
+      properties: 
+        Address_id:
+          type: integer
+          mapped: address_id
+        Address:
+          mapped: address
+        City:
+          type: object
+          parent_rows: true
+          properties:
+            id: 
+              mapped: city_id
+            name:
+              mapped: city
