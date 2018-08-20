@@ -1,4 +1,4 @@
-
+from jsonschema import validate, FormatChecker
 
 class Shape:
     def __init__(self, input_model, data, parent_shape, params_shape, query_shape, path_shape):        
@@ -131,5 +131,26 @@ class Shape:
 
             if path in self._shapes:
                 return self._shapes[path].set_prop(remaining_path, value)
-        else:                                   
-            self._data[prop] = value
+        else:            
+            self._data[prop] = self.check_and_cast(prop, value)
+
+    def validate(self):      
+        if self._input_model is not None:          
+            validate(self._data, self._input_model, format_checker=FormatChecker())
+
+    def check_and_cast(self, prop, value):
+        if self._input_properties is not None and prop in self._input_properties:
+                prop_schema = self._input_properties[prop]
+                _type_str = "type"
+                if _type_str in prop_schema:
+                    ptype = prop_schema[_type_str]
+                    try:
+                        if ptype  == "integer" and not isinstance(value, int):
+                            return int(value)
+                        if ptype  == "string" and not isinstance(value, str):
+                            return str(value)
+                        if ptype  == "number" and not isinstance(value, float):
+                            return float(value)
+                    except:
+                        pass                    
+        return value

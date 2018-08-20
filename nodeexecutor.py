@@ -240,17 +240,17 @@ class NodeExecutor:
                 mapped_result = {}
         return mapped_result
 
-    def get_result(self, execution_contexts, input_shape):
-        if "db" not in execution_contexts:
-            raise Exception("default connection string name db is missing")
-        
+    def get_result(self, execution_contexts, input_shape):        
         try:
+            if "db" not in execution_contexts:
+                raise Exception("default connection string name db is missing")
+        
             rs = self._execute(execution_contexts, input_shape, [], None)           
             rs = self.map(rs)
             
             return rs
         except Exception as e:
-            #raise e
+            #raise e            
             return { "errors" : e.args[0] }
     
     def _default_date_time_converter(self, o):
