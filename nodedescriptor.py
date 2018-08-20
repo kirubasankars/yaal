@@ -23,9 +23,11 @@ class NodeDescriptor:
         self._nodes = None
         self._node_queries = None
         self._use_parent_rows = None
+        self._input_query = None
+        self._input_path = None
 
-    def build(self, treemap, input_model, output_model):        
-        self._node_descriptor_builder.build(self, treemap, input_model, output_model)
+    def build(self, treemap, input_model, output_model, input_query, input_path):        
+        self._node_descriptor_builder.build(self, treemap, input_model, output_model, input_query, input_path)
 
     def get_name(self):
         return self._name 
@@ -107,6 +109,18 @@ class NodeDescriptor:
 
     def set_node_queries(self, queries):
         self._node_queries = queries
+
+    def set_input_query(self, input_query):
+        self._input_query = input_query
+
+    def get_input_query(self):
+        return self._input_query
+
+    def set_input_path(self, input_path):
+        self._input_path = input_path
+
+    def get_input_path(self):
+        return self._input_path
 
     def create_executor(self):
         node_execution_builder = NodeExecutorBuilder()
@@ -343,12 +357,12 @@ class NodeDescritporBuilder:
         
         node_descriptor.set_node_queries(node_queries)
 
-    def build(self, node_descriptor, treemap, input_model, output_model):
+    def build(self, node_descriptor, treemap, input_model, output_model, input_query, input_path):
         path = node_descriptor.get_path()
         method = node_descriptor.get_method()
 
         content = self._content_reader.get_sql(method, path)
-        node_descriptor.set_content(content)    
+        node_descriptor.set_content(content)
 
         sub_nodes_names = {}
         
@@ -365,6 +379,9 @@ class NodeDescritporBuilder:
             input_model["properties"] = {}
         
         node_descriptor.set_input_type(input_model[_typestr])
+        
+        node_descriptor.set_input_query(input_query)
+        node_descriptor.set_input_path(input_path)
 
         node_descriptor.set_input_model(input_model)        
         node_descriptor.set_output_model(output_model)
@@ -422,7 +439,7 @@ class NodeDescritporBuilder:
                 if k in output_properties:
                     sub_output_model = output_properties[k]
 
-            sub_node_descriptor.build(v, sub_input_model, sub_output_model)
+            sub_node_descriptor.build(v, sub_input_model, sub_output_model, input_query, input_path)
             nodes.append(sub_node_descriptor)
 
         node_descriptor.set_nodes(nodes)
@@ -483,17 +500,38 @@ class NodeDescritporFactory:
 
         treemap = self._build_treemap(ordered_files)        
         config = self._content_reader.get_config(method, path)
+        
         input_model_str = "input.model"
         output_model_str = "output.model"
+        input_body_str = "body"
+        input_query_str = "query"
+        input_path_str = "path"
+        
+        input_query = None
+        input_path = None
         input_model = None
-        output_model = None        
+        output_model = None
+
         if config is not None:
             if input_model_str in config:
-                input_model = config[input_model_str]
+                input_config = config[input_model_str]
+                if input_config is not None:
+                    if input_body_str in input_config:
+                        input_model = input_config[input_body_str]
+                    if input_query_str in input_config:
+                        input_query = {
+                            "type" : "object",
+                            "properties" : input_config[input_query_str]
+                        }
+                    if input_path_str in input_config:
+                        input_path = {
+                            "type" : "object",
+                            "properties" : input_config[input_path_str]
+                        }
             if output_model_str in config:
                 output_model = config[output_model_str]
-
+        
         node_descriptor = NodeDescriptor(method, method, path, None, True, self._node_descriptor_builder)
-        node_descriptor.build(treemap[method], input_model, output_model)
+        node_descriptor.build(treemap[method], input_model, output_model, input_query, input_path)
 
         return node_descriptor

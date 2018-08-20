@@ -21,7 +21,7 @@ class FakeExecutionContext:
 class FakeContentReader:
 
     def get_sql(self, method, path):
-        return """--params(id1, id2)--
+        return """--(id1, id2)--
 select {{id1}}
 --query()()--
         """
@@ -35,7 +35,7 @@ select {{id1}}
 class FakeContentReader1:
 
     def get_sql(self, method, path):
-        return """--params(id1 integer, id2 bool)--
+        return """--(id1 integer, id2 bool)--
 select {{id1}}, {{id2}}
 --query()()--
 select {{id2}}
@@ -99,7 +99,7 @@ class TestGravity(unittest.TestCase):
         self.assertEqual("bool", query1_parameters[0].get_type())
 
         e = descriptor_get.create_executor()        
-        s = e.create_input_shape(None)
+        s = e.create_input_shape(None, None, None, None)
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,4 +1,4 @@
---params($query.page integer)--
+--($query.page integer)--
 
 select 1 as "$error", 'page can''t be less then 1.' as "message" where {{$query.page}} < 1
 

@@ -25,13 +25,15 @@ class FakeContentReader:
     def get_config(self, method, path):
         return {
             "input.model" : {
-                "type" : "object",
-                "properties" : {
-                    "items": {
-                        "type" : "array",
-                        "properties" : {                            
-                            "product" : {
-                                "type" : "object"
+                "body" : {
+                    "type" : "object",
+                    "properties" : {
+                        "items": {
+                            "type" : "array",
+                            "properties" : {                            
+                                "product" : {
+                                    "type" : "object"
+                                }
                             }
                         }
                     }
@@ -85,7 +87,7 @@ class TestGravity(unittest.TestCase):
     def test_simple_get_shape_check(self):        
         descriptor_post = self._gravity.create_descriptor("post", "post1", True)
         executor_post = descriptor_post.create_executor()
-        input_shape = executor_post.create_input_shape(None)
+        input_shape = executor_post.create_input_shape(None, None, None, None)
         
         self.assertIsNotNone(input_shape._shapes["items"])        
         self.assertEqual(len(input_shape._shapes["items"]._shapes),0)
@@ -94,10 +96,10 @@ class TestGravity(unittest.TestCase):
         descriptor_post = self._gravity.create_descriptor("post", "post1", True)
         executor_post = descriptor_post.create_executor()
         d = {"items":[{"a":1}, {"b":1}]}
-        input_shape = executor_post.create_input_shape(d)            
-        rs = executor_post.get_result({ "db": FakeExecutionContext() },input_shape)
+        input_shape = executor_post.create_input_shape(d, None, None, None)            
+        rs = executor_post.get_result({ "db": FakeExecutionContext() }, input_shape)
 
-        self.assertListEqual(rs, [d])        
+        self.assertListEqual(rs, [d])
 
 if __name__ == "__main__":
     unittest.main()
