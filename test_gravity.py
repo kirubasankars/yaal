@@ -97,7 +97,7 @@ class TestGravity(unittest.TestCase):
     def test_simple_get_shape_check(self):
         descriptor_get = self._gravity.create_descriptor("get", "get1", True)
         executor_get = descriptor_get.create_executor()
-        input_shape = executor_get.create_input_shape(None)
+        input_shape = executor_get.create_input_shape(None, None, None, None)
         
         self.assertIsNotNone(input_shape._shapes["data"])
         self.assertIsNotNone(input_shape._shapes["paging"])

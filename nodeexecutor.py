@@ -266,18 +266,22 @@ class NodeExecutor:
     def get_nodes(self):
         return self._nodes
     
-    def create_input_shape(self, request_body, params, query, path):        
+    def create_input_shape(self, request_body, params, query, path):                
+        node_descriptor = self._node_descriptor
         params_shape = Shape({}, None, None, None, None, None)
-        for k, v in params.items():
-            params_shape.set_prop(k, v)
+        if params is not None:
+            for k, v in params.items():
+                params_shape.set_prop(k, v)
 
-        query_shape = Shape({}, None, None, None, None, None)
-        for k, v in query.items():
-            query_shape.set_prop(k, v)        
+        query_shape = Shape(node_descriptor.get_input_query(), None, None, None, None, None)
+        if query is not None:            
+            for k, v in query.items():
+                query_shape.set_prop(k, v)        
 
-        path_shape = Shape({}, None, None, None, None, None)
-        for k, v in path.items():
-            path_shape.set_prop(k, v)
+        path_shape = Shape(node_descriptor.get_input_path(), None, None, None, None, None)
+        if path is not None:
+            for k, v in path.items():
+                path_shape.set_prop(k, v)
 
         input_model = self._node_descriptor.get_input_model()    
         return Shape(input_model, request_body, None, params_shape, query_shape, path_shape)

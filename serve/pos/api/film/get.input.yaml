@@ -1,0 +1,4 @@
+query:
+  page:
+    type: integer
+    default: 1
