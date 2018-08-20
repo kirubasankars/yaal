@@ -1,7 +1,4 @@
 query:
   page:
     type: integer
-    default: 3
-path:
-  userId:
-    type: integer
+    default: 2

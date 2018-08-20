@@ -278,10 +278,10 @@ class NodeDescriptorParameter:
     def get_is_required(self):
         return self._required
 
-parameters_meta_rx = re.compile("--\((.*)\)--")
-parameter_meta_rx = re.compile("\s*([A-Za-z0-9_.$-]+)(\s+(\w+))?\s*")
-parameter_rx = re.compile("\{\{([A-Za-z0-9_.$-]*?)\}\}", re.MULTILINE)
-query_rx = re.compile("--query\(([a-zA-Z0-9.$_,]*?)\)\(([a-zA-Z0-9.$_]*?)\)--")
+parameters_meta_rx = re.compile(r"--\((.*)\)--")
+parameter_meta_rx = re.compile(r"\s*([A-Za-z0-9_.$-]+)(\s+(\w+))?\s*")
+parameter_rx = re.compile(r"\{\{([A-Za-z0-9_.$-]*?)\}\}", re.MULTILINE)
+query_rx = re.compile(r"--query\(([a-zA-Z0-9.$_,]*?)\)\(([a-zA-Z0-9.$_]*?)\)--")
 
 class NodeDescritporBuilder:
 
