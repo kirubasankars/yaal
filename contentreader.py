@@ -4,19 +4,19 @@ import json
 
 class FileReader:
 
-    def __init__(self, gravity_configuration):
-        self._gravity_configuration = gravity_configuration
+    def __init__(self, root_path):
+        self._root_path = root_path
 
     def get_sql(self, method, path):
-        file_path = os.path.join(*[self._gravity_configuration.get_root_path(), path, method + ".sql"])
+        file_path = os.path.join(*[self._root_path, path, method + ".sql"])
         return self._get(file_path)
     
     def get_config(self, method, path):
             
-        input_path = os.path.join(*[self._gravity_configuration.get_root_path(), path, method + ".input"])        
+        input_path = os.path.join(*[self._root_path, path, method + ".input"])        
         input_config = self._get_config(input_path)
 
-        output_path = os.path.join(*[self._gravity_configuration.get_root_path(), path, method + ".output"])        
+        output_path = os.path.join(*[self._root_path, path, method + ".output"])        
         output_config = self._get_config(output_path)
 
         if input_config is None and output_config is None:
@@ -48,7 +48,7 @@ class FileReader:
 
     def list_sql(self, method, path):
         try:     
-            files = os.listdir(os.path.join(*[self._gravity_configuration.get_root_path(), path]))
+            files = os.listdir(os.path.join(*[self._root_path, path]))
             ffiles = [f.replace(".sql", "") for f in files if f.startswith(method) and f.endswith(".sql")]        
         except:
             ffiles = None

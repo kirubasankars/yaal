@@ -9,10 +9,9 @@ def _dict_factory(cursor, row):
 
 class SQLiteExecutionContext:
     
-    def __init__(self, gravity_configuration, db_name):        
-        self._gravity_configuration = gravity_configuration
-
-        db_path = gravity_configuration.get_root_path() + "/db"
+    def __init__(self, root_path, db_name):        
+        self._root_path = root_path
+        db_path = root_path + "/db"
         self._con = lite.connect(db_path + "/" + db_name)
 
     def begin(self):
@@ -24,6 +23,11 @@ class SQLiteExecutionContext:
     def error(self):
         pass
 
+    def get_value(self, ptype, value):        
+        if ptype == "blob":        
+            return lite.Binary(value)        
+        return value
+
     def execute(self, node_query, input_shape):        
         con = self._con
         
@@ -31,7 +35,7 @@ class SQLiteExecutionContext:
         con.row_factory = _dict_factory    
         with con:
             cur = con.cursor()
-            args = node_query.build_parameter_values(input_shape)
+            args = node_query.build_parameter_values(input_shape, self.get_value)
             cur.execute(content, args)
             rows = cur.fetchall()
             
