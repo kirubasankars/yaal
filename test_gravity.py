@@ -1,6 +1,5 @@
 import unittest
 from gravity import Gravity
-from gravity import GravityConfiguration
 
 class FakeExecutionContext:
     
@@ -29,9 +28,8 @@ class FakeContentReader:
 
 class TestGravity(unittest.TestCase):
     
-    def setUp(self):
-        self._gravity_config = GravityConfiguration("/path")
-        self._gravity = Gravity(self._gravity_config, FakeContentReader())        
+    def setUp(self):        
+        self._gravity = Gravity("/path", FakeContentReader())        
 
     def tearDown(self):
         pass
