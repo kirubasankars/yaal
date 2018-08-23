@@ -1,0 +1,11 @@
+type: array
+partition_by: actor_id
+properties:  
+  name:
+    parent_rows: true
+    type: object
+    properties:
+      first:
+        mapped: first_name
+  last_update:
+    mapped: last_update

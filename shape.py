@@ -1,6 +1,7 @@
 from jsonschema import validate, FormatChecker
 
 class Shape:
+    
     def __init__(self, input_model, data, parent_shape, params_shape, query_shape, path_shape):        
         self._list = False
         self._object = False
@@ -134,7 +135,16 @@ class Shape:
         else:            
             self._data[prop] = self.check_and_cast(prop, value)
 
-    def validate(self):      
+    def validate(self):
+        errors = { }
+        
+        if self._query:
+            errors["query"] = self._query.validate()
+        if self._path:
+            errors["path"] = self._path.validate()
+        if self._params:
+            errors["params"] = self._params.validate()
+
         if self._input_model is not None:          
             validate(self._data, self._input_model, format_checker=FormatChecker())
 
