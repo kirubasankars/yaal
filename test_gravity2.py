@@ -1,5 +1,5 @@
 import unittest
-from gravity import Gravity
+from gravity import Gravity,create_input_shape, get_result
 
 class FakeExecutionContext:
     
@@ -66,35 +66,18 @@ class TestGravity(unittest.TestCase):
         descritpor_nodes = descriptor_post_data_items.get_nodes()
         self.assertEqual(len(descritpor_nodes), 0)
 
-    def test_simple_get_executor_check(self):        
-        descriptor_post = self._gravity.create_descriptor("post", "post1", True)
-        executor_post = descriptor_post.create_executor()
-        
-        self.assertTrue(executor_post.get_node_descritor().get_name() == "post")
-
-        executor_nodes = executor_post.get_nodes()    
-        self.assertEqual(len(executor_nodes), 1)
-        
-        executor_post_items = executor_nodes[0]
-        self.assertTrue(executor_post_items.get_node_descritor().get_name() == "items")
-        
-        executor_nodes = executor_post_items.get_nodes()
-        self.assertEqual(len(executor_nodes), 0)
-
     def test_simple_get_shape_check(self):        
-        descriptor_post = self._gravity.create_descriptor("post", "post1", True)
-        executor_post = descriptor_post.create_executor()
-        input_shape = executor_post.create_input_shape(None, None, None, None)
+        descriptor_post = self._gravity.create_descriptor("post", "post1", True)        
+        input_shape = create_input_shape(descriptor_post, None, None, None, None)
         
         self.assertIsNotNone(input_shape._shapes["items"])        
         self.assertEqual(len(input_shape._shapes["items"]._shapes),0)
 
     def test_run(self):
-        descriptor_post = self._gravity.create_descriptor("post", "post1", True)
-        executor_post = descriptor_post.create_executor()
+        descriptor_post = self._gravity.create_descriptor("post", "post1", True)        
         d = {"items":[{"a":1}, {"b":1}]}
-        input_shape = executor_post.create_input_shape(d, None, None, None)            
-        rs = executor_post.get_result({ "db": FakeExecutionContext() }, input_shape)
+        input_shape = create_input_shape(descriptor_post, d, None, None, None)            
+        rs = get_result(descriptor_post, { "db": FakeExecutionContext() }, input_shape)
 
         self.assertListEqual(rs, [d])
 

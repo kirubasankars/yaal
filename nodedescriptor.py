@@ -1,8 +1,5 @@
 import re
 
-from nodeexecutor import NodeExecutorBuilder
-from nodeexecutor import NodeExecutor
-
 parameters_meta_rx = re.compile(r"--\((.*)\)--")
 parameter_meta_rx = re.compile(r"\s*([A-Za-z0-9_.$-]+)(\s+(\w+))?\s*")
 parameter_rx = re.compile(r"\{\{([A-Za-z0-9_.$-]*?)\}\}", re.MULTILINE)
@@ -135,12 +132,6 @@ class NodeDescriptor:
 
     def get_input_path(self):
         return self._input_path
-
-    def create_executor(self):
-        node_execution_builder = NodeExecutorBuilder()
-        node_executor = NodeExecutor(self, node_execution_builder)
-        node_executor.build()
-        return node_executor
 
     def get_input_propery_definition(self, prop):
         dot = prop.find(".")
