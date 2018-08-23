@@ -1,5 +1,5 @@
 import unittest
-from gravity import Gravity
+from gravity import Gravity, create_input_shape, get_result
 
 class FakeExecutionContext:
     
@@ -88,37 +88,9 @@ class TestGravity(unittest.TestCase):
         self.assertTrue(descriptor_get_data_items_product.get_name() == "product")
         self.assertTrue(descriptor_get_data_items_product.get_method() == "get.data.items.product")
         
-    def test_simple_get_executor_check(self):
-        descriptor_get = self._gravity.create_descriptor("get", "get1", True)
-        executor_get = descriptor_get.create_executor()
-        
-        self.assertTrue(executor_get.get_node_descritor().get_name() == "get")
-
-        executor_nodes = executor_get.get_nodes()
-        self.assertEqual(len(executor_nodes), 2)
-        
-        executor_get_data = executor_nodes[0]
-        executor_get_page = executor_nodes[1]
-
-        self.assertTrue(executor_get_data.get_node_descritor().get_name() == "data")
-        self.assertTrue(executor_get_page.get_node_descritor().get_name() == "paging")
-        
-        executor_nodes = executor_get_data.get_nodes()    
-        self.assertEqual(len(executor_nodes), 1)
-        
-        executor_get_data_items = executor_nodes[0]
-        self.assertTrue(executor_get_data_items.get_node_descritor().get_name() == "items")
-        
-        executor_nodes = executor_get_data_items.get_nodes()
-        self.assertEqual(len(executor_nodes), 1)
-
-        executor_get_data_items_product = executor_nodes[0]
-        self.assertTrue(executor_get_data_items_product.get_node_descritor().get_name() == "product")
-
     def test_simple_get_shape_check(self):
-        descriptor_get = self._gravity.create_descriptor("get", "get1", True)
-        executor_get = descriptor_get.create_executor()
-        input_shape = executor_get.create_input_shape(None, None, None, None)
+        descriptor_get = self._gravity.create_descriptor("get", "get1", True)        
+        input_shape = create_input_shape(descriptor_get, None, None, None, None)
         
         self.assertIsNotNone(input_shape._shapes["data"])
         self.assertIsNotNone(input_shape._shapes["paging"])

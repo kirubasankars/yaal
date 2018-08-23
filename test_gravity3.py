@@ -1,5 +1,5 @@
 import unittest
-from gravity import Gravity
+from gravity import Gravity, create_input_shape, get_result_json
 from nodedescriptor import NodeDescriptorParameter
 
 class FakeExecutionContext:
@@ -94,8 +94,7 @@ class TestGravity(unittest.TestCase):
         self.assertEqual(1, len(query1_parameters))
         self.assertEqual("bool", query1_parameters[0].get_type())
 
-        e = descriptor_get.create_executor()        
-        s = e.create_input_shape(None, None, None, None)
+        s = create_input_shape(descriptor_get, None, None, None, None)
 
 if __name__ == "__main__":
     unittest.main()

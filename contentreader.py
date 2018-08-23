@@ -1,6 +1,4 @@
-import os
-import yaml
-import json
+import os, yaml, json
 
 class FileReader:
 
@@ -23,6 +21,14 @@ class FileReader:
             return None 
 
         return { "input.model" : input_config, "output.model" : output_config }
+
+    def list_sql(self, method, path):
+        try:     
+            files = os.listdir(os.path.join(*[self._root_path, path]))
+            ffiles = [f.replace(".sql", "") for f in files if f.startswith(method) and f.endswith(".sql")]        
+        except:
+            ffiles = None
+        return ffiles
         
     def _get_config(self, filepath):
         yaml_path = filepath + ".yaml"
@@ -45,11 +51,3 @@ class FileReader:
         except:
             content = None
         return content
-
-    def list_sql(self, method, path):
-        try:     
-            files = os.listdir(os.path.join(*[self._root_path, path]))
-            ffiles = [f.replace(".sql", "") for f in files if f.startswith(method) and f.endswith(".sql")]        
-        except:
-            ffiles = None
-        return ffiles

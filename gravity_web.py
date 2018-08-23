@@ -1,10 +1,7 @@
-import os 
-import json
+import os, json 
 
 from flask import Flask, request, abort, send_from_directory
-from gravity import Gravity
-from contentreader import FileReader
-from shape import Shape
+from gravity import Gravity, create_input_shape, get_result_json
 
 app = Flask(__name__)
 namespaces = {}
@@ -28,17 +25,17 @@ def serve_api(namespace, path):
     join = os.path.join
 
     if namespace in namespaces:
-        g = namespaces[namespace]            
+        app = namespaces[namespace]            
     else:
         root_path = join(*["serve", namespace])
-        g = Gravity(root_path, FileReader(root_path))
-        namespaces[namespace] = g
+        app = Gravity(root_path, None)
+        namespaces[namespace] = app
     
     method = request.method.lower()        
     path = join(*["api", path])
     
-    executor = g.create_executor(method, path, True)
-    if not executor:
+    node_descriptor = app.create_descriptor(method, path, False)
+    if not node_descriptor:
         return abort(404)
     
     if request.mimetype == "application/json":
@@ -63,10 +60,10 @@ def serve_api(namespace, path):
         'path': path            
     }
 
-    input_shape = executor.create_input_shape(request_body, params, query, query)
-    #input_shape.validate()            
-    execution_contexts = g.create_execution_contexts()
-    return executor.get_result_json(execution_contexts, input_shape)
+    input_shape = create_input_shape(node_descriptor, request_body, params, query, query)
+    #input_shape.validate()           
+    execution_contexts = app.create_execution_contexts()
+    return get_result_json(node_descriptor, execution_contexts, input_shape)
 
 if __name__ == '__main__':
     app.run(debug=False)
