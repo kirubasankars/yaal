@@ -1,7 +1,5 @@
 import unittest
 from gravity import Gravity
-from gravity import GravityConfiguration
-from gravity import ExecutionContext
 from nodedescriptor import NodeDescriptorParameter
 
 class FakeExecutionContext:
@@ -57,8 +55,7 @@ class TestGravity(unittest.TestCase):
         pass
         
     def test_descriptor_with_parameters_query_check(self):
-        gravity_config = GravityConfiguration("/path")
-        gravity = Gravity(gravity_config, FakeContentReader())  
+        gravity = Gravity("/path", FakeContentReader())  
         descriptor_get = gravity.create_descriptor("get", "get1", True)
         
         parameters = descriptor_get.get_parameters()
@@ -74,9 +71,8 @@ class TestGravity(unittest.TestCase):
         self.assertEqual(1, len(query0_parameters))        
         self.assertEqual("select {{id1}}", query0.get_content().lstrip().rstrip())        
 
-    def test_descriptor_with_parameters_queries_check(self):        
-        gravity_config = GravityConfiguration("/path")
-        gravity = Gravity(gravity_config, FakeContentReader1())  
+    def test_descriptor_with_parameters_queries_check(self):                
+        gravity = Gravity("/path", FakeContentReader1())  
         descriptor_get = gravity.create_descriptor("get", "get1", True)
         
         parameters = descriptor_get.get_parameters()
