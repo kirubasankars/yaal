@@ -12,7 +12,7 @@ class FakeExecutionContext:
     def error(self):
         pass
 
-    def execute(self, node_executor, input_shape):        
+    def execute(self, node_executor, input_shape, a, s):        
         return [input_shape._data], 0
 
 class FakeContentReader:
@@ -53,18 +53,18 @@ class TestGravity(unittest.TestCase):
     def test_simple_post_descriptor_check(self):
         descriptor_post = self._gravity.create_descriptor("post", "post1", True)
         
-        self.assertTrue(descriptor_post.get_name() == "post")
-        self.assertTrue(descriptor_post.get_method() == "post")
+        self.assertTrue(descriptor_post["name"] == "post")
+        self.assertTrue(descriptor_post["method"] == "post")
         
-        descritpor_nodes = descriptor_post.get_nodes()
+        descritpor_nodes = descriptor_post["childrens"]
         self.assertEqual(len(descritpor_nodes), 1)
                 
         descriptor_post_data_items = descritpor_nodes[0]
-        self.assertTrue(descriptor_post_data_items.get_name() == "items")
-        self.assertTrue(descriptor_post_data_items.get_method() == "post.items")
+        self.assertTrue(descriptor_post_data_items["name"] == "items")
+        self.assertTrue(descriptor_post_data_items["method"] == "post.items")
 
-        descritpor_nodes = descriptor_post_data_items.get_nodes()
-        self.assertEqual(len(descritpor_nodes), 0)
+        descritpor_nodes = descriptor_post_data_items["childrens"]
+        self.assertEqual(descritpor_nodes, None)
 
     def test_simple_get_shape_check(self):        
         descriptor_post = self._gravity.create_descriptor("post", "post1", True)        
