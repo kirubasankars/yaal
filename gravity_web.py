@@ -19,6 +19,9 @@ def serve_app(namespace, path):
  
     return send_from_directory(static_file_dir, path)
 
+def remove_nulls(d):
+    return {k: v for k, v in d.iteritems() if v is not None}
+
 @app.route('/<namespace>/api', methods=['GET'], defaults = { 'path' : '' })
 @app.route('/<namespace>/api/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE'])
 def serve_api(namespace, path):
@@ -38,6 +41,10 @@ def serve_api(namespace, path):
     if not node_descriptor:
         return abort(404)
     
+    args = request.args
+    if "debug" in args:
+        return json.dumps(node_descriptor)
+
     if request.mimetype == "application/json":
         try:
             request_body = request.get_json()
@@ -47,7 +54,7 @@ def serve_api(namespace, path):
         request_body = None
 
     query = {}
-    for k, v in request.args.items():
+    for k, v in args.items():
         query[k] = v
 
     if request.mimetype == "multipart/form-data":
