@@ -1,6 +1,5 @@
 import unittest
 from gravity import Gravity, create_input_shape, get_result_json
-from nodedescriptor import NodeDescriptorParameter
 
 class FakeExecutionContext:
     
@@ -58,41 +57,41 @@ class TestGravity(unittest.TestCase):
         gravity = Gravity("/path", FakeContentReader())  
         descriptor_get = gravity.create_descriptor("get", "get1", True)
         
-        parameters = descriptor_get.get_parameters()
+        parameters = descriptor_get["parameters"]
         self.assertIn("id1", parameters)
         self.assertIn("id2", parameters)
         self.assertIs(type(parameters), dict)
 
-        queries = descriptor_get.get_node_queries()        
+        queries = descriptor_get["actions"]        
         self.assertIs(type(queries), list)
         self.assertEqual(1, len(queries))
         query0 = queries[0]
-        query0_parameters = query0.get_parameters()        
+        query0_parameters = query0["parameters"]        
         self.assertEqual(1, len(query0_parameters))        
-        self.assertEqual("select {{id1}}", query0.get_content().lstrip().rstrip())        
+        self.assertEqual("select {{id1}}", query0["content"].lstrip().rstrip())        
 
     def test_descriptor_with_parameters_queries_check(self):                
         gravity = Gravity("/path", FakeContentReader1())  
         descriptor_get = gravity.create_descriptor("get", "get1", True)
         
-        parameters = descriptor_get.get_parameters()
+        parameters = descriptor_get["parameters"]
         self.assertIn("id1", parameters)
         self.assertIn("id2", parameters)
         self.assertIs(type(parameters), dict)
 
-        queries = descriptor_get.get_node_queries()        
+        queries = descriptor_get["actions"]    
         self.assertIs(type(queries), list)
         self.assertEqual(2, len(queries))
         query0 = queries[0]
-        query0_parameters = query0.get_parameters()    
+        query0_parameters = query0["parameters"]    
         self.assertEqual(2, len(query0_parameters))
-        self.assertEqual("integer", query0_parameters[0].get_type())
-        self.assertEqual("bool", query0_parameters[1].get_type())
+        self.assertEqual("integer", query0_parameters[0]["type"])
+        self.assertEqual("bool", query0_parameters[1]["type"])
 
         query1 = queries[1]
-        query1_parameters = query1.get_parameters()    
+        query1_parameters = query1["parameters"]    
         self.assertEqual(1, len(query1_parameters))
-        self.assertEqual("bool", query1_parameters[0].get_type())
+        self.assertEqual("bool", query1_parameters[0]["type"])
 
         s = create_input_shape(descriptor_get, None, None, None, None)
 

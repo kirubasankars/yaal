@@ -335,7 +335,7 @@ def _build_descriptor(node_descriptor, treemap, content_reader, input_model, out
     method = node_descriptor["method"]
 
     content = content_reader.get_sql(method, path)
-    sub_nodes_names = {}
+    node_tree = {}
     
     if input_model is None:
         input_model = {
@@ -384,19 +384,19 @@ def _build_descriptor(node_descriptor, treemap, content_reader, input_model, out
                 if type(v) == dict and _typestr in v:
                     _type = v[_typestr]
                     if _type == "object" or _type == "array":                      
-                        sub_nodes_names[k] = {}
+                        node_tree[k] = {}
     else:
         node_descriptor["output_type"] = "array"        
         node_descriptor["use_parent_rows"] = False
         node_descriptor["partition_by"] = None
 
     for k in treemap:
-        if k not in sub_nodes_names:
-            sub_nodes_names[k] = treemap[k]
+        if k not in node_tree:
+            node_tree[k] = treemap[k]
 
     childrens = []
-    for child_method_name in sub_nodes_names:
-        v = sub_nodes_names[child_method_name]
+    for child_method_name in node_tree:
+        sub_node_tree = node_tree[child_method_name]
         mname = ".".join([method, child_method_name])
         child_descriptor = {
             "name" : child_method_name,
@@ -419,7 +419,7 @@ def _build_descriptor(node_descriptor, treemap, content_reader, input_model, out
             if child_method_name in output_properties:
                 sub_output_model = output_properties[child_method_name]
 
-        _build_descriptor(child_descriptor, v, content_reader, sub_input_model, sub_output_model)
+        _build_descriptor(child_descriptor, sub_node_tree, content_reader, sub_input_model, sub_output_model)
         childrens.append(child_descriptor)
     
     if len(childrens) != 0:
