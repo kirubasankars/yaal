@@ -12,7 +12,7 @@ class FakeExecutionContext:
     def error(self):
         pass
 
-    def execute(self, node_executor, input_shape, a, s):        
+    def execute(self, node_executor, input_shape, helper):        
         return [input_shape._data], 0
 
 class FakeContentReader:
