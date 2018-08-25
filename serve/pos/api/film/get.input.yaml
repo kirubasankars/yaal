@@ -1,5 +1,4 @@
 query: 
   page:
     type: integer
-    default: 1
-    minimum: 10
+    default: 1    
