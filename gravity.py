@@ -1,6 +1,6 @@
 import os, argparse, copy, datetime, re, json, yaml
 from collections import defaultdict
-from jsonschema import validate, FormatChecker
+from jsonschema import validate, FormatChecker, Draft4Validator
 
 import sqlite3
 
@@ -438,7 +438,12 @@ def _order_list_by_dots(names):
     return ordered
 
 def get_result(node_descriptor, execution_contexts, input_shape):
-    try:
+    
+    errors = input_shape.validate()
+    if errors:
+        return { "errors" : errors }
+
+    try:        
         if "db" not in execution_contexts:
             raise Exception("default connection string name db is missing")
         execution_context_helper = ExecutionContextHelper(parameter_rx)
@@ -446,9 +451,8 @@ def get_result(node_descriptor, execution_contexts, input_shape):
         rs = _output_mapper(node_descriptor["output_type"], node_descriptor["output_model"], node_descriptor["childrens"], rs)
         
         return rs
-    except Exception as e:
-        raise e            
-        #return { "errors" : e.args[0] }
+    except Exception as e:        
+        return { "errors" : e.args[0] }
 
 def _default_date_time_converter(o):
     if isinstance(o, datetime.datetime):
@@ -457,29 +461,40 @@ def _default_date_time_converter(o):
 def get_result_json(node_descriptor, execution_contexts, input_shape):    
     return json.dumps(get_result(node_descriptor, execution_contexts, input_shape), default= _default_date_time_converter)
 
-def create_input_shape(node_descriptor, request_body, params, query, path):
-    params_shape = Shape({}, None, None, None)
+def create_input_shape(node_descriptor, request_body, params, query, path):    
+    
+    input_query = node_descriptor["input_query"]    
+    input_path = node_descriptor["input_path"]  
+    input_model = node_descriptor["input_model"]
+
+    params_shape = Shape({}, None, None, None)    
     if params is not None:
         for k, v in params.items():
             params_shape.set_prop(k, v)
-            
-    query_shape = Shape(node_descriptor["input_query"], None, None, None)
+    
+    
+    query_shape = Shape(input_query, None, None, None)    
+    query_shape._validator = node_descriptor["input_query_schema_validator"]
     if query is not None:
         for k, v in query.items():
             query_shape.set_prop(k, v)        
 
-    path_shape = Shape(node_descriptor["input_path"], None, None, None)
+    
+    path_shape = Shape(input_path, None, None, None)
+    path_shape._validator = node_descriptor["input_path_schema_validator"]
     if path is not None:
         for k, v in path.items():
             path_shape.set_prop(k, v)
 
-    input_model = node_descriptor["input_model"]
     extras = {
         "$params" : params_shape, 
         "$query" : query_shape,
         "$path" :path_shape
-    }   
-    return Shape(input_model, request_body, None, extras)
+    }
+
+    input_model_shape = Shape(input_model, request_body, None, extras)
+    input_model_shape._validator = node_descriptor["input_model_schema_validator"]
+    return input_model_shape
 
 def create(method, path, content_reader):
     ordered_files = _order_list_by_dots(content_reader.list_sql(method, path))       
@@ -539,6 +554,22 @@ def create(method, path, content_reader):
         "input_query" : input_query,
         "input_path" : input_path
     }
+        
+    if input_query:
+        node_descriptor["input_query_schema_validator"] = Draft4Validator(schema = input_query, format_checker = FormatChecker())
+    else:
+        node_descriptor["input_query_schema_validator"] = None
+
+    if input_path:
+        node_descriptor["input_path_schema_validator"] = Draft4Validator(schema = input_path, format_checker = FormatChecker())    
+    else:
+        node_descriptor["input_path_schema_validator"] = None
+    
+    if input_model:
+        node_descriptor["input_model_schema_validator"] = Draft4Validator(schema = input_model, format_checker = FormatChecker())
+    else:
+        node_descriptor["input_model_schema_validator"] = None
+
     _build_descriptor(node_descriptor, True, treemap[method], content_reader, input_model, output_model)
 
     return node_descriptor
@@ -554,7 +585,8 @@ class Shape:
         self._input_model = input_model
         self._input_properties = None
         input_properties = None
-        self._index = 0 
+        self._index = 0
+        self._validator = None
         
         self._extras = extras        
         
@@ -698,22 +730,31 @@ class Shape:
             self._data[prop] = self.check_and_cast(prop, value)
 
     def validate(self):
-        errors = { }
-        extras = self._extras
         
+        extras = self._extras        
         if extras:
+            errors = []
             query = extras["$query"]
-            path = extras["$path"]
-            params = extras["$params"]
+            path = extras["$path"]            
             
-            errors["query"] = query.validate()        
-            errors["path"] = path.validate()        
-            errors["params"] = params.validate()
+            t = query.validate()
+            if t:
+                errors.extend(t)
+            t = path.validate()
+            
+            if t:
+                errors.extend(t)
+            
+            if self._validator:
+                t = list(self._validator.iter_errors(self._data))  
+                if t:
+                    errors.extend(t)
 
-        if self._input_model is not None:          
-            validate(self._data, self._input_model, format_checker=FormatChecker())
-            return []
-
+            return [{ "path" : e.path[0], "message" : e.message } for e in errors]
+        else:
+            if self._validator:            
+                return list(self._validator.iter_errors(self._data))
+    
     def check_and_cast(self, prop, value):
         if self._input_properties is not None and prop in self._input_properties:
                 prop_schema = self._input_properties[prop]

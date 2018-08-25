@@ -67,8 +67,7 @@ def serve_api(namespace, path):
         'path': path            
     }
 
-    input_shape = create_input_shape(node_descriptor, request_body, params, query, query)
-    input_shape.validate()           
+    input_shape = create_input_shape(node_descriptor, request_body, params, query, query)    
     execution_contexts = app.create_execution_contexts()
     return get_result_json(node_descriptor, execution_contexts, input_shape)
 
