@@ -1,6 +1,6 @@
 --($query.page integer, $params.total_pages integer)--
 
---query()()--
+--query()--
 
 SELECT 
     1 as "$params",
@@ -8,7 +8,7 @@ SELECT
 FROM 
     film
 
---query()(sqlite3)--
+--query(sqlite3)--
 
 SELECT 
     1 as "$error", 
@@ -17,7 +17,7 @@ SELECT
 WHERE 
     {{$query.page}} < 1 or {{$query.page}} > {{$params.total_pages}} 
 
---query()(sqlite3)--
+--query(sqlite3)--
 
 SELECT
     {{$query.page}} as current_page,

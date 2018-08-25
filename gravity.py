@@ -1,18 +1,18 @@
-import os, argparse, copy, datetime, re
-import json, yaml
+import os, argparse, copy, datetime, re, json, yaml
 from collections import defaultdict
+from jsonschema import validate, FormatChecker
 
-import sqlite3 as lite, psycopg2 as pg
+import sqlite3
+
+import psycopg2 as pg
 from psycopg2.extras import RealDictCursor
-
-from shape import Shape
 
 parameters_meta_rx = re.compile(r"--\((.*)\)--")
 parameter_meta_rx = re.compile(r"\s*([A-Za-z0-9_.$-]+)(\s+(\w+))?\s*")
 parameter_rx = re.compile(r"\{\{([A-Za-z0-9_.$-]*?)\}\}", re.MULTILINE)
-query_rx = re.compile(r"--query\(([a-zA-Z0-9.$_,]*?)\)\(([a-zA-Z0-9.$_]*?)\)--")
+query_rx = re.compile(r"--query\(([a-zA-Z0-9.$_]*?)\)--")
 
-def _get_query_output(node_descriptor, execution_contexts, input_shape):
+def _get_query_output(node_descriptor, execution_contexts, input_shape, execution_context_helper):
     input_type = node_descriptor["input_type"]
     actions = node_descriptor["actions"]
     execution_context = execution_contexts["db"]
@@ -23,15 +23,15 @@ def _get_query_output(node_descriptor, execution_contexts, input_shape):
 
     rs = []
     if actions is not None: 
-        for action in actions:                            
-            query_connection = action["connection"]
-            if query_connection is not None:
+        for action in actions:
+            if "connection" in action:
+                query_connection = action["connection"]        
                 if query_connection in execution_contexts:
-                    output, output_last_inserted_id = execution_contexts[query_connection].execute(action, input_shape, parameter_rx, _build_parameter_values)
+                    output, output_last_inserted_id = execution_contexts[query_connection].execute(action, input_shape, execution_context_helper)
                 else:
                     raise Exception("connection string " + query_connection + " missing")
             else:
-                output, output_last_inserted_id = execution_context.execute(action, input_shape, parameter_rx, _build_parameter_values)
+                output, output_last_inserted_id = execution_context.execute(action, input_shape, execution_context_helper)
 
             input_shape.set_prop("$params.$last_inserted_id", output_last_inserted_id)
 
@@ -58,7 +58,7 @@ def _get_query_output(node_descriptor, execution_contexts, input_shape):
                         rs = output
     return rs
 
-def _execute_query(node_descriptor, execution_contexts, input_shape, parent_rows, parent_partition_by):
+def _execute_query(node_descriptor, execution_contexts, input_shape, parent_rows, parent_partition_by, execution_context_helper):
     input_type = node_descriptor["input_type"]
     output_partition_by = node_descriptor["partition_by"]
 
@@ -66,6 +66,7 @@ def _execute_query(node_descriptor, execution_contexts, input_shape, parent_rows
     execution_context =  execution_contexts["db"]
     root = node_descriptor["root"]
     output = []
+
     try:
         if root:
             execution_context.begin()
@@ -74,10 +75,10 @@ def _execute_query(node_descriptor, execution_contexts, input_shape, parent_rows
             length = int(input_shape.get_prop("$length"))
             for i in range(0, length):
                 item_input_shape = input_shape.get_prop("@" + str(i))                    
-                output.extend(_get_query_output(node_descriptor, execution_contexts, item_input_shape))
+                output.extend(_get_query_output(node_descriptor, execution_contexts, item_input_shape, execution_context_helper))
                 
         elif input_type is None or input_type == "object":                
-            output = _get_query_output(node_descriptor, execution_contexts, input_shape)
+            output = _get_query_output(node_descriptor, execution_contexts, input_shape, execution_context_helper)
                 
             if use_parent_rows == True and parent_partition_by is None:
                 raise Exception("parent _partition_by is can't be empty when child wanted to use parent rows")
@@ -93,7 +94,7 @@ def _execute_query(node_descriptor, execution_contexts, input_shape, parent_rows
                     if input_shape is not None:
                         sub_node_shape = input_shape.get_prop(sub_node_name)
 
-                    sub_node_output = _execute_query(child_descriptor, execution_contexts, sub_node_shape, output, output_partition_by)                    
+                    sub_node_output = _execute_query(child_descriptor, execution_contexts, sub_node_shape, output, output_partition_by, execution_context_helper)                    
                                         
                     if not node_descriptor["actions"] and not output:
                         output.append({})
@@ -232,7 +233,6 @@ def _build_descriptor_query(node_descriptor, content):
                     parameter_name = gm[0].lower()
                 if len(gm) > 1:
                     parameter_type = gm[2]                
-                #prop_def = node_descriptor.get_input_propery_definition(parameter_name)                
                 meta[parameter_name] = {
                     "name" : parameter_name,
                     "type" : parameter_type
@@ -253,13 +253,15 @@ def _build_descriptor_query(node_descriptor, content):
         if query_match is not None:                
             if content.lstrip().rstrip() is not "":                
                 action = {
-                    "content" : content,                    
-                    "connection" : connection
+                    "content" : content
                 }
+                if connection:
+                    action["connection"] = connection
+
                 _build_query_parameters(action, node_descriptor)
                 actions.append(action)
             
-            connection = query_match.groups(0)[1].lstrip().rstrip()            
+            connection = query_match.groups(0)[0].lstrip().rstrip()            
             if connection == "":
                 connection = None
 
@@ -269,9 +271,10 @@ def _build_descriptor_query(node_descriptor, content):
     
     if content.lstrip().rstrip() is not "":        
         action = {
-            "content" : content,            
-            "connection" : connection
-        }        
+            "content" : content
+        }
+        if connection:
+            action["connection"] = connection
         _build_query_parameters(action, node_descriptor)
         actions.append(action)
 
@@ -296,44 +299,13 @@ def _build_query_parameters(query, node_descriptor):
             raise TypeError("type missing for {{" + p + "}} in the " + node_descriptor["method"] + ".sql")
     
     if len(params) != 0:
-        query["parameters"] = params
-    else:
-        query["parameters"] = None
-
-def _build_parameter_values(query ,input_shape, get_value_converter):
-    values = []
-    _cache = {}
-    parameters = query["parameters"]
-    if parameters is not None:
-        for p in parameters:
-            pname = p["name"]
-            ptype = p["type"]
-
-            if pname in _cache:
-                pvalue = _cache[pname]
-            else:
-                pvalue = input_shape.get_prop(pname)
-                _cache[pname] = pvalue
-                
-            try:
-                if ptype == "integer":
-                    pvalue = int(pvalue)
-                elif ptype == "string":
-                    pvalue = str(pvalue)
-                else:
-                    pvalue = get_value_converter(pvalue)
-                values.append(pvalue)
-            except:
-                values.append(pvalue)
-    
-    return values
+        query["parameters"] = params    
 
 def _build_descriptor(node_descriptor, treemap, content_reader, input_model, output_model):
     _propertiesstr, _typestr, _partitionbystr, _parentrowsstr = "properties", "type", "partition_by", "parent_rows"
 
     path = node_descriptor["path"]
-    method = node_descriptor["method"]
-
+    method = node_descriptor["method"]    
     content = content_reader.get_sql(method, path)
     node_tree = {}
     
@@ -452,8 +424,8 @@ def get_result(node_descriptor, execution_contexts, input_shape):
     try:
         if "db" not in execution_contexts:
             raise Exception("default connection string name db is missing")
-    
-        rs = _execute_query(node_descriptor, execution_contexts, input_shape, [], None)           
+        execution_context_helper = ExecutionContextHelper(parameter_rx)
+        rs = _execute_query(node_descriptor, execution_contexts, input_shape, [], None, execution_context_helper)           
         rs = _output_mapper(node_descriptor, rs)
         
         return rs
@@ -465,27 +437,32 @@ def _default_date_time_converter(o):
     if isinstance(o, datetime.datetime):
         return o.__str__()
 
-def get_result_json(node_descriptor, execution_contexts, input_shape):
+def get_result_json(node_descriptor, execution_contexts, input_shape):    
     return json.dumps(get_result(node_descriptor, execution_contexts, input_shape), default= _default_date_time_converter)
 
 def create_input_shape(node_descriptor, request_body, params, query, path):
-    params_shape = Shape({}, None, None, None, None, None)
+    params_shape = Shape({}, None, None, None)
     if params is not None:
         for k, v in params.items():
             params_shape.set_prop(k, v)
             
-    query_shape = Shape(node_descriptor["input_query"], None, None, None, None, None)
+    query_shape = Shape(node_descriptor["input_query"], None, None, None)
     if query is not None:
         for k, v in query.items():
             query_shape.set_prop(k, v)        
 
-    path_shape = Shape(node_descriptor["input_path"], None, None, None, None, None)
+    path_shape = Shape(node_descriptor["input_path"], None, None, None)
     if path is not None:
         for k, v in path.items():
             path_shape.set_prop(k, v)
 
-    input_model = node_descriptor["input_model"]   
-    return Shape(input_model, request_body, None, params_shape, query_shape, path_shape)
+    input_model = node_descriptor["input_model"]
+    extras = {
+        "$params" : params_shape, 
+        "$query" : query_shape,
+        "$path" :path_shape
+    }   
+    return Shape(input_model, request_body, None, extras)
 
 def create(method, path, content_reader):
     ordered_files = _order_list_by_dots(content_reader.list_sql(method, path))       
@@ -549,19 +526,252 @@ def create(method, path, content_reader):
 
     return node_descriptor
 
-def _sqlite_dict_factory(cursor, row):
-    d = {}
-    for idx, col in enumerate(cursor.description):
-        d[col[0]] = row[idx]
-    return d
+class Shape:
+    
+    def __init__(self, input_model, data, parent_shape, extras):        
+        self._array = False
+        self._object = False
+
+        self._data = data or {}
+        self._parent = parent_shape        
+        self._input_model = input_model
+        self._input_properties = None
+        input_properties = None
+        self._index = 0 
+        
+        self._extras = extras        
+        
+        if data is not None and ("$parent" in data or "$length" in data):
+            raise Exception("$parent or $length is reversed keywords. You can't use them.")
+
+        if input_model is None:
+            return
+        
+        _propertiesstr = "properties"
+        if _propertiesstr in input_model:
+            input_properties = input_model[_propertiesstr]
+            self._input_properties = input_properties
+
+
+        _typestr = "type"
+        if _typestr in input_model:
+            _type = input_model[_typestr]
+            if _type == "array":
+                self._array = True                
+                if data is not None:
+                    if type(data) != list:
+                        raise TypeError("input expected as array. object is given.")
+            else:
+                self._object = True
+                if data is not None:
+                    if type(data) != dict:
+                        raise TypeError("input expected as object. array is given.")
+        
+        if self._array:
+            shapes = []            
+            input_model[_typestr] = "object"
+            idx = 0                
+            for item in self._data:
+                s = Shape(input_model, item, self, extras)
+                s._index = idx
+                shapes.append(s)
+                idx = idx + 1
+            input_model[_typestr] = "array"
+        else:
+            shapes = {}  
+            if input_properties is not None:
+                for k, v in input_properties.items():
+                    if type(v) == dict and _propertiesstr in v:                            
+                        dvalue = None
+                        if k in self._data:
+                            dvalue = data.get(k)
+                        shapes[k] = Shape(v, dvalue, self, extras)
+
+        self._shapes = shapes             
+
+    def get_prop(self, prop):
+        extras = self._extras
+        shapes = self._shapes
+        data = self._data
+        parent = self._parent
+
+        dot = prop.find(".")
+        if dot > -1:
+            path = prop[:dot]
+            remaining_path = prop[dot+1:]
+            
+            if path[0] == "$":
+                if path == "$parent":
+                    return parent.get_prop(remaining_path)                
+                                
+                if extras:
+                    if path == "$params":
+                        return extras["$params"].get_prop(remaining_path)
+
+                    if path == "$query":
+                        return extras["$query"].get_prop(remaining_path)
+
+                    if path == "$path":
+                        return extras["$path"].get_prop(remaining_path)
+
+            if self._array:
+                idx = int(path[1:])
+                return shapes[idx].get_prop(remaining_path)
+
+            return shapes[path].get_prop(remaining_path)
+        else:
+
+            if prop[0] == "$":
+
+                if prop == "$parent" or prop == "$length" or prop == "$index":
+                    if prop == "$parent":
+                        return parent
+                    if prop == "$length":
+                        return len(data)
+                    if prop == "$index":
+                        return self._index
+
+                if extras:
+                    if prop == "$params":
+                        return extras["$params"]
+
+                    if prop == "$query":
+                        return extras["$query"]
+
+                    if prop == "$path":
+                        return extras["$path"]
+
+            if self._array:
+                idx = int(prop[1:])                
+                return shapes[idx]
+
+            if prop in shapes:
+                return shapes[prop]
+
+            if prop in data:
+                return data[prop]
+
+            if self._input_properties is not None and prop in self._input_properties:
+                defaultstr = "default"
+                input_type = self._input_properties[prop]
+                if defaultstr in input_type:
+                    return input_type[defaultstr]
+            
+            return None
+
+    def set_prop(self, prop, value):
+        shapes = self._shapes
+
+        dot = prop.find(".")
+        if dot > -1:
+            path = prop[:dot]
+            remaining_path = prop[dot+1:]
+            
+            if path[0] == "$":
+                if path == "$params":
+                    return self._extras["$params"].set_prop(remaining_path, value)
+
+            if path in shapes:
+                if self._array:
+                    idx = int(path[1:])
+                    return shapes[idx].set_prop(remaining_path, value)
+                else:
+                    return shapes[path].set_prop(remaining_path, value)
+        else:            
+            self._data[prop] = self.check_and_cast(prop, value)
+
+    def validate(self):
+        errors = { }
+        extras = self._extras
+        
+        if extras:
+            query = extras["$query"]
+            path = extras["$path"]
+            params = extras["$params"]
+            
+            errors["query"] = query.validate()        
+            errors["path"] = path.validate()        
+            errors["params"] = params.validate()
+
+        if self._input_model is not None:          
+            validate(self._data, self._input_model, format_checker=FormatChecker())
+            return []
+
+    def check_and_cast(self, prop, value):
+        if self._input_properties is not None and prop in self._input_properties:
+                prop_schema = self._input_properties[prop]
+                _type_str = "type"
+                if _type_str in prop_schema:
+                    ptype = prop_schema[_type_str]
+                    try:
+                        if ptype  == "integer" and not isinstance(value, int):
+                            return int(value)
+                        if ptype  == "string" and not isinstance(value, str):
+                            return str(value)
+                        if ptype  == "number" and not isinstance(value, float):
+                            return float(value)
+                    except:
+                        pass                    
+        return value
+
+class ExecutionContextHelper:
+    def __init__(self, parameter_rx):
+        self._parameter_rx = parameter_rx
+        self._cache = {}
+
+    def get_executable_content(self, chr, query):
+        exeutable_content_str = "executable_content"
+        if exeutable_content_str in query:
+            return query[exeutable_content_str]
+        else:
+            executable_content = self._parameter_rx.sub(chr, query["content"])
+            query[exeutable_content_str] = executable_content
+            return executable_content
+
+    def build_parameters(self, query ,input_shape, get_value_converter):
+        values = []
+        _cache = self._cache
+
+        if "parameters" in query:
+            parameters = query["parameters"]    
+            for p in parameters:
+                pname = p["name"]
+                ptype = p["type"]
+
+                if pname in _cache:
+                    pvalue = _cache[pname]
+                else:
+                    pvalue = input_shape.get_prop(pname)
+                    
+                    if "$params" not in pname:
+                        _cache[pname] = pvalue
+                    
+                try:
+                    if ptype == "integer":
+                        pvalue = int(pvalue)
+                    elif ptype == "string":
+                        pvalue = str(pvalue)
+                    else:
+                        pvalue = get_value_converter(pvalue)
+                    values.append(pvalue)
+                except:
+                    values.append(pvalue)
+        
+        return values
 
 class SQLiteExecutionContext:
     
     def __init__(self, root_path, db_name):        
         self._root_path = root_path
         db_path = root_path + "/db"
-        self._con = lite.connect(db_path + "/" + db_name)
-        self._con.row_factory = _sqlite_dict_factory
+        self._con = sqlite3.connect(db_path + "/" + db_name)
+        self._con.row_factory = self._sqlite_dict_factory
+    
+    def _sqlite_dict_factory(self, cursor, row):
+        d = {}
+        for idx, col in enumerate(cursor.description):
+            d[col[0]] = row[idx]
+        return d
 
     def begin(self):
         pass
@@ -574,19 +784,19 @@ class SQLiteExecutionContext:
 
     def get_value(self, ptype, value):        
         if ptype == "blob":        
-            return lite.Binary(value)        
+            return sqlite3.Binary(value)        
         return value
 
-    def execute(self, query, input_shape, parameter_rx, build_parameter_values):        
+    def execute(self, query, input_shape, helper):        
         con = self._con        
-        content = parameter_rx.sub("?", query["content"])                                        
+        content = helper.get_executable_content("?", query)                                       
         with con:
             cur = con.cursor()
-            args = build_parameter_values(query, input_shape, self.get_value)
+            args = helper.build_parameters(query, input_shape, self.get_value)
             cur.execute(content, args)
             rows = cur.fetchall()
             
-        return rows, cur.lastrowid        
+        return rows, cur.lastrowid
 
 class FileContentReader:
 
@@ -689,13 +899,13 @@ class PostgresExecutionContext:
             return pg.Binary(value)        
         return value
         
-    def execute(self, query, input_shape, parameter_rx, build_parameter_values):
+    def execute(self, query, input_shape, helper):
         con = self._conn
-        content = parameter_rx.sub("%s", query["content"])
+        content = helper.get_executable_content("%s", query)
         
         with con:
             cur = con.cursor(cursor_factory = RealDictCursor)
-            args = build_parameter_values(query, input_shape, self.get_value_converter)
+            args = helper.build_parameters(query, input_shape, self.get_value_converter)
             cur.execute(content, args)
             rows = cur.fetchall()
             
