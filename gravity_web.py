@@ -22,7 +22,7 @@ def serve_app(namespace, path):
 def remove_nulls(d):
     return {k: v for k, v in d.iteritems() if v is not None}
 
-@app.route('/<namespace>/api', methods=['GET'], defaults = { 'path' : '' })
+@app.route('/<namespace>/api/', methods=['GET'], defaults = { 'path' : '' })
 @app.route('/<namespace>/api/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE'])
 def serve_api(namespace, path):
     join = os.path.join
@@ -68,7 +68,7 @@ def serve_api(namespace, path):
     }
 
     input_shape = create_input_shape(node_descriptor, request_body, params, query, query)
-    #input_shape.validate()           
+    input_shape.validate()           
     execution_contexts = app.create_execution_contexts()
     return get_result_json(node_descriptor, execution_contexts, input_shape)
 

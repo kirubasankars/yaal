@@ -64,7 +64,12 @@ def _execute_query(node_descriptor, execution_contexts, input_shape, parent_rows
 
     use_parent_rows = node_descriptor["use_parent_rows"]     
     execution_context =  execution_contexts["db"]
-    root = node_descriptor["root"]
+    
+    if "root" in node_descriptor:
+        root = True
+    else:
+        root = False
+    
     output = []
 
     try:
@@ -130,27 +135,36 @@ def _execute_query(node_descriptor, execution_contexts, input_shape, parent_rows
     
     return output
 
-def _output_mapper(node_descriptor, result):
+def _output_mapper(outputtype, output_modal, childrens, result):
     mapped_result = []
     
-    output_model = node_descriptor["output_model"]
+    output_model = output_modal
     if output_model and "properties" in output_model:
         output_properties = output_model["properties"]
     else:
         output_properties = None
     
-    output_type = node_descriptor["output_type"]
+    output_type = outputtype
 
     for row in result:
-        mapped_row = {}
-        sub_mapped_nodes = {}
-        childrens = node_descriptor["childrens"]
+        mapped_obj = {}
+        mapped_tree = {}
+        childrens = childrens
         if childrens:
             for child_descriptor in childrens:                    
-                sub_node_name = child_descriptor["name"]
                 
-                if sub_node_name in row:
-                    sub_mapped_nodes[sub_node_name] = _output_mapper(child_descriptor, row[sub_node_name])
+                child_descriptor_name = child_descriptor["name"]
+                child_descriptor_output_type = child_descriptor["output_type"]
+
+                if output_properties and child_descriptor_name in output_properties: 
+                    child_descriptor_output_model = output_properties[child_descriptor_name]
+                else:
+                    child_descriptor_output_model = None
+
+                child_descriptor_childrens = child_descriptor["childrens"]
+
+                if child_descriptor_name in row:
+                    mapped_tree[child_descriptor_name] = _output_mapper(child_descriptor_output_type, child_descriptor_output_model, child_descriptor_childrens, row[child_descriptor_name])
         
         _typestr = "type"
         _mappedstr = "mapped"                                  
@@ -161,7 +175,7 @@ def _output_mapper(node_descriptor, result):
                     if _mappedstr in v:
                         _mapped = v[_mappedstr]
                         if _mapped in row:
-                            mapped_row[k] = row[_mapped]
+                            mapped_obj[k] = row[_mapped]
                             prop_count = prop_count + 1
                         else:
                             raise Exception(_mapped + " _mapped column missing from row")
@@ -169,16 +183,16 @@ def _output_mapper(node_descriptor, result):
                         if _typestr in v:
                             _type = v[_typestr]       
                             if _type == "array" or _type == "object":
-                                mapped_row[k] = sub_mapped_nodes[k]
+                                mapped_obj[k] = mapped_tree[k]
             if prop_count == 0:
-                mapped_row = row                                   
+                mapped_obj = row                                   
         else:
-            mapped_row = row
+            mapped_obj = row
 
-        for k, v in sub_mapped_nodes.items():
-            mapped_row[k] = v
+        for k, v in mapped_tree.items():
+            mapped_obj[k] = v
 
-        mapped_result.append(mapped_row)
+        mapped_result.append(mapped_obj)
 
     if output_type == "object":
         if len(mapped_result) > 0:
@@ -301,7 +315,7 @@ def _build_query_parameters(query, node_descriptor):
     if len(params) != 0:
         query["parameters"] = params    
 
-def _build_descriptor(node_descriptor, treemap, content_reader, input_model, output_model):
+def _build_descriptor(node_descriptor, root, treemap, content_reader, input_model, output_model):
     _propertiesstr, _typestr, _partitionbystr, _parentrowsstr = "properties", "type", "partition_by", "parent_rows"
 
     path = node_descriptor["path"]
@@ -317,19 +331,15 @@ def _build_descriptor(node_descriptor, treemap, content_reader, input_model, out
     if _propertiesstr not in input_model:
         input_model[_propertiesstr] = {}
 
-    node_descriptor["input_model"] = input_model
-    node_descriptor["input_type"] = input_model[_typestr]    
+    if root:
+        node_descriptor["input_model"] = input_model
+        
+    node_descriptor["input_type"] = input_model[_typestr]
     input_properties = input_model[_propertiesstr]    
     
-    node_descriptor["output_model"] = output_model or { "type" : "array", "properties" : {} }
-    _build_descriptor_query(node_descriptor, content)
-
-    if "parameters" not in node_descriptor:
-        node_descriptor["parameters"] = None
-
-    if "actions" not in node_descriptor:
-        node_descriptor["actions"] = None
-
+    if root:
+        node_descriptor["output_model"] = output_model or { "type" : "array", "properties" : {} }
+    
     output_properties = None      
     if output_model is not None:
         if _typestr in output_model:
@@ -362,6 +372,14 @@ def _build_descriptor(node_descriptor, treemap, content_reader, input_model, out
         node_descriptor["use_parent_rows"] = False
         node_descriptor["partition_by"] = None
 
+    _build_descriptor_query(node_descriptor, content)
+
+    if "parameters" not in node_descriptor:
+        node_descriptor["parameters"] = None
+
+    if "actions" not in node_descriptor:
+        node_descriptor["actions"] = None
+
     for k in treemap:
         if k not in node_tree:
             node_tree[k] = treemap[k]
@@ -373,8 +391,7 @@ def _build_descriptor(node_descriptor, treemap, content_reader, input_model, out
         child_descriptor = {
             "name" : child_method_name,
             "method" : mname,
-            "path" : path,
-            "root" : False
+            "path" : path
         }        
 
         sub_input_model = None
@@ -391,7 +408,7 @@ def _build_descriptor(node_descriptor, treemap, content_reader, input_model, out
             if child_method_name in output_properties:
                 sub_output_model = output_properties[child_method_name]
 
-        _build_descriptor(child_descriptor, sub_node_tree, content_reader, sub_input_model, sub_output_model)
+        _build_descriptor(child_descriptor, False, sub_node_tree, content_reader, sub_input_model, sub_output_model)
         childrens.append(child_descriptor)
     
     if len(childrens) != 0:
@@ -425,8 +442,8 @@ def get_result(node_descriptor, execution_contexts, input_shape):
         if "db" not in execution_contexts:
             raise Exception("default connection string name db is missing")
         execution_context_helper = ExecutionContextHelper(parameter_rx)
-        rs = _execute_query(node_descriptor, execution_contexts, input_shape, [], None, execution_context_helper)           
-        rs = _output_mapper(node_descriptor, rs)
+        rs = _execute_query(node_descriptor, execution_contexts, input_shape, [], None, execution_context_helper)
+        rs = _output_mapper(node_descriptor["output_type"], node_descriptor["output_model"], node_descriptor["childrens"], rs)
         
         return rs
     except Exception as e:
@@ -522,7 +539,7 @@ def create(method, path, content_reader):
         "input_query" : input_query,
         "input_path" : input_path
     }
-    _build_descriptor(node_descriptor, treemap[method], content_reader, input_model, output_model)
+    _build_descriptor(node_descriptor, True, treemap[method], content_reader, input_model, output_model)
 
     return node_descriptor
 
@@ -715,6 +732,7 @@ class Shape:
         return value
 
 class ExecutionContextHelper:
+
     def __init__(self, parameter_rx):
         self._parameter_rx = parameter_rx
         self._cache = {}
