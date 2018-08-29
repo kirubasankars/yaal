@@ -13,14 +13,13 @@ parameter_rx = re.compile(r"\{\{([A-Za-z0-9_.$-]*?)\}\}", re.MULTILINE)
 query_rx = re.compile(r"--query\(([a-zA-Z0-9.$_]*?)\)--")
 
 def _get_query_output(node_descriptor, execution_contexts, input_shape, execution_context_helper):
+    errors = []
     input_type = node_descriptor["input_type"]
     actions = node_descriptor["actions"]
     execution_context = execution_contexts["db"]
     
-    paramsstr = "$params"
-    errorstr = "$error"
-    breakstr = "$break"
-
+    paramsstr, headerstr, cookiestr, errorstr, breakstr = "$params", "$header", "$cookie", "$error", "$break"
+    
     rs = []
     if actions is not None: 
         for action in actions:
@@ -32,22 +31,33 @@ def _get_query_output(node_descriptor, execution_contexts, input_shape, executio
                     raise Exception("connection string " + query_connection + " missing")
             else:
                 output, output_last_inserted_id = execution_context.execute(action, input_shape, execution_context_helper)
-
-            input_shape.set_prop("$params.$last_inserted_id", output_last_inserted_id)
-
+            
+            input_shape.get_prop("$params").set_prop("$last_inserted_id", output_last_inserted_id)
+            
             if len(output) >= 1:
                 output0 = output[0]
-                if errorstr in output0 and output0[errorstr] == 1:
-                    for o in output:
-                        del o[errorstr] 
-                    raise Exception(output)
-                elif paramsstr in output0 and output0[paramsstr] == 1:
-                    for k, v in output0.items():
-                        input_shape.set_prop("$params." + k, v)
-                elif breakstr in output0 and output0[breakstr] == 1:
-                    for o in output:
-                        del o[breakstr] 
-                    break
+                if errorstr in output0 or paramsstr in output0 or headerstr in output0 or cookiestr in output0 or breakstr in output0: 
+                    if errorstr in output0 and output0[errorstr] == 1:                        
+                        errors.extend(output)                        
+                        return None, errors
+                    elif paramsstr in output0 and output0[paramsstr] == 1:
+                        params = input_shape.get_prop(paramsstr)
+                        for k, v in output0.items():
+                            params.set_prop(k, v)
+                    elif cookiestr in output0 and output0[cookiestr] == 1:                        
+                        cookie = input_shape.get_prop("$response.cookie")
+                        for c in output:
+                            if "name" in c:
+                                cookie.set_prop(c["name"], c)
+                    elif headerstr in output0 and output0[headerstr] == 1:
+                        header = input_shape.get_prop("$response.header")                        
+                        for h in output:
+                            if "name" in h:
+                                header.set_prop(h["name"], h)
+                    elif breakstr in output0 and output0[breakstr] == 1:
+                        for o in output:
+                            del o[breakstr]
+                        break
                 else:
                     if input_type is not None:
                         if input_type == "array":
@@ -56,7 +66,7 @@ def _get_query_output(node_descriptor, execution_contexts, input_shape, executio
                             rs = output
                     else:
                         rs = output
-    return rs
+    return rs, None
 
 def _execute_query(node_descriptor, execution_contexts, input_shape, parent_rows, parent_partition_by, execution_context_helper):
     input_type = node_descriptor["input_type"]
@@ -80,11 +90,14 @@ def _execute_query(node_descriptor, execution_contexts, input_shape, parent_rows
             length = int(input_shape.get_prop("$length"))
             for i in range(0, length):
                 item_input_shape = input_shape.get_prop("@" + str(i))                    
-                output.extend(_get_query_output(node_descriptor, execution_contexts, item_input_shape, execution_context_helper))
-                
+                rs, errors = _get_query_output(node_descriptor, execution_contexts, item_input_shape, execution_context_helper)
+                output.extend(rs)
+                if errors:
+                    return None, errors
         elif input_type is None or input_type == "object":                
-            output = _get_query_output(node_descriptor, execution_contexts, input_shape, execution_context_helper)
-                
+            output, errors = _get_query_output(node_descriptor, execution_contexts, input_shape, execution_context_helper)
+            if errors:
+                return None, errors
             if use_parent_rows == True and parent_partition_by is None:
                 raise Exception("parent _partition_by is can't be empty when child wanted to use parent rows")
             
@@ -99,8 +112,10 @@ def _execute_query(node_descriptor, execution_contexts, input_shape, parent_rows
                     if input_shape is not None:
                         sub_node_shape = input_shape.get_prop(sub_node_name)
 
-                    sub_node_output = _execute_query(child_descriptor, execution_contexts, sub_node_shape, output, output_partition_by, execution_context_helper)                    
-                                        
+                    sub_node_output, errors = _execute_query(child_descriptor, execution_contexts, sub_node_shape, output, output_partition_by, execution_context_helper)                    
+                    if errors:
+                        return None, errors
+
                     if not node_descriptor["actions"] and not output:
                         output.append({})
                         
@@ -133,7 +148,7 @@ def _execute_query(node_descriptor, execution_contexts, input_shape, parent_rows
         if root:
             execution_context.end()
     
-    return output
+    return output, None
 
 def _output_mapper(outputtype, output_modal, childrens, result):
     mapped_result = []
@@ -437,18 +452,26 @@ def _order_list_by_dots(names):
                 break
     return ordered
 
-def get_result(node_descriptor, execution_contexts, input_shape):
+def get_result(node_descriptor, execution_contexts, ctx):
     
-    errors = input_shape.validate()
+    errors = ctx.get_prop("$request").validate()
+
     if errors:
+        ctx.set_prop("$response.status_code", 400)
         return { "errors" : errors }
 
     try:        
         if "db" not in execution_contexts:
             raise Exception("default connection string name db is missing")
-        execution_context_helper = ExecutionContextHelper(parameter_rx)
-        rs = _execute_query(node_descriptor, execution_contexts, input_shape, [], None, execution_context_helper)
+        
+        execution_context_helper = ExecutionContextHelper(parameter_rx)        
+        rs, errors = _execute_query(node_descriptor, execution_contexts, ctx, [], None, execution_context_helper)
+        if errors:
+            ctx.set_prop("$response.status_code", 400)
+            return { "errors" : errors }
+
         rs = _output_mapper(node_descriptor["output_type"], node_descriptor["output_model"], node_descriptor["childrens"], rs)
+        ctx.set_prop("$response.status_code", 200)
         
         return rs
     except Exception as e:        
@@ -458,43 +481,90 @@ def _default_date_time_converter(o):
     if isinstance(o, datetime.datetime):
         return o.__str__()
 
-def get_result_json(node_descriptor, execution_contexts, input_shape):    
+def get_result_json(node_descriptor, execution_contexts, input_shape):
     return json.dumps(get_result(node_descriptor, execution_contexts, input_shape), default= _default_date_time_converter)
 
-def create_input_shape(node_descriptor, request_body, params, query, path):    
-    
-    input_query = node_descriptor["input_query"]    
-    input_path = node_descriptor["input_path"]  
-    input_model = node_descriptor["input_model"]
+namespaces = {}
+def get_namespace(name, root_path, debug):
+    if name and name in namespaces:
+        return namespaces[name]
+    else:
+        path = os.path.join(*[root_path, name])
+        namespaces[name] = Gravity(path, None, debug)         
+        return namespaces[name]
 
-    params_shape = Shape({}, None, None, None)    
-    if params is not None:
-        for k, v in params.items():
-            params_shape.set_prop(k, v)
+def create_context(node_descriptor, request_body, params, query, header, cookie):    
+    
+    validators = node_descriptor["_validators"]
+    
+    querystr = "input_query"
+    headerstr = "input_header"
+    cookiestr = "input_cookie"
+    modelstr = "input_model"
+
+    if  querystr in node_descriptor:
+        query_schema = node_descriptor[querystr]
+        query_validator = validators[querystr]
+    else:
+        query_schema = None
+        query_validator = None
+
+    if headerstr in node_descriptor:
+        header_schema = node_descriptor[headerstr]
+        header_validator = validators[headerstr]
+    else:
+        header_schema = None
+        header_validator = None
+
+    if cookiestr in node_descriptor:
+        cookie_schema = node_descriptor[cookiestr]
+        cookie_validator = validators[cookiestr]
+    else:
+        cookie_schema = None
+        cookie_validator = None
+
+    if modelstr in node_descriptor:
+        model_schema = node_descriptor[modelstr]
+        model_validator = validators[modelstr]
+    else:
+        model_schema = None
+        model_validator = None
+
     
     
-    query_shape = Shape(input_query, None, None, None)    
-    query_shape._validator = node_descriptor["input_query_schema_validator"]
-    if query is not None:
+    query_shape = Shape(query_schema, query, None, None, query_validator)
+    if query:
         for k, v in query.items():
-            query_shape.set_prop(k, v)        
-
+            query_shape.set_prop(k, v)
     
-    path_shape = Shape(input_path, None, None, None)
-    path_shape._validator = node_descriptor["input_path_schema_validator"]
-    if path is not None:
-        for k, v in path.items():
-            path_shape.set_prop(k, v)
+    header_shape = Shape(header_schema, header, None, None, header_validator)
+    cookie_shape = Shape(cookie_schema, cookie, None, None, cookie_validator)
+
+    request_extras = {
+        "$query" : query_shape,
+        "$header" : header_shape,
+        "$cookie" : cookie_shape
+    }
+    request_shape = Shape({}, None, None, request_extras, None)
+    
+    response_extras = {
+        "$header" :  Shape(None, None, None, None, None),
+        "$cookie" : Shape(None, None, None, None, None)
+    }
+    response_shape = Shape({}, None, None, response_extras, None)
+
+    params_shape = Shape({}, params, None, None, None)
 
     extras = {
-        "$params" : params_shape, 
+        "$params" : params_shape,
         "$query" : query_shape,
-        "$path" :path_shape
+        "$header" : header_shape,
+        "$cookie" : cookie_shape,
+        "$request" : request_shape,
+        "$response" : response_shape
     }
 
-    input_model_shape = Shape(input_model, request_body, None, extras)
-    input_model_shape._validator = node_descriptor["input_model_schema_validator"]
-    return input_model_shape
+    return Shape(model_schema, request_body, None, extras, model_validator)
 
 def create(method, path, content_reader):
     ordered_files = _order_list_by_dots(content_reader.list_sql(method, path))       
@@ -508,7 +578,6 @@ def create(method, path, content_reader):
     output_model_str = "output.model"
     input_body_str = "body"
     input_query_str = "query"
-    input_path_str = "path"
     
     input_model = None
     output_model = None
@@ -522,15 +591,7 @@ def create(method, path, content_reader):
                 if input_body_str in input_config:
                     input_model = input_config[input_body_str]
                 if input_query_str in input_config:
-                    input_query = {
-                        "type" : "object",
-                        "properties" : input_config[input_query_str]
-                    }
-                if input_path_str in input_config:
-                    input_path = {
-                        "type" : "object",
-                        "properties" : input_config[input_path_str]
-                    }
+                    input_query = input_config[input_query_str]               
             
         if output_model_str in config:
             output_model = config[output_model_str]
@@ -551,32 +612,30 @@ def create(method, path, content_reader):
         "method" : method,
         "path" : path,        
         "root": True,
-        "input_query" : input_query,
-        "input_path" : input_path
+        "input_query" : input_query
     }
-        
-    if input_query:
-        node_descriptor["input_query_schema_validator"] = Draft4Validator(schema = input_query, format_checker = FormatChecker())
-    else:
-        node_descriptor["input_query_schema_validator"] = None
-
-    if input_path:
-        node_descriptor["input_path_schema_validator"] = Draft4Validator(schema = input_path, format_checker = FormatChecker())    
-    else:
-        node_descriptor["input_path_schema_validator"] = None
     
-    if input_model:
-        node_descriptor["input_model_schema_validator"] = Draft4Validator(schema = input_model, format_checker = FormatChecker())
+    if input_query:
+        input_query_schema_validator = Draft4Validator(schema = input_query, format_checker = FormatChecker())
     else:
-        node_descriptor["input_model_schema_validator"] = None
+        input_query_schema_validator = None
+
+    if input_model:
+        input_model_schema_validator = Draft4Validator(schema = input_model, format_checker = FormatChecker())
+    else:
+        input_model_schema_validator = None
 
     _build_descriptor(node_descriptor, True, treemap[method], content_reader, input_model, output_model)
-
+    validators = {
+        "input_query" : input_query_schema_validator,
+        "input_model" : input_model_schema_validator
+    }
+    node_descriptor["_validators"] = validators
     return node_descriptor
 
 class Shape:
     
-    def __init__(self, input_model, data, parent_shape, extras):        
+    def __init__(self, input_model, data, parent_shape, extras, validator):        
         self._array = False
         self._object = False
 
@@ -586,15 +645,14 @@ class Shape:
         self._input_properties = None
         input_properties = None
         self._index = 0
-        self._validator = None
+        self._validator = validator
         
         self._extras = extras        
         
         if data is not None and ("$parent" in data or "$length" in data):
             raise Exception("$parent or $length is reversed keywords. You can't use them.")
 
-        if input_model is None:
-            return
+        input_model = input_model or {}
         
         _propertiesstr = "properties"
         if _propertiesstr in input_model:
@@ -621,7 +679,7 @@ class Shape:
             input_model[_typestr] = "object"
             idx = 0                
             for item in self._data:
-                s = Shape(input_model, item, self, extras)
+                s = Shape(input_model, item, self, extras, None)
                 s._index = idx
                 shapes.append(s)
                 idx = idx + 1
@@ -634,7 +692,7 @@ class Shape:
                         dvalue = None
                         if k in self._data:
                             dvalue = data.get(k)
-                        shapes[k] = Shape(v, dvalue, self, extras)
+                        shapes[k] = Shape(v, dvalue, self, extras, None)
 
         self._shapes = shapes             
 
@@ -654,15 +712,9 @@ class Shape:
                     return parent.get_prop(remaining_path)                
                                 
                 if extras:
-                    if path == "$params":
-                        return extras["$params"].get_prop(remaining_path)
-
-                    if path == "$query":
-                        return extras["$query"].get_prop(remaining_path)
-
-                    if path == "$path":
-                        return extras["$path"].get_prop(remaining_path)
-
+                    if path in extras:
+                        return extras[path].get_prop(remaining_path)
+                    
             if self._array:
                 idx = int(path[1:])
                 return shapes[idx].get_prop(remaining_path)
@@ -681,15 +733,9 @@ class Shape:
                         return self._index
 
                 if extras:
-                    if prop == "$params":
-                        return extras["$params"]
-
-                    if prop == "$query":
-                        return extras["$query"]
-
-                    if prop == "$path":
-                        return extras["$path"]
-
+                    if prop in extras:
+                        return extras[prop]
+                    
             if self._array:
                 idx = int(prop[1:])                
                 return shapes[idx]
@@ -716,16 +762,15 @@ class Shape:
             path = prop[:dot]
             remaining_path = prop[dot+1:]
             
-            if path[0] == "$":
-                if path == "$params":
-                    return self._extras["$params"].set_prop(remaining_path, value)
-
             if path in shapes:
                 if self._array:
                     idx = int(path[1:])
                     return shapes[idx].set_prop(remaining_path, value)
                 else:
                     return shapes[path].set_prop(remaining_path, value)
+            else:
+                if path in self._extras:
+                    self._extras[path].set_prop(remaining_path, value)
         else:            
             self._data[prop] = self.check_and_cast(prop, value)
 
@@ -734,27 +779,26 @@ class Shape:
         extras = self._extras        
         if extras:
             errors = []
-            query = extras["$query"]
-            path = extras["$path"]            
-            
-            t = query.validate()
-            if t:
-                errors.extend(t)
-            t = path.validate()
-            
-            if t:
-                errors.extend(t)
+
+            for k, e in extras.items():
+                if e:
+                    errors.extend(e.validate())
             
             if self._validator:
                 t = list(self._validator.iter_errors(self._data))  
                 if t:
                     errors.extend(t)
 
-            return [{ "path" : e.path[0], "message" : e.message } for e in errors]
+            return [{ "message" : e.message } for e in errors]
         else:
             if self._validator:            
                 return list(self._validator.iter_errors(self._data))
-    
+            else:
+                return []
+                
+    def get_data(self):
+        return self._data
+
     def check_and_cast(self, prop, value):
         if self._input_properties is not None and prop in self._input_properties:
                 prop_schema = self._input_properties[prop]
@@ -911,9 +955,12 @@ class FileContentReader:
 
 class Gravity:
 
-    def __init__(self, root_path, content_reader):
-        self._descriptors = {}        
+    def __init__(self, root_path, content_reader, debug):
+        self._descriptors = {}
+        self._descriptor_validators = {}
         self._root_path = root_path
+        self._debug = debug or False
+        
         if content_reader is None:
             self._content_reader = FileContentReader(self._root_path)
         else:
@@ -927,14 +974,17 @@ class Gravity:
         }
         return execution_contexts
 
-    def create_descriptor(self, method, path, debug):
-            
+    def create_descriptor(self, method, path):            
         k = os.path.join(*[path, method])        
-        if debug == False and k in self._descriptors:
-            return self._descriptors[k]            
+        return create(method, path, self._content_reader)
+    
+    def get_descriptor(self, method, path):
+        k = os.path.join(*[path, method])
+        if self._debug == False and k in self._descriptors:
+            return self._descriptors[k]
         
-        descriptor = create(method, path, self._content_reader)
-        self._descriptors[k] = descriptor
+        descriptor  = self.create_descriptor(method, path) 
+        self._descriptors[k] = descriptor      
         return descriptor
 
 class PostgresExecutionContext:

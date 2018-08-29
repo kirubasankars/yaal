@@ -1,5 +1,5 @@
 import unittest
-from gravity import Gravity, create_input_shape, get_result_json
+from gravity import Gravity, create_context, get_result_json
 
 class FakeExecutionContext:
     
@@ -54,8 +54,8 @@ class TestGravity(unittest.TestCase):
         pass
         
     def test_descriptor_with_parameters_query_check(self):
-        gravity = Gravity("/path", FakeContentReader())  
-        descriptor_get = gravity.create_descriptor("get", "get1", True)
+        gravity = Gravity("/path", FakeContentReader(), True)  
+        descriptor_get = gravity.create_descriptor("get", "get1")
         
         parameters = descriptor_get["parameters"]
         self.assertIn("id1", parameters)
@@ -71,8 +71,8 @@ class TestGravity(unittest.TestCase):
         self.assertEqual("select {{id1}}", query0["content"].lstrip().rstrip())        
 
     def test_descriptor_with_parameters_queries_check(self):                
-        gravity = Gravity("/path", FakeContentReader1())  
-        descriptor_get = gravity.create_descriptor("get", "get1", True)
+        gravity = Gravity("/path", FakeContentReader1(), True)  
+        descriptor_get = gravity.create_descriptor("get", "get1")
         
         parameters = descriptor_get["parameters"]
         self.assertIn("id1", parameters)
@@ -93,7 +93,7 @@ class TestGravity(unittest.TestCase):
         self.assertEqual(1, len(query1_parameters))
         self.assertEqual("bool", query1_parameters[0]["type"])
 
-        s = create_input_shape(descriptor_get, None, None, None, None)
+        s = create_context(descriptor_get, None, None, None, None, None)
 
 if __name__ == "__main__":
     unittest.main()
