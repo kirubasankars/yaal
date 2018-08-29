@@ -37,8 +37,10 @@ def _get_query_output(node_descriptor, execution_contexts, input_shape, executio
             if len(output) >= 1:
                 output0 = output[0]
                 if errorstr in output0 or paramsstr in output0 or headerstr in output0 or cookiestr in output0 or breakstr in output0: 
-                    if errorstr in output0 and output0[errorstr] == 1:                        
-                        errors.extend(output)                        
+                    if errorstr in output0 and output0[errorstr] == 1:
+                        if "$http_status_code" in output0:
+                            input_shape.get_prop("$response.status_code", output0["$http_status_code"])
+                        errors.extend(output)
                         return None, errors
                     elif paramsstr in output0 and output0[paramsstr] == 1:
                         params = input_shape.get_prop(paramsstr)
@@ -455,9 +457,10 @@ def _order_list_by_dots(names):
 def get_result(node_descriptor, execution_contexts, ctx):
     
     errors = ctx.get_prop("$request").validate()
-
+    
+    statuscodestr = "$response.status_code"
     if errors:
-        ctx.set_prop("$response.status_code", 400)
+        ctx.set_prop(statuscodestr, 400)
         return { "errors" : errors }
 
     try:        
@@ -466,12 +469,15 @@ def get_result(node_descriptor, execution_contexts, ctx):
         
         execution_context_helper = ExecutionContextHelper(parameter_rx)        
         rs, errors = _execute_query(node_descriptor, execution_contexts, ctx, [], None, execution_context_helper)
+        
         if errors:
-            ctx.set_prop("$response.status_code", 400)
+            status_code = ctx.get_prop(statuscodestr)
+            if not status_code:
+                ctx.set_prop(statuscodestr, 400)
             return { "errors" : errors }
 
         rs = _output_mapper(node_descriptor["output_type"], node_descriptor["output_model"], node_descriptor["childrens"], rs)
-        ctx.set_prop("$response.status_code", 200)
+        ctx.set_prop(statuscodestr, 200)
         
         return rs
     except Exception as e:        
