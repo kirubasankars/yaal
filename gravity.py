@@ -70,15 +70,16 @@ def _get_action_output(descriptor, data_providers, context, data_provider_helper
 
 def _execute_descriptor(descriptor, data_providers, context, parent_rows, parent_partition_by, data_provider_helper):
     input_type, output_partition_by = descriptor["input_type"], descriptor["partition_by"]
-    use_parent_rows, execution_context =  descriptor["use_parent_rows"], data_providers["db"]
+    use_parent_rows, default_data_provider =  descriptor["use_parent_rows"], data_providers["db"]
     
     root = ("root" in descriptor)    
     output = []
 
     try:
         if root:
-            execution_context.begin()
-            
+            for name, pro in data_providers.items():
+                pro.begin()                
+
             if "init" in descriptor:
                 rs, errors =  _execute_descriptor(descriptor["init"], data_providers, context, [], output_partition_by, data_provider_helper)
                 if errors:
@@ -140,12 +141,25 @@ def _execute_descriptor(descriptor, data_providers, context, parent_rows, parent
             else:
                 pass
 
-    except Exception as e:
-        execution_context.error()  
+    except Exception as e:    
+        default_data_provider.error()
+        for name, pro in data_providers.items():
+            try:
+                if name != "db":
+                    pro.error()
+            except:
+                pass
         raise e
     finally:
         if root:
-            execution_context.end()
+            default_data_provider.end()
+
+            for name, pro in data_providers.items():
+                try:
+                    if name != "db":
+                        pro.end()
+                except:
+                    pass
     
     return output, None
 
@@ -237,7 +251,7 @@ def _build_treemap(namelist):
             _treemap(treemap, item)
     return treemap
 
-def _build_descriptor_action(descriptor, content):
+def _build_descriptor_action(descriptor, content, connections_used):
     if content is None or content == '':
         return
 
@@ -268,7 +282,7 @@ def _build_descriptor_action(descriptor, content):
         descriptor["parameters"] = meta
     else:
         descriptor["parameters"] = None
-
+    
     actions = []
     content = ""        
     connection = None
@@ -303,6 +317,7 @@ def _build_descriptor_action(descriptor, content):
         }
         if connection:
             action["connection"] = connection
+            connections_used.append(connection)
         _build_action_parameters(action, descriptor)
         actions.append(action)
 
@@ -329,10 +344,10 @@ def _build_action_parameters(action, descriptor):
     if len(params) != 0:
         action["parameters"] = params    
 
-def _build_descriptor(descriptor, root, tree_map, content_reader, input_model, output_model):
+def _build_descriptor(descriptor, root, tree_map, content_reader, input_model, output_model, connections):
     _propertiesstr, _typestr, _partitionbystr, _parentrowsstr = "properties", "type", "partition_by", "parent_rows"
     _outputtypestr, _useparentrowsstr, _parametersstr, _actionsstr = "output_type", "use_parent_rows", "parameters", "actions"
-
+    
     path, method = descriptor["path"], descriptor["method"]    
     content = content_reader.get_sql(method, path)
     branch_map = {}
@@ -358,7 +373,7 @@ def _build_descriptor(descriptor, root, tree_map, content_reader, input_model, o
             "path" : "api",
             "method" : "init"
         }
-        _build_descriptor(before_descriptor, False, {}, content_reader, None, None)
+        _build_descriptor(before_descriptor, False, {}, content_reader, None, None, connections)
 
         if _actionsstr in before_descriptor and before_descriptor[_actionsstr]:
             descriptor["init"] = before_descriptor
@@ -395,7 +410,7 @@ def _build_descriptor(descriptor, root, tree_map, content_reader, input_model, o
         descriptor[_useparentrowsstr] = False
         descriptor[_partitionbystr] = None
 
-    _build_descriptor_action(descriptor, content)
+    _build_descriptor_action(descriptor, content, connections)
 
     if _parametersstr not in descriptor:
         descriptor[_parametersstr] = None
@@ -432,7 +447,7 @@ def _build_descriptor(descriptor, root, tree_map, content_reader, input_model, o
             if branch_name in output_properties:
                 branch_output_model = output_properties[branch_name]
 
-        _build_descriptor(branch_descriptor, False, branch, content_reader, branch_input_model, branch_output_model)
+        _build_descriptor(branch_descriptor, False, branch, content_reader, branch_input_model, branch_output_model, connections)
         branches.append(branch_descriptor)
     
     if len(branches) != 0:
@@ -465,7 +480,7 @@ def _default_date_time_converter(o):
     if isinstance(o, datetime.datetime):
         return o.__str__()
 
-def get_result(descriptor, data_providers, ctx):
+def get_result(descriptor, get_data_provider, ctx):
     
     errors = ctx.get_prop("$request").validate()
     
@@ -474,9 +489,13 @@ def get_result(descriptor, data_providers, ctx):
         ctx.set_prop(statuscodestr, 400)
         return { "errors" : errors }
 
-    try:        
-        if "db" not in data_providers:
-            raise Exception("default connection string name db is missing")
+    try:
+
+        data_providers = {
+           "db" : get_data_provider("db")  
+        }        
+        for c in descriptor["connections"]:            
+            data_providers[c] = get_data_provider(c)
         
         data_provider_helper = DataProviderHelper(parameter_rx)        
         rs, errors = _execute_descriptor(descriptor, data_providers, ctx, [], None, data_provider_helper)
@@ -632,12 +651,16 @@ def create_descriptor(method, path, content_reader):
     else:
         input_model_schema_validator = None
 
-    _build_descriptor(descriptor, True, treemap[method], content_reader, input_model, output_model)
+    connections = []
+    _build_descriptor(descriptor, True, treemap[method], content_reader, input_model, output_model, connections)    
+    descriptor["connections"] = list(set(connections))
+
     validators = {
         "input_query" : input_query_schema_validator,
         "input_model" : input_model_schema_validator
     }
     descriptor["_validators"] = validators
+    
     return descriptor
 
 class Shape:
@@ -878,9 +901,6 @@ class SQLiteDataProvider:
     def __init__(self, root_path, db_name):        
         self._root_path = root_path
         self._db_path = root_path + "/db/" + db_name        
-        self._con = sqlite3.connect(self._db_path)
-        self._con.row_factory = self._sqlite_dict_factory
-
 
     def _sqlite_dict_factory(self, cursor, row):
         d = {}
@@ -889,13 +909,16 @@ class SQLiteDataProvider:
         return d
 
     def begin(self):
-        pass
+        self._con = sqlite3.connect(self._db_path)
+        self._con.row_factory = self._sqlite_dict_factory
 
     def end(self):
-        pass
+        self._con.commit()
+        self._con.close()
     
     def error(self):
-        pass
+        self._con.rollback()
+        self._con.close()
 
     def get_value(self, ptype, value):        
         if ptype == "blob":        
@@ -978,13 +1001,13 @@ class Gravity:
         else:
             self._content_reader = content_reader
 
-    def get_data_providers(self):        
+    def get_data_provider(self, name):        
         data_providers = {
             "db" : PostgresDataProvider(self._root_path, "dvdrental"),
             "sqlite3" : SQLiteDataProvider(self._root_path, "sqlite3.db"),
             "app.db": SQLiteDataProvider(self._root_path, "app.db")
         }
-        return data_providers
+        return data_providers[name]
 
     def create_descriptor(self, method, path):        
         return create_descriptor(method, path, self._content_reader)
@@ -1002,17 +1025,17 @@ class PostgresDataProvider:
 
     def __init__(self, root_path, db_name):
         self._root_path = root_path
-        self._conn = pg.connect("dbname='" + db_name + "' user='postgres' password='admin'")
-        pass
+        self._db_name = db_name
 
     def begin(self):
-        pass
+        self._conn = pg.connect("dbname='" + self._db_name + "' user='postgres' password='admin'")
 
     def end(self):
         self._conn.commit()
-
+        self._conn.close()
     def error(self):
         self._conn.rollback()
+        self._conn.close()
     
     def get_value_converter(self, ptype, value):        
         if ptype == "blob":        

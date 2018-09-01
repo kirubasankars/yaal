@@ -22,7 +22,7 @@ def serve_app(path):
 def namespace_serve_api(path):
     
     namespace = ""
-    gravity_app = get_namespace(namespace, root_path, True)
+    gravity_app = get_namespace(namespace, root_path, False)
     
     method = request.method.lower()    
     descriptor = gravity_app.get_descriptor(method, path)
@@ -34,9 +34,7 @@ def namespace_serve_api(path):
         return get_descriptor_json(descriptor)
 
     ctx = create_gravity_context(request, namespace, path, descriptor)
-
-    data_providers = gravity_app.get_data_providers()
-    rs = get_result_json(descriptor, data_providers, ctx)
+    rs = get_result_json(descriptor, gravity_app.get_data_provider, ctx)
     
     r = ctx.get_prop("$response")
     header = r.get_prop("$header")
