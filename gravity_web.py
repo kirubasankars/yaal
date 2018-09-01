@@ -4,29 +4,25 @@ from flask import Flask, request, abort, send_from_directory
 from gravity import get_namespace, create_context, get_result_json, get_descriptor_json
 
 app = Flask(__name__)
-namespaces = {}
+root_path  = "serve"
 
-
-@app.route('/<namespace>', methods=['GET'])
-def namespace_root(namespace):
-    static_file_dir = os.path.join('serve', namespace, 'app')
-    return send_from_directory(static_file_dir, 'index.html')
- 
-
-@app.route('/<namespace>/<path:path>', methods=['GET'])
-def serve_app(namespace, path):
-    static_file_dir = os.path.join('serve', namespace, 'app')
+@app.route("/", methods=["GET"], defaults = { "path" : "" })
+@app.route("/<path:path>", methods=["GET"])
+def serve_app(path):
+    namespace = ""
+    static_file_dir = os.path.join(root_path, namespace, "app")
     if not os.path.isfile(os.path.join(static_file_dir, path)):
-        path = os.path.join(path, 'index.html')
+        path = os.path.join(path, "index.html")
  
     return send_from_directory(static_file_dir, path)
 
 
-@app.route('/<namespace>/api/', methods=['GET'], defaults = { 'path' : '' })
-@app.route('/<namespace>/api/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE'])
-def namespace_serve_api(namespace, path):
+@app.route("/api/", methods=["GET"], defaults = { "path" : "" })
+@app.route("/api/<path:path>", methods=["GET", "POST", "PUT", "DELETE"])
+def namespace_serve_api(path):
     
-    gravity_app = get_namespace(namespace, "serve", True)
+    namespace = ""
+    gravity_app = get_namespace(namespace, root_path, True)
     
     method = request.method.lower()    
     descriptor = gravity_app.get_descriptor(method, path)
@@ -82,8 +78,8 @@ def create_gravity_context(request, namespace, path, node_descriptor):
             request_body[k] = v
 
     params = {
-        'namespace': namespace,
-        'path': path         
+        "namespace": namespace,
+        "path": path         
     }
 
     query = {}
@@ -93,6 +89,6 @@ def create_gravity_context(request, namespace, path, node_descriptor):
     return create_context(node_descriptor, request_body, params, query, request.headers, request.cookies)    
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     app.run(debug=False)
 

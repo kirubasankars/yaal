@@ -1,6 +1,0 @@
-input.model:
-  type: object
-  properties:    
-    items:
-      type: array
-    

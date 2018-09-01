@@ -1,7 +1,0 @@
-input.model:
-  type: array
-  test:
-    type: integer
-
-output.model:
-  type: array
