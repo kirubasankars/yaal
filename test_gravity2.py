@@ -56,14 +56,14 @@ class TestGravity(unittest.TestCase):
         self.assertTrue(descriptor_post["name"] == "post")
         self.assertTrue(descriptor_post["method"] == "post")
         
-        descritpor_nodes = descriptor_post["childrens"]
+        descritpor_nodes = descriptor_post["branches"]
         self.assertEqual(len(descritpor_nodes), 1)
                 
         descriptor_post_data_items = descritpor_nodes[0]
         self.assertTrue(descriptor_post_data_items["name"] == "items")
         self.assertTrue(descriptor_post_data_items["method"] == "post.items")
 
-        descritpor_nodes = descriptor_post_data_items["childrens"]
+        descritpor_nodes = descriptor_post_data_items["branches"]
         self.assertEqual(descritpor_nodes, None)
 
     def test_simple_get_shape_check(self):        
@@ -73,11 +73,14 @@ class TestGravity(unittest.TestCase):
         self.assertIsNotNone(input_shape._shapes["items"])        
         self.assertEqual(len(input_shape._shapes["items"]._shapes),0)
 
+    def get_data_provider(self, name):
+        return FakeExecutionContext()
+
     def test_run(self):
         descriptor_post = self._gravity.create_descriptor("post", "post1")        
         d = {"items":[{"a":1}, {"b":1}]}
         input_shape = create_context(descriptor_post, d, None, None, None, None)            
-        rs = get_result(descriptor_post, { "db": FakeExecutionContext() }, input_shape)
+        rs = get_result(descriptor_post, self.get_data_provider, input_shape)
 
         self.assertListEqual(rs, [d])
 

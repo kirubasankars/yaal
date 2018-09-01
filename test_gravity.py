@@ -26,28 +26,28 @@ class TestGravity(unittest.TestCase):
         self.assertTrue(descriptor_get["name"] == "get")
         self.assertTrue(descriptor_get["method"] == "get")
         
-        descritpor_childrens = descriptor_get["childrens"]
-        self.assertEqual(len(descritpor_childrens), 2)
+        descritpor_branches = descriptor_get["branches"]
+        self.assertEqual(len(descritpor_branches), 2)
         
-        descriptor_get_data = descritpor_childrens[0]
-        descriptor_get_page = descritpor_childrens[1]
+        descriptor_get_data = descritpor_branches[0]
+        descriptor_get_page = descritpor_branches[1]
         self.assertTrue(descriptor_get_data["name"] == "data")
         self.assertTrue(descriptor_get_page["name"] == "paging")
 
         self.assertTrue(descriptor_get_data["method"] == "get.data")
         self.assertTrue(descriptor_get_page["method"] == "get.paging")
 
-        descritpor_childrens = descriptor_get_data["childrens"]    
-        self.assertEqual(len(descritpor_childrens), 1)
+        descritpor_branches = descriptor_get_data["branches"]    
+        self.assertEqual(len(descritpor_branches), 1)
 
-        descriptor_get_data_items = descritpor_childrens[0]
+        descriptor_get_data_items = descritpor_branches[0]
         self.assertTrue(descriptor_get_data_items["name"] == "items")
         self.assertTrue(descriptor_get_data_items["method"] == "get.data.items")
 
-        descritpor_childrens = descriptor_get_data_items["childrens"]
-        self.assertEqual(len(descritpor_childrens), 1)
+        descritpor_branches = descriptor_get_data_items["branches"]
+        self.assertEqual(len(descritpor_branches), 1)
 
-        descriptor_get_data_items_product = descritpor_childrens[0]       
+        descriptor_get_data_items_product = descritpor_branches[0]       
         self.assertTrue(descriptor_get_data_items_product["name"] == "product")
         self.assertTrue(descriptor_get_data_items_product["method"] == "get.data.items.product")
         
