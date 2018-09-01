@@ -1,4 +1,6 @@
-query: 
-  page:
-    type: integer
-    default: 1
+query:
+  type: object
+  properties:
+    page:
+      type: string
+      default: 1

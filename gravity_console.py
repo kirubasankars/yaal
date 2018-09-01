@@ -1,6 +1,6 @@
 import re, argparse, json
 
-from gravity import Gravity, create_input_shape, get_result_json
+from gravity import Gravity, create_context, get_result_json
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -16,10 +16,9 @@ if __name__ == '__main__':
         exit() 
     
     root_path = "serve/pos"
-    app = Gravity(root_path, None)
-    node_descriptor = app.create_descriptor(args.method, args.path, False)
-    execution_contexts = app.create_execution_contexts()
-    input_shape = create_input_shape(node_descriptor, { "page" : 1 }, None, { "page" : 1 }, None)    
-    input_shape.validate()    
-    print(get_result_json(node_descriptor, execution_contexts, input_shape))
+    app = Gravity(root_path, None, False)
+    descriptor = app.create_descriptor(args.method, args.path)
+    data_providers = app.get_data_providers()
+    context = create_context(descriptor, { "page" : 1 }, None, { "page" : 1 }, None, None)    
+    print(get_result_json(descriptor, data_providers, context))
     #print(json.dumps(node_descriptor))
