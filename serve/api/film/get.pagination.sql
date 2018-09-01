@@ -23,7 +23,7 @@ SELECT
     {{$query.page}} as current_page,
     {{$params.total_pages}} as total_pages,
     CASE WHEN {{$query.page}} < {{$params.total_pages}} THEN 
-        ("http://localhost:5000/pos/api/film?page=" || ({{$query.page}} + 1))
+        ("http://localhost:5000/api/film?page=" || ({{$query.page}} + 1))
     ELSE
         null
     END as next_page

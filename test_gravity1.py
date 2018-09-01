@@ -49,7 +49,7 @@ class TestGravity(unittest.TestCase):
         self.assertTrue(descriptor_get["name"] == "get")
         self.assertTrue(descriptor_get["method"] == "get")
         
-        descritpor_nodes = descriptor_get["childrens"]
+        descritpor_nodes = descriptor_get["branches"]
         self.assertEqual(len(descritpor_nodes), 2)
         
         descriptor_get_data = descritpor_nodes[0]
@@ -60,14 +60,14 @@ class TestGravity(unittest.TestCase):
         self.assertTrue(descriptor_get_data["method"] == "get.data")
         self.assertTrue(descriptor_get_page["method"] == "get.paging")
 
-        descritpor_nodes = descriptor_get_data["childrens"]    
+        descritpor_nodes = descriptor_get_data["branches"]    
         self.assertEqual(len(descritpor_nodes), 1)
 
         descriptor_get_data_items = descritpor_nodes[0]
         self.assertTrue(descriptor_get_data_items["name"] == "items")
         self.assertTrue(descriptor_get_data_items["method"] == "get.data.items")
 
-        descritpor_nodes = descriptor_get_data_items["childrens"]
+        descritpor_nodes = descriptor_get_data_items["branches"]
         self.assertEqual(len(descritpor_nodes), 1)
 
         descriptor_get_data_items_product = descritpor_nodes[0]       

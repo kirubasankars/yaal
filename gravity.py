@@ -40,6 +40,10 @@ def _get_action_output(descriptor, data_providers, context, data_provider_helper
                             context.get_prop("$response.status_code", output0["$http_status_code"])                        
                         errors.extend(output)
                         return None, errors
+                    elif breakstr in output0 and output0[breakstr] == 1:
+                        for o in output:
+                            del o[breakstr]
+                        break
                     elif paramsstr in output0 and output0[paramsstr] == 1:
                         params = context.get_prop(paramsstr)
                         for k, v in output0.items():
@@ -53,11 +57,7 @@ def _get_action_output(descriptor, data_providers, context, data_provider_helper
                         header = context.get_prop("$response.header")                        
                         for h in output:
                             if "name" in h and "value" in h:
-                                header.set_prop(h["name"], h)
-                    elif breakstr in output0 and output0[breakstr] == 1:
-                        for o in output:
-                            del o[breakstr]
-                        break
+                                header.set_prop(h["name"], h)                    
                 else:
                     if input_type is not None:
                         if input_type == "array":
@@ -913,12 +913,14 @@ class SQLiteDataProvider:
         self._con.row_factory = self._sqlite_dict_factory
 
     def end(self):
-        self._con.commit()
-        self._con.close()
+        if self._con:
+            self._con.commit()
+            self._con.close()
     
     def error(self):
         self._con.rollback()
         self._con.close()
+        self._con = None
 
     def get_value(self, ptype, value):        
         if ptype == "blob":        
@@ -1031,11 +1033,14 @@ class PostgresDataProvider:
         self._conn = pg.connect("dbname='" + self._db_name + "' user='postgres' password='admin'")
 
     def end(self):
-        self._conn.commit()
-        self._conn.close()
+        if self._conn:
+            self._conn.commit()
+            self._conn.close()
+
     def error(self):
         self._conn.rollback()
         self._conn.close()
+        self._conn = None
     
     def get_value_converter(self, ptype, value):        
         if ptype == "blob":        
