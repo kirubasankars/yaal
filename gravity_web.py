@@ -1,7 +1,7 @@
 import os, json 
 import copy
 from flask import Flask, request, abort, send_from_directory
-from gravity import get_namespace, create_context, get_result_json
+from gravity import get_namespace, create_context, get_result_json, get_descriptor_json
 
 app = Flask(__name__)
 namespaces = {}
@@ -28,22 +28,19 @@ def namespace_serve_api(namespace, path):
     
     gravity_app = get_namespace(namespace, "serve", True)
     
-    method = request.method.lower()        
-    path = os.path.join(*["api", path])
-    node_descriptor = gravity_app.get_descriptor(method, path)
+    method = request.method.lower()    
+    descriptor = gravity_app.get_descriptor(method, path)
     
-    if not node_descriptor:
+    if not descriptor:
         return abort(404)   
 
-    if "debug" in request.args:
-        d = copy.deepcopy(node_descriptor)
-        del d["_validators"]
-        return json.dumps(d)
+    if "debug" in request.args:        
+        return get_descriptor_json(descriptor)
 
-    ctx = create_gravity_context(request, namespace, path, node_descriptor)
+    ctx = create_gravity_context(request, namespace, path, descriptor)
 
-    execution_contexts = gravity_app.create_execution_contexts()
-    rs = get_result_json(node_descriptor, execution_contexts, ctx)
+    data_providers = gravity_app.get_data_providers()
+    rs = get_result_json(descriptor, data_providers, ctx)
     
     r = ctx.get_prop("$response")
     header = r.get_prop("$header")

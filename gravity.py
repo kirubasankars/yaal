@@ -12,7 +12,7 @@ parameter_meta_rx = re.compile(r"\s*([A-Za-z0-9_.$-]+)(\s+(\w+))?\s*")
 parameter_rx = re.compile(r"\{\{([A-Za-z0-9_.$-]*?)\}\}", re.MULTILINE)
 query_rx = re.compile(r"--query\(([a-zA-Z0-9.$_]*?)\)--")
 
-def _get_query_output(descriptor, data_providers, context, data_provider_helper):
+def _get_action_output(descriptor, data_providers, context, data_provider_helper):
     errors = []
     
     input_type, actions, data_provider = descriptor["input_type"], descriptor["actions"], data_providers["db"]
@@ -37,7 +37,7 @@ def _get_query_output(descriptor, data_providers, context, data_provider_helper)
                 if errorstr in output0 or paramsstr in output0 or headerstr in output0 or cookiestr in output0 or breakstr in output0: 
                     if errorstr in output0 and output0[errorstr] == 1:
                         if "$http_status_code" in output0:
-                            context.get_prop("$response.status_code", output0["$http_status_code"])
+                            context.get_prop("$response.status_code", output0["$http_status_code"])                        
                         errors.extend(output)
                         return None, errors
                     elif paramsstr in output0 and output0[paramsstr] == 1:
@@ -47,12 +47,12 @@ def _get_query_output(descriptor, data_providers, context, data_provider_helper)
                     elif cookiestr in output0 and output0[cookiestr] == 1:                        
                         cookie = context.get_prop("$response.cookie")
                         for c in output:
-                            if "name" in c:
+                            if "name" in c and "value" in c:
                                 cookie.set_prop(c["name"], c)
                     elif headerstr in output0 and output0[headerstr] == 1:
                         header = context.get_prop("$response.header")                        
                         for h in output:
-                            if "name" in h:
+                            if "name" in h and "value" in h:
                                 header.set_prop(h["name"], h)
                     elif breakstr in output0 and output0[breakstr] == 1:
                         for o in output:
@@ -68,7 +68,7 @@ def _get_query_output(descriptor, data_providers, context, data_provider_helper)
                         rs = output
     return rs, None
 
-def _execute_action(descriptor, data_providers, context, parent_rows, parent_partition_by, data_provider_helper):
+def _execute_descriptor(descriptor, data_providers, context, parent_rows, parent_partition_by, data_provider_helper):
     input_type, output_partition_by = descriptor["input_type"], descriptor["partition_by"]
     use_parent_rows, execution_context =  descriptor["use_parent_rows"], data_providers["db"]
     
@@ -79,8 +79,8 @@ def _execute_action(descriptor, data_providers, context, parent_rows, parent_par
         if root:
             execution_context.begin()
             
-            if "before" in descriptor:
-                rs, errors =  _execute_action(descriptor["before"], data_providers, context, [], output_partition_by, data_provider_helper)
+            if "init" in descriptor:
+                rs, errors =  _execute_descriptor(descriptor["init"], data_providers, context, [], output_partition_by, data_provider_helper)
                 if errors:
                     return None, errors    
 
@@ -88,13 +88,13 @@ def _execute_action(descriptor, data_providers, context, parent_rows, parent_par
             length = int(context.get_prop("$length"))
             for i in range(0, length):
                 item_ctx = context.get_prop("@" + str(i))                    
-                rs, errors = _get_query_output(descriptor, data_providers, item_ctx, data_provider_helper)
+                rs, errors = _get_action_output(descriptor, data_providers, item_ctx, data_provider_helper)
                 output.extend(rs)
                 if errors:
                     return None, errors
         
         elif input_type is None or input_type == "object":                
-            output, errors = _get_query_output(descriptor, data_providers, context, data_provider_helper)
+            output, errors = _get_action_output(descriptor, data_providers, context, data_provider_helper)
             if errors:
                 return None, errors
             if use_parent_rows == True and parent_partition_by is None:
@@ -103,7 +103,7 @@ def _execute_action(descriptor, data_providers, context, parent_rows, parent_par
             if use_parent_rows == True:
                 output = copy.deepcopy(parent_rows)
 
-            branches = descriptor["childrens"]
+            branches = descriptor["branches"]
             if branches:
                 for branch_descriptor in branches:                    
                     sub_node_name = branch_descriptor["name"]                    
@@ -111,7 +111,7 @@ def _execute_action(descriptor, data_providers, context, parent_rows, parent_par
                     if context is not None:
                         sub_node_shape = context.get_prop(sub_node_name)
 
-                    sub_node_output, errors = _execute_action(branch_descriptor, data_providers, sub_node_shape, output, output_partition_by, data_provider_helper)                    
+                    sub_node_output, errors = _execute_descriptor(branch_descriptor, data_providers, sub_node_shape, output, output_partition_by, data_provider_helper)                    
                     if errors:
                         return None, errors
 
@@ -149,21 +149,22 @@ def _execute_action(descriptor, data_providers, context, parent_rows, parent_par
     
     return output, None
 
-def _output_mapper(outputtype, output_modal, branches, result):
+def _output_mapper(output_type, output_modal, branches, result):
     mapped_result = []
-    
+     
+    _typestr, _mappedstr = "type", "mapped" 
+
     output_model = output_modal
     if output_model and "properties" in output_model:
         output_properties = output_model["properties"]
     else:
         output_properties = None
     
-    output_type = outputtype
+    output_type = output_type
 
     for row in result:
         mapped_obj = {}
-        mapped_tree = {}
-        branches = branches
+        mapped_tree = {}        
         if branches:
             for branch_descriptor in branches:                    
                 
@@ -175,13 +176,12 @@ def _output_mapper(outputtype, output_modal, branches, result):
                 else:
                     branch_output_model = None
 
-                branch_descriptor_branches = branch_descriptor["childrens"]
+                branch_descriptor_branches = branch_descriptor["branches"]
 
                 if branch_name in row:
                     mapped_tree[branch_name] = _output_mapper(branch_output_type, branch_output_model, branch_descriptor_branches, row[branch_name])
         
-        _typestr = "type"
-        _mappedstr = "mapped"                                  
+                                        
         if output_properties is not None:
             prop_count = 0
             for k, v in output_properties.items():
@@ -349,19 +349,19 @@ def _build_descriptor(descriptor, root, tree_map, content_reader, input_model, o
         descriptor["input_model"] = input_model
         
     descriptor["input_type"] = input_model[_typestr]
-    input_properties = input_model[_propertiesstr]    
+    input_properties = input_model[_propertiesstr]
     
     if root:
-        descriptor["output_model"] = output_model or { "type" : "array", "properties" : {} }
+        descriptor["output_model"] = output_model or { _typestr : "array", _propertiesstr : {} }
         
         before_descriptor = {
-            "path" : "",
-            "method" : "before"
+            "path" : "api",
+            "method" : "init"
         }
         _build_descriptor(before_descriptor, False, {}, content_reader, None, None)
 
         if _actionsstr in before_descriptor and before_descriptor[_actionsstr]:
-            descriptor["before"] = before_descriptor
+            descriptor["init"] = before_descriptor
 
     output_properties = None      
     if output_model is not None:
@@ -423,8 +423,8 @@ def _build_descriptor(descriptor, root, tree_map, content_reader, input_model, o
                     
         if branch_name not in input_properties:
             input_properties[branch_name] = {
-                "type" : "object",
-                "properties" : {}
+                _typestr : "object",
+                _propertiesstr : {}
             }
         branch_input_model = input_properties[branch_name]
         
@@ -436,9 +436,9 @@ def _build_descriptor(descriptor, root, tree_map, content_reader, input_model, o
         branches.append(branch_descriptor)
     
     if len(branches) != 0:
-        descriptor["childrens"] = branches
+        descriptor["branches"] = branches
     else:
-        descriptor["childrens"] = None
+        descriptor["branches"] = None
 
 def _order_list_by_dots(names):
     if names is None:
@@ -461,6 +461,10 @@ def _order_list_by_dots(names):
                 break
     return ordered
 
+def _default_date_time_converter(o):
+    if isinstance(o, datetime.datetime):
+        return o.__str__()
+
 def get_result(descriptor, data_providers, ctx):
     
     errors = ctx.get_prop("$request").validate()
@@ -475,7 +479,7 @@ def get_result(descriptor, data_providers, ctx):
             raise Exception("default connection string name db is missing")
         
         data_provider_helper = DataProviderHelper(parameter_rx)        
-        rs, errors = _execute_action(descriptor, data_providers, ctx, [], None, data_provider_helper)
+        rs, errors = _execute_descriptor(descriptor, data_providers, ctx, [], None, data_provider_helper)
         
         if errors:
             status_code = ctx.get_prop(statuscodestr)
@@ -483,27 +487,28 @@ def get_result(descriptor, data_providers, ctx):
                 ctx.set_prop(statuscodestr, 400)
             return { "errors" : errors }
 
-        rs = _output_mapper(descriptor["output_type"], descriptor["output_model"], descriptor["childrens"], rs)
+        rs = _output_mapper(descriptor["output_type"], descriptor["output_model"], descriptor["branches"], rs)
         ctx.set_prop(statuscodestr, 200)
         
         return rs
     except Exception as e:        
         return { "errors" : e.args[0] }
 
-def _default_date_time_converter(o):
-    if isinstance(o, datetime.datetime):
-        return o.__str__()
-
 def get_result_json(descriptor, data_providers, context):
     return json.dumps(get_result(descriptor, data_providers, context), default= _default_date_time_converter)
 
+def get_descriptor_json(descriptor):
+    d = copy.deepcopy(descriptor)
+    del d["_validators"]
+    return json.dumps(d)    
+
 namespaces = {}
 def get_namespace(name, root_path, debug):
-    if name and name in namespaces:
+    if not debug and name in namespaces:
         return namespaces[name]
     else:
-        path = os.path.join(*[root_path, name])
-        namespaces[name] = Gravity(path, None, debug)         
+        root_path = os.path.join(*[root_path, name])
+        namespaces[name] = Gravity(root_path, None, debug)         
         return namespaces[name]
 
 def create_context(descriptor, body, params, query, header, cookie):    
@@ -575,6 +580,7 @@ def create_context(descriptor, body, params, query, header, cookie):
     return Shape(model_schema, body, None, extras, model_validator)
 
 def create_descriptor(method, path, content_reader):
+    path = "api/" + path 
     ordered_files = _order_list_by_dots(content_reader.list_sql(method, path))       
     if len(ordered_files) == 0: 
         return None # found zero sql files, then return no api available
@@ -582,15 +588,8 @@ def create_descriptor(method, path, content_reader):
     treemap = _build_treemap(ordered_files)        
     config = content_reader.get_config(method, path)
     
-    input_model_str = "input.model"
-    output_model_str = "output.model"
-    input_body_str = "body"
-    input_query_str = "query"
-    
-    input_model = None
-    output_model = None
-    
-    input_query, input_path =  None, None
+    input_model_str, output_model_str, input_body_str, input_query_str = "input.model", "output.model", "body", "query"    
+    input_model, output_model, input_query, input_path = None, None, None, None
     
     if config is not None:
         if input_model_str in config:
@@ -615,7 +614,7 @@ def create_descriptor(method, path, content_reader):
             "properties" : {}
         }
 
-    node_descriptor = {
+    descriptor = {
         "name" : method,
         "method" : method,
         "path" : path,        
@@ -633,13 +632,13 @@ def create_descriptor(method, path, content_reader):
     else:
         input_model_schema_validator = None
 
-    _build_descriptor(node_descriptor, True, treemap[method], content_reader, input_model, output_model)
+    _build_descriptor(descriptor, True, treemap[method], content_reader, input_model, output_model)
     validators = {
         "input_query" : input_query_schema_validator,
         "input_model" : input_model_schema_validator
     }
-    node_descriptor["_validators"] = validators
-    return node_descriptor
+    descriptor["_validators"] = validators
+    return descriptor
 
 class Shape:
     
@@ -987,8 +986,7 @@ class Gravity:
         }
         return data_providers
 
-    def create_descriptor(self, method, path):            
-        k = os.path.join(*[path, method])        
+    def create_descriptor(self, method, path):        
         return create_descriptor(method, path, self._content_reader)
     
     def get_descriptor(self, method, path):
