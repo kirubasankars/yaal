@@ -68,7 +68,7 @@ def _get_query_output(descriptor, data_providers, context, data_provider_helper)
                         rs = output
     return rs, None
 
-def _execute_query(descriptor, data_providers, context, parent_rows, parent_partition_by, data_provider_helper):
+def _execute_action(descriptor, data_providers, context, parent_rows, parent_partition_by, data_provider_helper):
     input_type, output_partition_by = descriptor["input_type"], descriptor["partition_by"]
     use_parent_rows, execution_context =  descriptor["use_parent_rows"], data_providers["db"]
     
@@ -80,7 +80,7 @@ def _execute_query(descriptor, data_providers, context, parent_rows, parent_part
             execution_context.begin()
             
             if "before" in descriptor:
-                rs, errors =  _execute_query(descriptor["before"], data_providers, context, [], output_partition_by, data_provider_helper)
+                rs, errors =  _execute_action(descriptor["before"], data_providers, context, [], output_partition_by, data_provider_helper)
                 if errors:
                     return None, errors    
 
@@ -111,7 +111,7 @@ def _execute_query(descriptor, data_providers, context, parent_rows, parent_part
                     if context is not None:
                         sub_node_shape = context.get_prop(sub_node_name)
 
-                    sub_node_output, errors = _execute_query(branch_descriptor, data_providers, sub_node_shape, output, output_partition_by, data_provider_helper)                    
+                    sub_node_output, errors = _execute_action(branch_descriptor, data_providers, sub_node_shape, output, output_partition_by, data_provider_helper)                    
                     if errors:
                         return None, errors
 
@@ -237,7 +237,7 @@ def _build_treemap(namelist):
             _treemap(treemap, item)
     return treemap
 
-def _build_descriptor_query(descriptor, content):
+def _build_descriptor_action(descriptor, content):
     if content is None or content == '':
         return
 
@@ -395,7 +395,7 @@ def _build_descriptor(descriptor, root, tree_map, content_reader, input_model, o
         descriptor[_useparentrowsstr] = False
         descriptor[_partitionbystr] = None
 
-    _build_descriptor_query(descriptor, content)
+    _build_descriptor_action(descriptor, content)
 
     if _parametersstr not in descriptor:
         descriptor[_parametersstr] = None
@@ -475,7 +475,7 @@ def get_result(descriptor, data_providers, ctx):
             raise Exception("default connection string name db is missing")
         
         data_provider_helper = DataProviderHelper(parameter_rx)        
-        rs, errors = _execute_query(descriptor, data_providers, ctx, [], None, data_provider_helper)
+        rs, errors = _execute_action(descriptor, data_providers, ctx, [], None, data_provider_helper)
         
         if errors:
             status_code = ctx.get_prop(statuscodestr)
@@ -574,7 +574,7 @@ def create_context(descriptor, body, params, query, header, cookie):
 
     return Shape(model_schema, body, None, extras, model_validator)
 
-def create(method, path, content_reader):
+def create_descriptor(method, path, content_reader):
     ordered_files = _order_list_by_dots(content_reader.list_sql(method, path))       
     if len(ordered_files) == 0: 
         return None # found zero sql files, then return no api available
@@ -989,7 +989,7 @@ class Gravity:
 
     def create_descriptor(self, method, path):            
         k = os.path.join(*[path, method])        
-        return create(method, path, self._content_reader)
+        return create_descriptor(method, path, self._content_reader)
     
     def get_descriptor(self, method, path):
         k = os.path.join(*[path, method])
