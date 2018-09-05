@@ -68,7 +68,7 @@ class TestGravity(unittest.TestCase):
 
     def test_simple_get_shape_check(self):        
         descriptor_post = self._gravity.create_descriptor("post", "post1")        
-        input_shape = create_context(descriptor_post, None, None, None, None, None)
+        input_shape = create_context(descriptor_post, "", None, None, None, None, None, None)
         
         self.assertIsNotNone(input_shape._shapes["items"])        
         self.assertEqual(len(input_shape._shapes["items"]._shapes),0)
@@ -79,7 +79,7 @@ class TestGravity(unittest.TestCase):
     def test_run(self):
         descriptor_post = self._gravity.create_descriptor("post", "post1")        
         d = {"items":[{"a":1}, {"b":1}]}
-        input_shape = create_context(descriptor_post, d, None, None, None, None)            
+        input_shape = create_context(descriptor_post, "", d, None, None, None, None, None)            
         rs = get_result(descriptor_post, self.get_data_provider, input_shape)
 
         self.assertListEqual(rs, [d])

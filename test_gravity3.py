@@ -93,7 +93,7 @@ class TestGravity(unittest.TestCase):
         self.assertEqual(1, len(query1_parameters))
         self.assertEqual("bool", query1_parameters[0]["type"])
 
-        s = create_context(descriptor_get, None, None, None, None, None)
+        s = create_context(descriptor_get, "", None, None, None, None, None, None)
 
 if __name__ == "__main__":
     unittest.main()
