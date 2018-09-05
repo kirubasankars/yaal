@@ -1,5 +1,5 @@
 import unittest
-from gravity import _get_action_output, create_context
+from gravity import _get_actions_output, create_context
 
 class FakeExecutionContext:
     
@@ -54,7 +54,7 @@ class TestGravity(unittest.TestCase):
             "db" : FakeExecutionContext()
         }
 
-        rs, errors = _get_action_output(descriptor, p, ctx, None)
+        rs, errors = _get_actions_output(descriptor, p, ctx, None)
 
         self.assertListEqual(errors, [{ "$error" : 1, "message" : "message1", '$http_status_code': 400 }, { "$error" : 1, "message" : "message2", '$http_status_code': 400 }])
         self.assertEqual(ctx.get_prop("$response.status_code"), 400)
@@ -77,7 +77,7 @@ class TestGravity(unittest.TestCase):
             "db" : FakeExecutionContext()
         }
 
-        _get_action_output(descriptor, p, ctx, None)
+        _get_actions_output(descriptor, p, ctx, None)
 
         self.assertDictEqual(ctx.get_prop("$response.$cookie").get_data(), {'name1': {'$cookie': 1, 'name': 'name1', 'value': 'value'}, 'name2': {'$cookie': 1, 'name': 'name2', 'value': 'value'}})
 
@@ -99,7 +99,7 @@ class TestGravity(unittest.TestCase):
             "db" : FakeExecutionContext()
         }
 
-        _get_action_output(descriptor, p, ctx, None)
+        _get_actions_output(descriptor, p, ctx, None)
 
         self.assertDictEqual(ctx.get_prop("$response.$header").get_data(), {'name1': {'$header': 1, 'name': 'name1', 'value': 'value'}, 'name2': {'$header': 1, 'name': 'name2', 'value': 'value'}})
 
@@ -121,7 +121,7 @@ class TestGravity(unittest.TestCase):
             "db" : FakeExecutionContext()
         }
 
-        _get_action_output(descriptor, p, ctx, None)
+        _get_actions_output(descriptor, p, ctx, None)
 
         self.assertDictEqual(ctx.get_prop("$params").get_data(), {'$last_inserted_id': 1, '$params': 1, 'a': '1', 'b': '2'})
 
@@ -144,7 +144,7 @@ class TestGravity(unittest.TestCase):
             "db" : FakeExecutionContext()
         }
 
-        rs, errors = _get_action_output(descriptor, p, ctx, None)
+        rs, errors = _get_actions_output(descriptor, p, ctx, None)
 
         self.assertListEqual(rs, [{'a': '1', 'b': '2'}])
 
@@ -168,8 +168,7 @@ class TestGravity(unittest.TestCase):
             "db" : FakeExecutionContext()
         }
 
-        with self.assertRaises(Exception): _get_action_output(descriptor, p, ctx, None)
-        
+        with self.assertRaises(Exception): _get_actions_output(descriptor, p, ctx, None)   
 
 if __name__ == "__main__":
     unittest.main()

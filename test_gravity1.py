@@ -35,6 +35,9 @@ class FakeContentReader:
         
         return ["get"]
 
+    def get_routes_config(self, path):
+        return None
+
 class TestGravity(unittest.TestCase):
     
     def setUp(self):

@@ -41,6 +41,9 @@ class FakeContentReader:
 
     def list_sql(self, method, path):        
         return ["post", "post.items"]
+    
+    def get_routes_config(self, path):
+        return None
 
 class TestGravity(unittest.TestCase):
     

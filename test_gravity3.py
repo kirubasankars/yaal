@@ -29,6 +29,9 @@ select {{id1}}
     def list_sql(self, method, path):        
         return ["get"]
 
+    def get_routes_config(self, path):
+        return None
+
 class FakeContentReader1:
 
     def get_sql(self, method, path):
@@ -43,6 +46,9 @@ select {{id2}}
 
     def list_sql(self, method, path):        
         return ["get"]
+
+    def get_routes_config(self, path):
+        return None
 
 
 class TestGravity(unittest.TestCase):
