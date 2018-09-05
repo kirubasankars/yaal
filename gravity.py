@@ -4,8 +4,7 @@ from jsonschema import validate, FormatChecker, Draft4Validator
 
 import sqlite3
 
-import psycopg2 as pg
-from psycopg2.extras import RealDictCursor
+from gravity_postgres import PostgresContextManager
 
 parameters_meta_rx = re.compile(r"--\((.*)\)--")
 parameter_meta_rx = re.compile(r"\s*([A-Za-z0-9_.$-]+)(\s+(\w+))?\s*")
@@ -15,7 +14,7 @@ query_rx = re.compile(r"--query\(([a-zA-Z0-9.$_]*?)\)--")
 def _get_action_output(descriptor, data_providers, context, data_provider_helper):
     errors = []
     
-    input_type, actions, data_provider = descriptor["input_type"], descriptor["actions"], data_providers["db"]
+    actions, data_provider = descriptor["actions"], data_providers["db"]
     paramsstr, headerstr, cookiestr, errorstr, breakstr = "$params", "$header", "$cookie", "$error", "$break"
     
     rs = []
@@ -37,35 +36,29 @@ def _get_action_output(descriptor, data_providers, context, data_provider_helper
                 if errorstr in output0 or paramsstr in output0 or headerstr in output0 or cookiestr in output0 or breakstr in output0: 
                     if errorstr in output0 and output0[errorstr] == 1:
                         if "$http_status_code" in output0:
-                            context.get_prop("$response.status_code", output0["$http_status_code"])                        
+                            context.set_prop("$response.status_code", output0["$http_status_code"])                        
                         errors.extend(output)
                         return None, errors
                     elif breakstr in output0 and output0[breakstr] == 1:
                         for o in output:
                             del o[breakstr]
-                        break
+                        return output, None
                     elif paramsstr in output0 and output0[paramsstr] == 1:
                         params = context.get_prop(paramsstr)
                         for k, v in output0.items():
                             params.set_prop(k, v)
                     elif cookiestr in output0 and output0[cookiestr] == 1:                        
-                        cookie = context.get_prop("$response.cookie")
+                        cookie = context.get_prop("$response.$cookie")
                         for c in output:
                             if "name" in c and "value" in c:
                                 cookie.set_prop(c["name"], c)
                     elif headerstr in output0 and output0[headerstr] == 1:
-                        header = context.get_prop("$response.header")                        
+                        header = context.get_prop("$response.$header")                        
                         for h in output:
                             if "name" in h and "value" in h:
                                 header.set_prop(h["name"], h)                    
                 else:
-                    if input_type is not None:
-                        if input_type == "array":
-                            rs.extend(output)
-                        elif input_type == "object":
-                            rs = output
-                    else:
-                        rs = output
+                    rs = output
     return rs, None
 
 def _execute_descriptor(descriptor, data_providers, context, parent_rows, parent_partition_by, data_provider_helper):
@@ -141,25 +134,30 @@ def _execute_descriptor(descriptor, data_providers, context, parent_rows, parent
             else:
                 pass
 
-    except Exception as e:    
-        default_data_provider.error()
-        for name, pro in data_providers.items():
-            try:
-                if name != "db":
-                    pro.error()
-            except:
-                pass
+    except Exception as e:
+        if root:
+            default_data_provider.error()
+            
+            for name, pro in data_providers.items():
+                try:
+                    if name != "db":
+                        pro.error()
+                except:
+                    pass
         raise e
     finally:
         if root:
             default_data_provider.end()
-
+            error = None
             for name, pro in data_providers.items():
                 try:
                     if name != "db":
                         pro.end()
-                except:
-                    pass
+                except Exception as e:
+                    error = e
+
+            if error:
+                raise Exception("Connection Error.")
     
     return output, None
 
@@ -513,8 +511,8 @@ def get_result(descriptor, get_data_provider, ctx):
     except Exception as e:        
         return { "errors" : e.args[0] }
 
-def get_result_json(descriptor, data_providers, context):
-    return json.dumps(get_result(descriptor, data_providers, context), default= _default_date_time_converter)
+def get_result_json(descriptor, get_data_providers, context):
+    return json.dumps(get_result(descriptor, get_data_providers, context), default= _default_date_time_converter)
 
 def get_descriptor_json(descriptor):
     d = copy.deepcopy(descriptor)
@@ -529,74 +527,6 @@ def get_namespace(name, root_path, debug):
         root_path = os.path.join(*[root_path, name])
         namespaces[name] = Gravity(root_path, None, debug)         
         return namespaces[name]
-
-def create_context(descriptor, body, params, query, header, cookie):    
-    
-    validators = descriptor["_validators"]
-    
-    querystr, headerstr, cookiestr, modelstr = "input_query", "input_header", "input_cookie", "input_model"
-
-    if  querystr in descriptor:
-        query_schema = descriptor[querystr]
-        query_validator = validators[querystr]
-    else:
-        query_schema = None
-        query_validator = None
-
-    if headerstr in descriptor:
-        header_schema = descriptor[headerstr]
-        header_validator = validators[headerstr]
-    else:
-        header_schema = None
-        header_validator = None
-
-    if cookiestr in descriptor:
-        cookie_schema = descriptor[cookiestr]
-        cookie_validator = validators[cookiestr]
-    else:
-        cookie_schema = None
-        cookie_validator = None
-
-    if modelstr in descriptor:
-        model_schema = descriptor[modelstr]
-        model_validator = validators[modelstr]
-    else:
-        model_schema = None
-        model_validator = None
-    
-    query_shape = Shape(query_schema, query, None, None, query_validator)
-    if query:
-        for k, v in query.items():
-            query_shape.set_prop(k, v)
-    
-    header_shape = Shape(header_schema, header, None, None, header_validator)
-    cookie_shape = Shape(cookie_schema, cookie, None, None, cookie_validator)
-
-    request_extras = {
-        "$query" : query_shape,
-        "$header" : header_shape,
-        "$cookie" : cookie_shape
-    }
-    request_shape = Shape({}, None, None, request_extras, None)
-    
-    response_extras = {
-        "$header" :  Shape(None, None, None, None, None),
-        "$cookie" : Shape(None, None, None, None, None)
-    }
-    response_shape = Shape({}, None, None, response_extras, None)
-
-    params_shape = Shape({}, params, None, None, None)
-
-    extras = {
-        "$params" : params_shape,
-        "$query" : query_shape,
-        "$header" : header_shape,
-        "$cookie" : cookie_shape,
-        "$request" : request_shape,
-        "$response" : response_shape
-    }
-
-    return Shape(model_schema, body, None, extras, model_validator)
 
 def create_descriptor(method, path, content_reader):
     path = "api/" + path 
@@ -662,6 +592,96 @@ def create_descriptor(method, path, content_reader):
     descriptor["_validators"] = validators
     
     return descriptor
+
+def create_context(descriptor, path, body, params, query, path_values, header, cookie):
+        validators = descriptor["_validators"]
+        
+        querystr, pathstr, headerstr, cookiestr, modelstr = "input_query", "input_path", "input_header", "input_cookie", "input_model"
+
+        if  querystr in descriptor:
+            query_schema = descriptor[querystr]
+            query_validator = validators[querystr]
+        else:
+            query_schema = None
+            query_validator = None
+
+        if  pathstr in descriptor:
+            path_schema = descriptor[pathstr]
+            path_validator = validators[pathstr]
+        else:
+            path_schema = None
+            path_validator = None
+
+        if headerstr in descriptor:
+            header_schema = descriptor[headerstr]
+            header_validator = validators[headerstr]
+        else:
+            header_schema = None
+            header_validator = None
+
+        if cookiestr in descriptor:
+            cookie_schema = descriptor[cookiestr]
+            cookie_validator = validators[cookiestr]
+        else:
+            cookie_schema = None
+            cookie_validator = None
+
+        if modelstr in descriptor:
+            model_schema = descriptor[modelstr]
+            model_validator = validators[modelstr]
+        else:
+            model_schema = None
+            model_validator = None
+        
+        query_shape = Shape(query_schema, None, None, None, query_validator)
+        if query:
+            for k, v in query.items():
+                query_shape.set_prop(k, v)
+        
+        path_shape = Shape(path_schema, None, None, None, path_validator)
+        if path_values:
+            for k, v in path_values.items():
+                path_shape.set_prop(k, v)
+
+        header_shape = Shape(header_schema, header, None, None, header_validator)
+        cookie_shape = Shape(cookie_schema, cookie, None, None, cookie_validator)
+
+        request_extras = {
+            "$query" : query_shape,
+            "$header" : header_shape,
+            "$cookie" : cookie_shape,
+            "$path" : path_shape
+        }
+        request_shape = Shape({}, None, None, request_extras, None)
+        
+        response_extras = {
+            "$header" :  Shape(None, None, None, None, None),
+            "$cookie" : Shape(None, None, None, None, None)
+        }
+        response_shape = Shape({}, None, None, response_extras, None)
+
+        params_shape = Shape({}, params, None, None, None)
+
+        extras = {
+            "$params" : params_shape,
+            "$query" : query_shape,
+            "$path" : path_shape,
+            "$header" : header_shape,
+            "$cookie" : cookie_shape,
+            "$request" : request_shape,
+            "$response" : response_shape
+        }
+
+        return Shape(model_schema, body, None, extras, model_validator)
+
+def _build_routes(routes):
+    _routes = []
+    if routes:
+        for r in routes:
+            path = r["route"]
+            p = "^" + re.sub(r"<(.*?)>", r"(?P<\1>[^/]+)", path) + "/?$" 
+            _routes.append({ "route" : re.compile(p), "descriptor" : r["descriptor"], "path" : path })
+        return _routes
 
 class Shape:
     
@@ -884,59 +904,18 @@ class DataProviderHelper:
                         _cache[pname] = pvalue
                     
                 try:
-                    if ptype == "integer":
-                        pvalue = int(pvalue)
-                    elif ptype == "string":
-                        pvalue = str(pvalue)
-                    else:
-                        pvalue = get_value_converter(pvalue)
+                    if pvalue:
+                        if ptype == "integer":
+                            pvalue = int(pvalue)
+                        elif ptype == "string":
+                            pvalue = str(pvalue)
+                        else:
+                            pvalue = get_value_converter(pvalue)
                     values.append(pvalue)
                 except:
                     values.append(pvalue)
         
         return values
-
-class SQLiteDataProvider:
-    
-    def __init__(self, root_path, db_name):        
-        self._root_path = root_path
-        self._db_path = root_path + "/db/" + db_name        
-
-    def _sqlite_dict_factory(self, cursor, row):
-        d = {}
-        for idx, col in enumerate(cursor.description):
-            d[col[0]] = row[idx]
-        return d
-
-    def begin(self):
-        self._con = sqlite3.connect(self._db_path)
-        self._con.row_factory = self._sqlite_dict_factory
-
-    def end(self):
-        if self._con:
-            self._con.commit()
-            self._con.close()
-    
-    def error(self):
-        self._con.rollback()
-        self._con.close()
-        self._con = None
-
-    def get_value(self, ptype, value):        
-        if ptype == "blob":        
-            return sqlite3.Binary(value)        
-        return value
-
-    def execute(self, query, input_shape, helper):        
-        con = self._con        
-        content = helper.get_executable_content("?", query)                                       
-        with con:
-            cur = con.cursor()
-            args = helper.build_parameters(query, input_shape, self.get_value)
-            cur.execute(content, args)
-            rows = cur.fetchall()
-            
-        return rows, cur.lastrowid
 
 class FileContentReader:
 
@@ -947,6 +926,10 @@ class FileContentReader:
         file_path = os.path.join(*[self._root_path, path, method + ".sql"])
         return self._get(file_path)
     
+    def get_routes_config(self, path):
+        routes_path = os.path.join(*[self._root_path, path])
+        return self._get_config(routes_path)
+
     def get_config(self, method, path):
             
         input_path = os.path.join(*[self._root_path, path, method + ".input"])        
@@ -992,30 +975,42 @@ class FileContentReader:
 
 class Gravity:
 
-    def __init__(self, root_path, content_reader, debug):
-        self._descriptors = {}
-        self._descriptor_validators = {}
+    def __init__(self, root_path, content_reader, debug): 
         self._root_path = root_path
         self._debug = debug or False
+       
+        self._descriptors = {}
+        self._descriptor_validators = {}
         
+        self._data_providers = {
+            "db": PostgresContextManager({
+                "root_path" : root_path,
+                "db_name" : "dvdrental"
+            }),
+            "sqlite3": SQLiteContextManager({
+                "root_path" : root_path,
+                "db_name" : "sqlite3.db"
+            })
+        }
+               
         if content_reader is None:
             self._content_reader = FileContentReader(self._root_path)
         else:
             self._content_reader = content_reader
 
-    def get_data_provider(self, name):        
-        data_providers = {
-            "db" : PostgresDataProvider(self._root_path, "dvdrental"),
-            "sqlite3" : SQLiteDataProvider(self._root_path, "sqlite3.db"),
-            "app.db": SQLiteDataProvider(self._root_path, "app.db")
-        }
-        return data_providers[name]
+        self._routes = _build_routes(self._content_reader.get_routes_config("api/routes"))
+        
+    def get_data_provider(self, name):
+        if name in self._data_providers:
+            return self._data_providers[name].getContext()
+        else:
+            return None
 
     def create_descriptor(self, method, path):        
         return create_descriptor(method, path, self._content_reader)
     
-    def get_descriptor(self, method, path):
-        k = os.path.join(*[path, method])
+    def get_descriptor(self, method, route, path):        
+        k = os.path.join(*[route, method])
         if self._debug == False and k in self._descriptors:
             return self._descriptors[k]
         
@@ -1023,37 +1018,68 @@ class Gravity:
         self._descriptors[k] = descriptor      
         return descriptor
 
-class PostgresDataProvider:
+    def get_descriptor_path_by_route(self, path):
+        pathVars = {} 
+        for r in self._routes:
+            m = r["route"].match(path)
+            if m:                
+                for k, v in m.groupdict().items():
+                    pathVars[k] = v
+                return r["descriptor"], r["path"], pathVars
+        return path, path, None
 
-    def __init__(self, root_path, db_name):
-        self._root_path = root_path
-        self._db_name = db_name
+    def get_result_json(self, descriptor, context):
+        return get_result_json(descriptor, self.get_data_provider, context)
+
+class SQLiteContextManager:
+
+    def __init__(self, options):
+        self._options = options
+
+    def getContext(self):
+        return SQLiteDataProvider(self._options)
+
+class SQLiteDataProvider:
+
+    def __init__(self, options):     
+        self._db_path = options["root_path"] + "/db/" + options["db_name"]        
+        
+    def _sqlite_dict_factory(self, cursor, row):
+        d = {}
+        for idx, col in enumerate(cursor.description):
+            d[col[0]] = row[idx]
+        return d
 
     def begin(self):
-        self._conn = pg.connect("dbname='" + self._db_name + "' user='postgres' password='admin'")
+        self._con = sqlite3.connect(self._db_path)
+        self._con.row_factory = self._sqlite_dict_factory
 
     def end(self):
-        if self._conn:
-            self._conn.commit()
-            self._conn.close()
+        try:
+            if self._con:
+                self._con.commit()
+                self._con.close()                
+        except Exception as e:      
+            raise e
+        finally:
+            self._con = None
 
-    def error(self):
-        self._conn.rollback()
-        self._conn.close()
-        self._conn = None
-    
-    def get_value_converter(self, ptype, value):        
+    def error(self):        
+        self._con.rollback()
+        self._con.close()
+        self._con = None
+
+    def get_value(self, ptype, value):        
         if ptype == "blob":        
-            return pg.Binary(value)        
+            return sqlite3.Binary(value)        
         return value
-        
-    def execute(self, query, input_shape, helper):
-        con = self._conn
-        content = helper.get_executable_content("%s", query)
-        
+
+    def execute(self, query, input_shape, helper):        
+        con = self._con        
+        content = helper.get_executable_content("?", query)                                       
         with con:
-            cur = con.cursor(cursor_factory = RealDictCursor)
-            args = helper.build_parameters(query, input_shape, self.get_value_converter)
+            cur = con.cursor()
+            args = helper.build_parameters(query, input_shape, self.get_value)
             cur.execute(content, args)
             rows = cur.fetchall()
             

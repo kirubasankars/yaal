@@ -1,40 +1,38 @@
 import os, json 
 import copy
 from flask import Flask, request, abort, send_from_directory
-from gravity import get_namespace, create_context, get_result_json, get_descriptor_json
+from gravity import get_namespace, create_context, get_descriptor_json
 
 app = Flask(__name__)
 root_path  = "serve"
 
-@app.route("/", methods=["GET"], defaults = { "path" : "" })
-@app.route("/<path:path>", methods=["GET"])
-def serve_app(path):
-    namespace = ""
+@app.route("/_<namespace>/", methods=["GET"], defaults = { "path" : "" })
+@app.route("/_<namespace>/<path:path>", methods=["GET"])
+def serve_app(namespace, path):
     static_file_dir = os.path.join(root_path, namespace, "app")
     if not os.path.isfile(os.path.join(static_file_dir, path)):
         path = os.path.join(path, "index.html")
  
     return send_from_directory(static_file_dir, path)
 
+@app.route("/_<namespace>/api/", methods=["GET"], defaults = { "path" : "" })
+@app.route("/_<namespace>/api/<path:path>", methods=["GET", "POST", "PUT", "DELETE"])
+def namespace_serve_api(namespace, path):
 
-@app.route("/api/", methods=["GET"], defaults = { "path" : "" })
-@app.route("/api/<path:path>", methods=["GET", "POST", "PUT", "DELETE"])
-def namespace_serve_api(path):
+    g = get_namespace(namespace, root_path, False)
     
-    namespace = ""
-    gravity_app = get_namespace(namespace, root_path, False)
-    
-    method = request.method.lower()    
-    descriptor = gravity_app.get_descriptor(method, path)
-    
+    method = request.method.lower()
+    descriptor_path, route_path, path_values = g.get_descriptor_path_by_route(path)    
+    descriptor = g.get_descriptor(method, route_path, descriptor_path)
+     
     if not descriptor:
         return abort(404)   
 
     if "debug" in request.args:        
         return get_descriptor_json(descriptor)
 
-    ctx = create_gravity_context(request, namespace, path, descriptor)
-    rs = get_result_json(descriptor, gravity_app.get_data_provider, ctx)
+    ctx = create_gravity_context(request, path_values, namespace, path, descriptor)
+    rs = g.get_result_json(descriptor, ctx)
     
     r = ctx.get_prop("$response")
     header = r.get_prop("$header")
@@ -60,8 +58,7 @@ def namespace_serve_api(path):
     
     return resp
 
-
-def create_gravity_context(request, namespace, path, node_descriptor):
+def create_gravity_context(request, path_values, namespace, path, descriptor):
     if request.mimetype == "application/json":
         try:
             request_body = request.get_json()
@@ -84,9 +81,7 @@ def create_gravity_context(request, namespace, path, node_descriptor):
     for k,v in request.args.items():
         query[k] = v 
 
-    return create_context(node_descriptor, request_body, params, query, request.headers, request.cookies)    
-
+    return create_context(descriptor, path, request_body, params, query, path_values, request.headers, request.cookies)    
 
 if __name__ == "__main__":
     app.run(debug=False)
-
