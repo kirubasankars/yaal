@@ -11,10 +11,365 @@ parameter_meta_rx = re.compile(r"\s*([A-Za-z0-9_.$-]+)(\s+(\w+))?\s*")
 parameter_rx = re.compile(r"\{\{([A-Za-z0-9_.$-]*?)\}\}", re.MULTILINE)
 query_rx = re.compile(r"--query\(([a-zA-Z0-9.$_]*?)\)--")
 
-def _get_action_output(descriptor, data_providers, context, data_provider_helper):
+def _build_descriptor_leafs(descriptor, content, connections_used):
+    if content is None or content == '':
+        return
+
+    lines = content.splitlines()
+
+    if len(lines) == 0:
+        return
+
+    first_line = lines[0]
+    parameters_first_line_m = parameters_meta_rx.match(first_line)
+
+    meta = {}
+    if parameters_first_line_m is not None:
+        params_meta = parameters_first_line_m.groups(1)[0].split(",")
+        for p in params_meta:
+            parameter_meta_m = parameter_meta_rx.match(p)
+
+            if parameter_meta_m is not None:
+                gm = parameter_meta_m.groups(1)
+                if len(gm) > 0:
+                    parameter_name = gm[0].lower()
+                if len(gm) > 1:
+                    parameter_type = gm[2]                
+                meta[parameter_name] = {
+                    "name" : parameter_name,
+                    "type" : parameter_type
+                }
+        descriptor["parameters"] = meta
+    else:
+        descriptor["parameters"] = None
+    
+    leafs = []
+    content = ""        
+    connection = None
+
+    for idx, line in enumerate(lines):
+        if idx == 0 and parameters_first_line_m is not None:
+            continue
+        
+        query_match = query_rx.match(line)
+        if query_match is not None:                
+            if content.lstrip().rstrip() is not "":                
+                leaf = {
+                    "content" : content
+                }
+                if connection:
+                    leaf["connection"] = connection
+
+                _build_leaf_parameters(leaf, descriptor)
+                leafs.append(leaf)
+            
+            connection = query_match.groups(0)[0].lstrip().rstrip()            
+            if connection == "":
+                connection = None
+
+            content = ""
+        else:
+            content = "\r\n".join([content, line])            
+    
+    if content.lstrip().rstrip() is not "":        
+        leaf = {
+            "content" : content
+        }
+        if connection:
+            leaf["connection"] = connection
+            connections_used.append(connection)
+        _build_leaf_parameters(leaf, descriptor)
+        leafs.append(leaf)
+
+    descriptor["leafs"] = leafs
+
+def _build_leaf_parameters(action, descriptor):
+    content = action["content"]
+    parameter_names = [x.lower() for x in parameter_rx.findall(content)]
+    descriptor_parameters = descriptor["parameters"]
+
+    params = []
+    for p in parameter_names:
+        leaf_parameter = None
+        if descriptor_parameters is not None and p in descriptor_parameters:
+            descriptor_parameter = descriptor_parameters[p]
+            leaf_parameter = {
+                "name": p,
+                "type": descriptor_parameter["type"]
+            }
+            params.append(leaf_parameter)                            
+        else:
+            raise TypeError("type missing for {{" + p + "}} in the " + descriptor["method"] + ".sql")
+    
+    if len(params) != 0:
+        action["parameters"] = params    
+
+def _order_list_by_dots(names):
+    if names is None:
+        return []
+
+    dots = [x.count(".") for x in names]
+    ordered = []
+    for x in range(0, len(dots)):
+        if len(dots) == 0:
+            break
+
+        el = min(dots)
+        while True:
+            try:
+                idx = dots.index(el)
+                ordered.append(names[idx])
+                del names[idx]
+                del dots[idx]
+            except:
+                break
+    return ordered
+
+def _build_treemap(treemap, item):
+    if item == "":
+        return
+    item = item
+    dot = item.find(".")
+    if  dot > -1:
+        path = item[0:dot]
+        remaining_path = item[dot + 1:]
+        if path not in treemap:
+            treemap[path] = {}
+        _build_treemap(treemap[path], remaining_path)
+    else:
+        if item not in treemap:
+            treemap[item] = {}
+
+def _build_descriptor_treemap(namelist):
+    treemap = {}
+    if namelist is not None:
+        for item in namelist:
+            _build_treemap(treemap, item)
+    return treemap
+
+def _build_descriptor(descriptor, root, tree_map, content_reader, input_model, output_model, connections):
+    _propertiesstr, _typestr, _partitionbystr, _parentrowsstr = "properties", "type", "partition_by", "parent_rows"
+    _outputtypestr, _useparentrowsstr, _parametersstr, _actionsstr = "output_type", "use_parent_rows", "parameters", "leafs"
+    
+    path, method = descriptor["path"], descriptor["method"]
+    content = content_reader.get_sql(method, path)
+    branch_map = {}
+    
+    if input_model is None:
+        input_model = {
+            "type" : "object",
+            _propertiesstr : {}
+        }
+    if _propertiesstr not in input_model:
+        input_model[_propertiesstr] = {}
+
+    if root:
+        descriptor["input_model"] = input_model
+        
+    descriptor["input_type"] = input_model[_typestr]
+    input_properties = input_model[_propertiesstr]
+    
+    if root:
+        descriptor["output_model"] = output_model or { _typestr : "array", _propertiesstr : {} }
+        
+        before_descriptor = {
+            "path" : "api",
+            "method" : "init"
+        }
+        _build_descriptor(before_descriptor, False, {}, content_reader, None, None, connections)
+
+        if _actionsstr in before_descriptor and before_descriptor[_actionsstr]:
+            descriptor["init"] = before_descriptor
+
+    output_properties = None      
+    if output_model is not None:
+        if _typestr in output_model:
+            descriptor[_outputtypestr] = output_model[_typestr]
+        else:
+            descriptor[_outputtypestr] = "array"
+
+        if _propertiesstr in output_model:
+            output_properties = output_model[_propertiesstr]            
+
+        if _parentrowsstr in output_model:
+            descriptor[_useparentrowsstr] = output_model[_parentrowsstr]
+        else:
+            descriptor[_useparentrowsstr] = None
+
+        if _partitionbystr in output_model:
+            descriptor[_partitionbystr] = output_model[_partitionbystr]
+        else:
+            descriptor[_partitionbystr] = None
+                
+        if output_properties is not None:
+            for k in output_properties:
+                v = output_properties[k]
+                if type(v) == dict and _typestr in v:
+                    _type = v[_typestr]
+                    if _type == "object" or _type == "array":                      
+                        branch_map[k] = {}
+    else:
+        descriptor[_outputtypestr] = "array"        
+        descriptor[_useparentrowsstr] = False
+        descriptor[_partitionbystr] = None
+
+    _build_descriptor_leafs(descriptor, content, connections)
+
+    if _parametersstr not in descriptor:
+        descriptor[_parametersstr] = None
+
+    if _actionsstr not in descriptor:
+        descriptor[_actionsstr] = None
+
+    for k in tree_map:
+        if k not in branch_map:
+            branch_map[k] = tree_map[k]
+
+    branches = []
+    for branch_name in branch_map:
+
+        branch = branch_map[branch_name]
+        branch_method_name = ".".join([method, branch_name])
+        branch_descriptor = {
+            "name" : branch_name,
+            "method" : branch_method_name,
+            "path" : path
+        }        
+
+        branch_input_model = None
+        branch_output_model = None
+                    
+        if branch_name not in input_properties:
+            input_properties[branch_name] = {
+                _typestr : "object",
+                _propertiesstr : {}
+            }
+        branch_input_model = input_properties[branch_name]
+        
+        if output_properties is not None:                
+            if branch_name in output_properties:
+                branch_output_model = output_properties[branch_name]
+
+        _build_descriptor(branch_descriptor, False, branch, content_reader, branch_input_model, branch_output_model, connections)
+        branches.append(branch_descriptor)
+    
+    if len(branches) != 0:
+        descriptor["branches"] = branches
+    else:
+        descriptor["branches"] = None
+
+def create_descriptor(method, path, content_reader):
+    path = "api/" + path 
+    ordered_files = _order_list_by_dots(content_reader.list_sql(method, path))       
+    if len(ordered_files) == 0: 
+        return None # found zero sql files, then return no api available
+
+    treemap = _build_descriptor_treemap(ordered_files)        
+    config = content_reader.get_config(method, path)
+    
+    input_model_str, output_model_str, input_body_str = "input.model", "output.model", "body"    
+    parameter_query_str, parameter_path_str, parameter_header_str, parameter_cookie_str = "query", "path", "header", "cookie"
+    input_model, output_model = None, None 
+    parameter_query, parameter_path, parameter_header, parameter_cookie = None, None, None, None
+    
+    if config is not None:
+        if input_model_str in config:
+            input_config = config[input_model_str]
+            if input_config is not None:
+                if input_body_str in input_config:
+                    input_model = input_config[input_body_str]
+
+                if parameter_query_str in input_config:
+                    parameter_query = input_config[parameter_query_str]
+                if parameter_path_str in input_config:
+                    parameter_path = input_config[parameter_path_str]
+                if parameter_header_str in input_config:
+                    parameter_header = input_config[parameter_header_str]                    
+                if parameter_cookie_str in input_config:
+                    parameter_cookie = input_config[parameter_cookie_str]
+            
+        if output_model_str in config:
+            output_model = config[output_model_str]
+    
+    if not parameter_query:
+        parameter_query = {
+            "type" : "object",
+            "properties" : {}
+        }
+    if not parameter_path:
+        parameter_path = {
+            "type" : "object",
+            "properties" : {}
+        }
+    if not parameter_header:
+        parameter_header = {
+            "type" : "object",
+            "properties" : {}
+        }
+    if not parameter_cookie:
+        parameter_cookie = {
+            "type" : "object",
+            "properties" : {}
+        }
+
+    descriptor = {
+        "name" : method,
+        "method" : method,
+        "path" : path,        
+        "trunk": True,
+        "parameters_model" : {
+            "query" : parameter_query,
+            "path" : parameter_path,
+            "header" : parameter_header,
+            "cookie" : parameter_cookie
+        }
+    }
+
+    if input_model:
+        request_body_validator = Draft4Validator(schema = input_model, format_checker = FormatChecker())
+    else:
+        request_body_validator = None
+
+    if parameter_query:
+        parameter_query_validator = Draft4Validator(schema = parameter_query, format_checker = FormatChecker())
+    else:
+        parameter_query_validator = None
+
+    if parameter_path:
+        parameter_path_validator = Draft4Validator(schema = parameter_query, format_checker = FormatChecker())
+    else:
+        parameter_path_validator = None
+
+    if parameter_header:
+        parameter_header_validator = Draft4Validator(schema = parameter_header, format_checker = FormatChecker())
+    else:
+        parameter_header_validator = None
+
+    if parameter_cookie:
+        parameter_cookie_validator = Draft4Validator(schema = parameter_cookie, format_checker = FormatChecker())
+    else:
+        parameter_cookie_validator = None
+
+
+    connections = []
+    _build_descriptor(descriptor, True, treemap[method], content_reader, input_model, output_model, connections)    
+    descriptor["connections"] = list(set(connections))
+
+    validators = {
+        "query" : parameter_query_validator,
+        "path" : parameter_path_validator,
+        "header" : parameter_header_validator,
+        "cookie" : parameter_cookie_validator,
+        "input_model" : request_body_validator
+    }
+    descriptor["_validators"] = validators
+    
+    return descriptor
+
+def _get_leafs_output(descriptor, data_providers, context, data_provider_helper):
     errors = []
     
-    actions, data_provider = descriptor["actions"], data_providers["db"]
+    actions, data_provider = descriptor["leafs"], data_providers["db"]
     paramsstr, headerstr, cookiestr, errorstr, breakstr = "$params", "$header", "$cookie", "$error", "$break"
     
     rs = []
@@ -64,31 +419,31 @@ def _get_action_output(descriptor, data_providers, context, data_provider_helper
 def _execute_descriptor(descriptor, data_providers, context, parent_rows, parent_partition_by, data_provider_helper):
     input_type, output_partition_by = descriptor["input_type"], descriptor["partition_by"]
     use_parent_rows, default_data_provider =  descriptor["use_parent_rows"], data_providers["db"]
-    
-    root = ("root" in descriptor)    
     output = []
 
+    root = ("trunk" in descriptor)    
+    
     try:
         if root:
             for name, pro in data_providers.items():
-                pro.begin()                
+                pro.begin()
 
             if "init" in descriptor:
                 rs, errors =  _execute_descriptor(descriptor["init"], data_providers, context, [], output_partition_by, data_provider_helper)
                 if errors:
                     return None, errors    
 
-        if input_type is not None and input_type == "array":
+        if input_type == "array":
             length = int(context.get_prop("$length"))
             for i in range(0, length):
                 item_ctx = context.get_prop("@" + str(i))                    
-                rs, errors = _get_action_output(descriptor, data_providers, item_ctx, data_provider_helper)
+                rs, errors = _get_leafs_output(descriptor, data_providers, item_ctx, data_provider_helper)
                 output.extend(rs)
                 if errors:
                     return None, errors
         
-        elif input_type is None or input_type == "object":                
-            output, errors = _get_action_output(descriptor, data_providers, context, data_provider_helper)
+        elif input_type == "object":                
+            output, errors = _get_leafs_output(descriptor, data_providers, context, data_provider_helper)
             if errors:
                 return None, errors
             if use_parent_rows == True and parent_partition_by is None:
@@ -109,7 +464,7 @@ def _execute_descriptor(descriptor, data_providers, context, parent_rows, parent
                     if errors:
                         return None, errors
 
-                    if not descriptor["actions"] and not output:
+                    if not descriptor["leafs"] and not output:
                         output.append({})
                         
                     if output_partition_by is None:
@@ -157,7 +512,7 @@ def _execute_descriptor(descriptor, data_providers, context, parent_rows, parent
                     error = e
 
             if error:
-                raise Exception("Connection Error.")
+                raise error
     
     return output, None
 
@@ -227,257 +582,6 @@ def _output_mapper(output_type, output_modal, branches, result):
             mapped_result = {}
     return mapped_result
 
-def _treemap(treemap, item):
-    if item == "":
-        return
-    item = item
-    dot = item.find(".")
-    if  dot > -1:
-        path = item[0:dot]
-        remaining_path = item[dot + 1:]
-        if path not in treemap:
-            treemap[path] = {}
-        _treemap(treemap[path], remaining_path)
-    else:
-        if item not in treemap:
-            treemap[item] = {}
-
-def _build_treemap(namelist):
-    treemap = {}
-    if namelist is not None:
-        for item in namelist:
-            _treemap(treemap, item)
-    return treemap
-
-def _build_descriptor_action(descriptor, content, connections_used):
-    if content is None or content == '':
-        return
-
-    lines = content.splitlines()
-
-    if len(lines) == 0:
-        return
-
-    first_line = lines[0]
-    parameters_first_line_m = parameters_meta_rx.match(first_line)
-
-    meta = {}
-    if parameters_first_line_m is not None:
-        params_meta = parameters_first_line_m.groups(1)[0].split(",")
-        for p in params_meta:
-            parameter_meta_m = parameter_meta_rx.match(p)
-
-            if parameter_meta_m is not None:
-                gm = parameter_meta_m.groups(1)
-                if len(gm) > 0:
-                    parameter_name = gm[0].lower()
-                if len(gm) > 1:
-                    parameter_type = gm[2]                
-                meta[parameter_name] = {
-                    "name" : parameter_name,
-                    "type" : parameter_type
-                }
-        descriptor["parameters"] = meta
-    else:
-        descriptor["parameters"] = None
-    
-    actions = []
-    content = ""        
-    connection = None
-
-    for idx, line in enumerate(lines):
-        if idx == 0 and parameters_first_line_m is not None:
-            continue
-        
-        query_match = query_rx.match(line)
-        if query_match is not None:                
-            if content.lstrip().rstrip() is not "":                
-                action = {
-                    "content" : content
-                }
-                if connection:
-                    action["connection"] = connection
-
-                _build_action_parameters(action, descriptor)
-                actions.append(action)
-            
-            connection = query_match.groups(0)[0].lstrip().rstrip()            
-            if connection == "":
-                connection = None
-
-            content = ""
-        else:
-            content = "\r\n".join([content, line])            
-    
-    if content.lstrip().rstrip() is not "":        
-        action = {
-            "content" : content
-        }
-        if connection:
-            action["connection"] = connection
-            connections_used.append(connection)
-        _build_action_parameters(action, descriptor)
-        actions.append(action)
-
-    descriptor["actions"] = actions
-
-def _build_action_parameters(action, descriptor):
-    content = action["content"]
-    parameter_names = [x.lower() for x in parameter_rx.findall(content)]
-    descriptor_parameters = descriptor["parameters"]
-
-    params = []
-    for p in parameter_names:
-        action_parameter = None
-        if descriptor_parameters is not None and p in descriptor_parameters:
-            descriptor_parameter = descriptor_parameters[p]
-            action_parameter = {
-                "name": p,
-                "type": descriptor_parameter["type"]
-            }
-            params.append(action_parameter)                            
-        else:
-            raise TypeError("type missing for {{" + p + "}} in the " + descriptor["method"] + ".sql")
-    
-    if len(params) != 0:
-        action["parameters"] = params    
-
-def _build_descriptor(descriptor, root, tree_map, content_reader, input_model, output_model, connections):
-    _propertiesstr, _typestr, _partitionbystr, _parentrowsstr = "properties", "type", "partition_by", "parent_rows"
-    _outputtypestr, _useparentrowsstr, _parametersstr, _actionsstr = "output_type", "use_parent_rows", "parameters", "actions"
-    
-    path, method = descriptor["path"], descriptor["method"]    
-    content = content_reader.get_sql(method, path)
-    branch_map = {}
-    
-    if input_model is None:
-        input_model = {
-            "type" : "object",
-            _propertiesstr : {}
-        }
-    if _propertiesstr not in input_model:
-        input_model[_propertiesstr] = {}
-
-    if root:
-        descriptor["input_model"] = input_model
-        
-    descriptor["input_type"] = input_model[_typestr]
-    input_properties = input_model[_propertiesstr]
-    
-    if root:
-        descriptor["output_model"] = output_model or { _typestr : "array", _propertiesstr : {} }
-        
-        before_descriptor = {
-            "path" : "api",
-            "method" : "init"
-        }
-        _build_descriptor(before_descriptor, False, {}, content_reader, None, None, connections)
-
-        if _actionsstr in before_descriptor and before_descriptor[_actionsstr]:
-            descriptor["init"] = before_descriptor
-
-    output_properties = None      
-    if output_model is not None:
-        if _typestr in output_model:
-            descriptor[_outputtypestr] = output_model[_typestr]
-        else:
-            descriptor[_outputtypestr] = "array"
-
-        if _propertiesstr in output_model:
-            output_properties = output_model[_propertiesstr]            
-
-        if _parentrowsstr in output_model:
-            descriptor[_useparentrowsstr] = output_model[_parentrowsstr]
-        else:
-            descriptor[_useparentrowsstr] = None
-
-        if _partitionbystr in output_model:
-            descriptor[_partitionbystr] = output_model[_partitionbystr]
-        else:
-            descriptor[_partitionbystr] = None
-                
-        if output_properties is not None:
-            for k in output_properties:
-                v = output_properties[k]
-                if type(v) == dict and _typestr in v:
-                    _type = v[_typestr]
-                    if _type == "object" or _type == "array":                      
-                        branch_map[k] = {}
-    else:
-        descriptor[_outputtypestr] = "array"        
-        descriptor[_useparentrowsstr] = False
-        descriptor[_partitionbystr] = None
-
-    _build_descriptor_action(descriptor, content, connections)
-
-    if _parametersstr not in descriptor:
-        descriptor[_parametersstr] = None
-
-    if _actionsstr not in descriptor:
-        descriptor[_actionsstr] = None
-
-    for k in tree_map:
-        if k not in branch_map:
-            branch_map[k] = tree_map[k]
-
-    branches = []
-    for branch_name in branch_map:
-
-        branch = branch_map[branch_name]
-        branch_method_name = ".".join([method, branch_name])
-        branch_descriptor = {
-            "name" : branch_name,
-            "method" : branch_method_name,
-            "path" : path
-        }        
-
-        branch_input_model = None
-        branch_output_model = None
-                    
-        if branch_name not in input_properties:
-            input_properties[branch_name] = {
-                _typestr : "object",
-                _propertiesstr : {}
-            }
-        branch_input_model = input_properties[branch_name]
-        
-        if output_properties is not None:                
-            if branch_name in output_properties:
-                branch_output_model = output_properties[branch_name]
-
-        _build_descriptor(branch_descriptor, False, branch, content_reader, branch_input_model, branch_output_model, connections)
-        branches.append(branch_descriptor)
-    
-    if len(branches) != 0:
-        descriptor["branches"] = branches
-    else:
-        descriptor["branches"] = None
-
-def _order_list_by_dots(names):
-    if names is None:
-        return []
-
-    dots = [x.count(".") for x in names]
-    ordered = []
-    for x in range(0, len(dots)):
-        if len(dots) == 0:
-            break
-
-        el = min(dots)
-        while True:
-            try:
-                idx = dots.index(el)
-                ordered.append(names[idx])
-                del names[idx]
-                del dots[idx]
-            except:
-                break
-    return ordered
-
-def _default_date_time_converter(o):
-    if isinstance(o, datetime.datetime):
-        return o.__str__()
-
 def get_result(descriptor, get_data_provider, ctx):
     
     errors = ctx.get_prop("$request").validate()
@@ -511,12 +615,16 @@ def get_result(descriptor, get_data_provider, ctx):
     except Exception as e:        
         return { "errors" : e.args[0] }
 
+def _default_date_time_converter(o):
+    if isinstance(o, datetime.datetime):
+        return o.__str__()
+
 def get_result_json(descriptor, get_data_providers, context):
     return json.dumps(get_result(descriptor, get_data_providers, context), default= _default_date_time_converter)
 
 def get_descriptor_json(descriptor):
     d = copy.deepcopy(descriptor)
-    del d["_validators"]
+    del d["_validators"]    
     return json.dumps(d)    
 
 namespaces = {}
@@ -528,110 +636,58 @@ def get_namespace(name, root_path, debug):
         namespaces[name] = Gravity(root_path, None, debug)         
         return namespaces[name]
 
-def create_descriptor(method, path, content_reader):
-    path = "api/" + path 
-    ordered_files = _order_list_by_dots(content_reader.list_sql(method, path))       
-    if len(ordered_files) == 0: 
-        return None # found zero sql files, then return no api available
-
-    treemap = _build_treemap(ordered_files)        
-    config = content_reader.get_config(method, path)
-    
-    input_model_str, output_model_str, input_body_str, input_query_str = "input.model", "output.model", "body", "query"    
-    input_model, output_model, input_query, input_path = None, None, None, None
-    
-    if config is not None:
-        if input_model_str in config:
-            input_config = config[input_model_str]
-            if input_config is not None:
-                if input_body_str in input_config:
-                    input_model = input_config[input_body_str]
-                if input_query_str in input_config:
-                    input_query = input_config[input_query_str]               
-            
-        if output_model_str in config:
-            output_model = config[output_model_str]
-    
-    if not input_query:
-        input_query = {
-            "type" : "object",
-            "properties" : {}
-        }
-    if not input_path:
-        input_path = {
-            "type" : "object",
-            "properties" : {}
-        }
-
-    descriptor = {
-        "name" : method,
-        "method" : method,
-        "path" : path,        
-        "root": True,
-        "input_query" : input_query
-    }
-    
-    if input_query:
-        input_query_schema_validator = Draft4Validator(schema = input_query, format_checker = FormatChecker())
-    else:
-        input_query_schema_validator = None
-
-    if input_model:
-        input_model_schema_validator = Draft4Validator(schema = input_model, format_checker = FormatChecker())
-    else:
-        input_model_schema_validator = None
-
-    connections = []
-    _build_descriptor(descriptor, True, treemap[method], content_reader, input_model, output_model, connections)    
-    descriptor["connections"] = list(set(connections))
-
-    validators = {
-        "input_query" : input_query_schema_validator,
-        "input_model" : input_model_schema_validator
-    }
-    descriptor["_validators"] = validators
-    
-    return descriptor
-
 def create_context(descriptor, path, body, params, query, path_values, header, cookie):
         validators = descriptor["_validators"]
         
-        querystr, pathstr, headerstr, cookiestr, modelstr = "input_query", "input_path", "input_header", "input_cookie", "input_model"
+        parameters_modelstr = "parameters_model"        
+        query_str, path_str, header_str, cookie_str, input_model_str = "query", "path", "header", "cookie", "input_model"
 
-        if  querystr in descriptor:
-            query_schema = descriptor[querystr]
-            query_validator = validators[querystr]
+        if parameters_modelstr in descriptor:
+            parameters_model = descriptor[parameters_modelstr]
+        
+            if  query_str in parameters_model:
+                query_schema = parameters_model[query_str]
+                query_validator = validators[query_str]
+            else:
+                query_schema = None
+                query_validator = None
+
+            if  path_str in parameters_model:
+                path_schema = parameters_model[path_str]
+                path_validator = validators[path_str]
+            else:
+                path_schema = None
+                path_validator = None
+
+            if header_str in parameters_model:
+                header_schema = parameters_model[header_str]
+                header_validator = validators[header_str]
+            else:
+                header_schema = None
+                header_validator = None
+
+            if cookie_str in parameters_model:
+                cookie_schema = parameters_model[cookie_str]
+                cookie_validator = validators[cookie_str]
+            else:
+                cookie_schema = None
+                cookie_validator = None
         else:
             query_schema = None
             query_validator = None
-
-        if  pathstr in descriptor:
-            path_schema = descriptor[pathstr]
-            path_validator = validators[pathstr]
-        else:
             path_schema = None
             path_validator = None
-
-        if headerstr in descriptor:
-            header_schema = descriptor[headerstr]
-            header_validator = validators[headerstr]
-        else:
             header_schema = None
             header_validator = None
-
-        if cookiestr in descriptor:
-            cookie_schema = descriptor[cookiestr]
-            cookie_validator = validators[cookiestr]
-        else:
             cookie_schema = None
             cookie_validator = None
 
-        if modelstr in descriptor:
-            model_schema = descriptor[modelstr]
-            model_validator = validators[modelstr]
+        if input_model_str in descriptor:
+            requestbody_schema = descriptor[input_model_str]
+            requestbody_validator = validators[input_model_str]
         else:
-            model_schema = None
-            model_validator = None
+            requestbody_schema = None
+            requestbody_validator = None
         
         query_shape = Shape(query_schema, None, None, None, query_validator)
         if query:
@@ -643,14 +699,14 @@ def create_context(descriptor, path, body, params, query, path_values, header, c
             for k, v in path_values.items():
                 path_shape.set_prop(k, v)
 
-        header_shape = Shape(header_schema, header, None, None, header_validator)
-        cookie_shape = Shape(cookie_schema, cookie, None, None, cookie_validator)
+        header_shape = Shape(header_schema, {}, None, None, header_validator)
+        cookie_shape = Shape(cookie_schema, {}, None, None, cookie_validator)
 
         request_extras = {
             "$query" : query_shape,
+            "$path" : path_shape,
             "$header" : header_shape,
-            "$cookie" : cookie_shape,
-            "$path" : path_shape
+            "$cookie" : cookie_shape        
         }
         request_shape = Shape({}, None, None, request_extras, None)
         
@@ -672,7 +728,7 @@ def create_context(descriptor, path, body, params, query, path_values, header, c
             "$response" : response_shape
         }
 
-        return Shape(model_schema, body, None, extras, model_validator)
+        return Shape(requestbody_schema, body, None, extras, requestbody_validator)
 
 def _build_routes(routes):
     _routes = []
@@ -1019,13 +1075,14 @@ class Gravity:
         return descriptor
 
     def get_descriptor_path_by_route(self, path):
-        pathVars = {} 
-        for r in self._routes:
-            m = r["route"].match(path)
-            if m:                
-                for k, v in m.groupdict().items():
-                    pathVars[k] = v
-                return r["descriptor"], r["path"], pathVars
+        path_values = {} 
+        if self._routes:
+            for r in self._routes:
+                m = r["route"].match(path)
+                if m:                
+                    for k, v in m.groupdict().items():
+                        path_values[k] = v
+                    return r["descriptor"], r["path"], path_values
         return path, path, None
 
     def get_result_json(self, descriptor, context):
