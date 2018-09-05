@@ -11,7 +11,9 @@ parameter_meta_rx = re.compile(r"\s*([A-Za-z0-9_.$-]+)(\s+(\w+))?\s*")
 parameter_rx = re.compile(r"\{\{([A-Za-z0-9_.$-]*?)\}\}", re.MULTILINE)
 query_rx = re.compile(r"--query\(([a-zA-Z0-9.$_]*?)\)--")
 
-def _build_descriptor_leafs(descriptor, content, connections_used):
+path_join = os.path.join
+
+def _build_leafs(branch, content, connections_used):
     if content is None or content == '':
         return
 
@@ -39,9 +41,9 @@ def _build_descriptor_leafs(descriptor, content, connections_used):
                     "name" : parameter_name,
                     "type" : parameter_type
                 }
-        descriptor["parameters"] = meta
+        branch["parameters"] = meta
     else:
-        descriptor["parameters"] = None
+        branch["parameters"] = None
     
     leafs = []
     content = ""        
@@ -60,7 +62,7 @@ def _build_descriptor_leafs(descriptor, content, connections_used):
                 if connection:
                     leaf["connection"] = connection
 
-                _build_leaf_parameters(leaf, descriptor)
+                _build_leaf_parameters(leaf, branch)
                 leafs.append(leaf)
             
             connection = query_match.groups(0)[0].lstrip().rstrip()            
@@ -78,13 +80,13 @@ def _build_descriptor_leafs(descriptor, content, connections_used):
         if connection:
             leaf["connection"] = connection
             connections_used.append(connection)
-        _build_leaf_parameters(leaf, descriptor)
+        _build_leaf_parameters(leaf, branch)
         leafs.append(leaf)
 
-    descriptor["leafs"] = leafs
+    branch["leafs"] = leafs
 
-def _build_leaf_parameters(action, descriptor):
-    content = action["content"]
+def _build_leaf_parameters(leaf, descriptor):
+    content = leaf["content"]
     parameter_names = [x.lower() for x in parameter_rx.findall(content)]
     descriptor_parameters = descriptor["parameters"]
 
@@ -102,7 +104,7 @@ def _build_leaf_parameters(action, descriptor):
             raise TypeError("type missing for {{" + p + "}} in the " + descriptor["method"] + ".sql")
     
     if len(params) != 0:
-        action["parameters"] = params    
+        leaf["parameters"] = params    
 
 def _order_list_by_dots(names):
     if names is None:
@@ -125,33 +127,32 @@ def _order_list_by_dots(names):
                 break
     return ordered
 
-def _build_treemap(treemap, item):
+def _build_branchmap_by_files(branchmap, item):
     if item == "":
         return
-    item = item
     dot = item.find(".")
     if  dot > -1:
         path = item[0:dot]
         remaining_path = item[dot + 1:]
-        if path not in treemap:
-            treemap[path] = {}
-        _build_treemap(treemap[path], remaining_path)
+        if path not in branchmap:
+            branchmap[path] = {}
+        _build_branchmap_by_files(branchmap[path], remaining_path)
     else:
-        if item not in treemap:
-            treemap[item] = {}
+        if item not in branchmap:
+            branchmap[item] = {}
 
-def _build_descriptor_treemap(namelist):
+def _build_trunkmap_by_files(namelist):
     treemap = {}
     if namelist is not None:
         for item in namelist:
-            _build_treemap(treemap, item)
+            _build_branchmap_by_files(treemap, item)
     return treemap
 
-def _build_descriptor(descriptor, root, tree_map, content_reader, input_model, output_model, connections):
+def _build_branch(branch, is_trunk, branchmap_by_files, content_reader, input_model, output_model, connections):
     _propertiesstr, _typestr, _partitionbystr, _parentrowsstr = "properties", "type", "partition_by", "parent_rows"
     _outputtypestr, _useparentrowsstr, _parametersstr, _actionsstr = "output_type", "use_parent_rows", "parameters", "leafs"
     
-    path, method = descriptor["path"], descriptor["method"]
+    path, method = branch["path"], branch["method"]
     content = content_reader.get_sql(method, path)
     branch_map = {}
     
@@ -163,43 +164,43 @@ def _build_descriptor(descriptor, root, tree_map, content_reader, input_model, o
     if _propertiesstr not in input_model:
         input_model[_propertiesstr] = {}
 
-    if root:
-        descriptor["input_model"] = input_model
+    if is_trunk:
+        branch["input_model"] = input_model
         
-    descriptor["input_type"] = input_model[_typestr]
+    branch["input_type"] = input_model[_typestr]
     input_properties = input_model[_propertiesstr]
     
-    if root:
-        descriptor["output_model"] = output_model or { _typestr : "array", _propertiesstr : {} }
+    if is_trunk:
+        branch["output_model"] = output_model or { _typestr : "array", _propertiesstr : {} }
         
         before_descriptor = {
             "path" : "api",
             "method" : "init"
         }
-        _build_descriptor(before_descriptor, False, {}, content_reader, None, None, connections)
+        _build_branch(before_descriptor, False, {}, content_reader, None, None, connections)
 
         if _actionsstr in before_descriptor and before_descriptor[_actionsstr]:
-            descriptor["init"] = before_descriptor
+            branch["init"] = before_descriptor
 
     output_properties = None      
     if output_model is not None:
         if _typestr in output_model:
-            descriptor[_outputtypestr] = output_model[_typestr]
+            branch[_outputtypestr] = output_model[_typestr]
         else:
-            descriptor[_outputtypestr] = "array"
+            branch[_outputtypestr] = "array"
 
         if _propertiesstr in output_model:
             output_properties = output_model[_propertiesstr]            
 
         if _parentrowsstr in output_model:
-            descriptor[_useparentrowsstr] = output_model[_parentrowsstr]
+            branch[_useparentrowsstr] = output_model[_parentrowsstr]
         else:
-            descriptor[_useparentrowsstr] = None
+            branch[_useparentrowsstr] = None
 
         if _partitionbystr in output_model:
-            descriptor[_partitionbystr] = output_model[_partitionbystr]
+            branch[_partitionbystr] = output_model[_partitionbystr]
         else:
-            descriptor[_partitionbystr] = None
+            branch[_partitionbystr] = None
                 
         if output_properties is not None:
             for k in output_properties:
@@ -209,28 +210,28 @@ def _build_descriptor(descriptor, root, tree_map, content_reader, input_model, o
                     if _type == "object" or _type == "array":                      
                         branch_map[k] = {}
     else:
-        descriptor[_outputtypestr] = "array"        
-        descriptor[_useparentrowsstr] = False
-        descriptor[_partitionbystr] = None
+        branch[_outputtypestr] = "array"        
+        branch[_useparentrowsstr] = False
+        branch[_partitionbystr] = None
 
-    _build_descriptor_leafs(descriptor, content, connections)
+    _build_leafs(branch, content, connections)
 
-    if _parametersstr not in descriptor:
-        descriptor[_parametersstr] = None
+    if _parametersstr not in branch:
+        branch[_parametersstr] = None
 
-    if _actionsstr not in descriptor:
-        descriptor[_actionsstr] = None
+    if _actionsstr not in branch:
+        branch[_actionsstr] = None
 
-    for k in tree_map:
+    for k in branchmap_by_files:
         if k not in branch_map:
-            branch_map[k] = tree_map[k]
+            branch_map[k] = branchmap_by_files[k]
 
     branches = []
     for branch_name in branch_map:
 
-        branch = branch_map[branch_name]
+        sub_branch_map = branch_map[branch_name]
         branch_method_name = ".".join([method, branch_name])
-        branch_descriptor = {
+        sub_branch = {
             "name" : branch_name,
             "method" : branch_method_name,
             "path" : path
@@ -250,21 +251,21 @@ def _build_descriptor(descriptor, root, tree_map, content_reader, input_model, o
             if branch_name in output_properties:
                 branch_output_model = output_properties[branch_name]
 
-        _build_descriptor(branch_descriptor, False, branch, content_reader, branch_input_model, branch_output_model, connections)
-        branches.append(branch_descriptor)
+        _build_branch(sub_branch, False, sub_branch_map, content_reader, branch_input_model, branch_output_model, connections)
+        branches.append(sub_branch)
     
     if len(branches) != 0:
-        descriptor["branches"] = branches
+        branch["branches"] = branches
     else:
-        descriptor["branches"] = None
+        branch["branches"] = None
 
-def create_descriptor(method, path, content_reader):
-    path = "api/" + path 
+def create_trunk(method, path, content_reader):
+    path = path_join(*["api", path])
     ordered_files = _order_list_by_dots(content_reader.list_sql(method, path))       
     if len(ordered_files) == 0: 
         return None # found zero sql files, then return no api available
 
-    treemap = _build_descriptor_treemap(ordered_files)        
+    trunkmap = _build_trunkmap_by_files(ordered_files)        
     config = content_reader.get_config(method, path)
     
     input_model_str, output_model_str, input_body_str = "input.model", "output.model", "body"    
@@ -312,10 +313,10 @@ def create_descriptor(method, path, content_reader):
             "properties" : {}
         }
 
-    descriptor = {
-        "name" : method,
-        "method" : method,
-        "path" : path,        
+    trunk = {
+        "name" : "$",
+        "method" : "$",
+        "path" : path_join(*[path, method]),        
         "trunk": True,
         "parameters_model" : {
             "query" : parameter_query,
@@ -350,10 +351,9 @@ def create_descriptor(method, path, content_reader):
     else:
         parameter_cookie_validator = None
 
-
     connections = []
-    _build_descriptor(descriptor, True, treemap[method], content_reader, input_model, output_model, connections)    
-    descriptor["connections"] = list(set(connections))
+    _build_branch(trunk, True, trunkmap["$"], content_reader, input_model, output_model, connections)    
+    trunk["connections"] = list(set(connections))
 
     validators = {
         "query" : parameter_query_validator,
@@ -362,14 +362,14 @@ def create_descriptor(method, path, content_reader):
         "cookie" : parameter_cookie_validator,
         "input_model" : request_body_validator
     }
-    descriptor["_validators"] = validators
+    trunk["_validators"] = validators
     
-    return descriptor
+    return trunk
 
-def _get_leafs_output(descriptor, data_providers, context, data_provider_helper):
+def _get_leafs_output(branch, data_providers, context, data_provider_helper):
     errors = []
     
-    actions, data_provider = descriptor["leafs"], data_providers["db"]
+    actions, data_provider = branch["leafs"], data_providers["db"]
     paramsstr, headerstr, cookiestr, errorstr, breakstr = "$params", "$header", "$cookie", "$error", "$break"
     
     rs = []
@@ -416,20 +416,20 @@ def _get_leafs_output(descriptor, data_providers, context, data_provider_helper)
                     rs = output
     return rs, None
 
-def _execute_descriptor(descriptor, data_providers, context, parent_rows, parent_partition_by, data_provider_helper):
-    input_type, output_partition_by = descriptor["input_type"], descriptor["partition_by"]
-    use_parent_rows, default_data_provider =  descriptor["use_parent_rows"], data_providers["db"]
+def _execute_branch(branch, data_providers, context, parent_rows, parent_partition_by, data_provider_helper):
+    input_type, output_partition_by = branch["input_type"], branch["partition_by"]
+    use_parent_rows, default_data_provider =  branch["use_parent_rows"], data_providers["db"]
     output = []
 
-    root = ("trunk" in descriptor)    
+    root = ("trunk" in branch)    
     
     try:
         if root:
             for name, pro in data_providers.items():
                 pro.begin()
 
-            if "init" in descriptor:
-                rs, errors =  _execute_descriptor(descriptor["init"], data_providers, context, [], output_partition_by, data_provider_helper)
+            if "init" in branch:
+                rs, errors =  _execute_branch(branch["init"], data_providers, context, [], output_partition_by, data_provider_helper)
                 if errors:
                     return None, errors    
 
@@ -437,13 +437,13 @@ def _execute_descriptor(descriptor, data_providers, context, parent_rows, parent
             length = int(context.get_prop("$length"))
             for i in range(0, length):
                 item_ctx = context.get_prop("@" + str(i))                    
-                rs, errors = _get_leafs_output(descriptor, data_providers, item_ctx, data_provider_helper)
+                rs, errors = _get_leafs_output(branch, data_providers, item_ctx, data_provider_helper)
                 output.extend(rs)
                 if errors:
                     return None, errors
         
         elif input_type == "object":                
-            output, errors = _get_leafs_output(descriptor, data_providers, context, data_provider_helper)
+            output, errors = _get_leafs_output(branch, data_providers, context, data_provider_helper)
             if errors:
                 return None, errors
             if use_parent_rows == True and parent_partition_by is None:
@@ -452,7 +452,7 @@ def _execute_descriptor(descriptor, data_providers, context, parent_rows, parent
             if use_parent_rows == True:
                 output = copy.deepcopy(parent_rows)
 
-            branches = descriptor["branches"]
+            branches = branch["branches"]
             if branches:
                 for branch_descriptor in branches:                    
                     sub_node_name = branch_descriptor["name"]                    
@@ -460,11 +460,11 @@ def _execute_descriptor(descriptor, data_providers, context, parent_rows, parent
                     if context is not None:
                         sub_node_shape = context.get_prop(sub_node_name)
 
-                    sub_node_output, errors = _execute_descriptor(branch_descriptor, data_providers, sub_node_shape, output, output_partition_by, data_provider_helper)                    
+                    sub_node_output, errors = _execute_branch(branch_descriptor, data_providers, sub_node_shape, output, output_partition_by, data_provider_helper)                    
                     if errors:
                         return None, errors
 
-                    if not descriptor["leafs"] and not output:
+                    if not branch["leafs"] and not output:
                         output.append({})
                         
                     if output_partition_by is None:
@@ -582,7 +582,7 @@ def _output_mapper(output_type, output_modal, branches, result):
             mapped_result = {}
     return mapped_result
 
-def get_result(descriptor, get_data_provider, ctx):
+def get_result(trunk, get_data_provider, ctx):
     
     errors = ctx.get_prop("$request").validate()
     
@@ -596,11 +596,11 @@ def get_result(descriptor, get_data_provider, ctx):
         data_providers = {
            "db" : get_data_provider("db")  
         }        
-        for c in descriptor["connections"]:            
+        for c in trunk["connections"]:            
             data_providers[c] = get_data_provider(c)
         
         data_provider_helper = DataProviderHelper(parameter_rx)        
-        rs, errors = _execute_descriptor(descriptor, data_providers, ctx, [], None, data_provider_helper)
+        rs, errors = _execute_branch(trunk, data_providers, ctx, [], None, data_provider_helper)
         
         if errors:
             status_code = ctx.get_prop(statuscodestr)
@@ -608,7 +608,7 @@ def get_result(descriptor, get_data_provider, ctx):
                 ctx.set_prop(statuscodestr, 400)
             return { "errors" : errors }
 
-        rs = _output_mapper(descriptor["output_type"], descriptor["output_model"], descriptor["branches"], rs)
+        rs = _output_mapper(trunk["output_type"], trunk["output_model"], trunk["branches"], rs)
         ctx.set_prop(statuscodestr, 200)
         
         return rs
@@ -622,7 +622,7 @@ def _default_date_time_converter(o):
 def get_result_json(descriptor, get_data_providers, context):
     return json.dumps(get_result(descriptor, get_data_providers, context), default= _default_date_time_converter)
 
-def get_descriptor_json(descriptor):
+def get_trunk_json(descriptor):
     d = copy.deepcopy(descriptor)
     del d["_validators"]    
     return json.dumps(d)    
@@ -632,7 +632,7 @@ def get_namespace(name, root_path, debug):
     if not debug and name in namespaces:
         return namespaces[name]
     else:
-        root_path = os.path.join(*[root_path, name])
+        root_path = path_join(*[root_path, name])
         namespaces[name] = Gravity(root_path, None, debug)         
         return namespaces[name]
 
@@ -988,10 +988,10 @@ class FileContentReader:
 
     def get_config(self, method, path):
             
-        input_path = os.path.join(*[self._root_path, path, method + ".input"])        
+        input_path = os.path.join(*[self._root_path, path, method, "$.input"])        
         input_config = self._get_config(input_path)
 
-        output_path = os.path.join(*[self._root_path, path, method + ".output"])        
+        output_path = os.path.join(*[self._root_path, path, method, "$.output"])        
         output_config = self._get_config(output_path)
 
         if input_config is None and output_config is None:
@@ -1001,8 +1001,8 @@ class FileContentReader:
 
     def list_sql(self, method, path):
         try:     
-            files = os.listdir(os.path.join(*[self._root_path, path]))
-            ffiles = [f.replace(".sql", "") for f in files if f.startswith(method) and f.endswith(".sql")]        
+            files = os.listdir(os.path.join(*[self._root_path, path, method]))
+            ffiles = [f.replace(".sql", "") for f in files if f.endswith(".sql")]        
         except:
             ffiles = None
         return ffiles
@@ -1035,8 +1035,7 @@ class Gravity:
         self._root_path = root_path
         self._debug = debug or False
        
-        self._descriptors = {}
-        self._descriptor_validators = {}
+        self._trunks = {}
         
         self._data_providers = {
             "db": PostgresContextManager({
@@ -1062,19 +1061,19 @@ class Gravity:
         else:
             return None
 
-    def create_descriptor(self, method, path):        
-        return create_descriptor(method, path, self._content_reader)
+    def create_trunk(self, method, path):        
+        return create_trunk(method, path, self._content_reader)
     
-    def get_descriptor(self, method, route, path):        
+    def get_trunk(self, method, route, path):        
         k = os.path.join(*[route, method])
-        if self._debug == False and k in self._descriptors:
-            return self._descriptors[k]
+        if self._debug == False and k in self._trunks:
+            return self._trunks[k]
         
-        descriptor  = self.create_descriptor(method, path) 
-        self._descriptors[k] = descriptor      
-        return descriptor
+        trunk  = self.create_trunk(method, path) 
+        self._trunks[k] = trunk      
+        return trunk
 
-    def get_descriptor_path_by_route(self, path):
+    def get_trunk_path_by_route(self, path):
         path_values = {} 
         if self._routes:
             for r in self._routes:
@@ -1085,8 +1084,8 @@ class Gravity:
                     return r["descriptor"], r["path"], path_values
         return path, path, None
 
-    def get_result_json(self, descriptor, context):
-        return get_result_json(descriptor, self.get_data_provider, context)
+    def get_result_json(self, trunk, context):
+        return get_result_json(trunk, self.get_data_provider, context)
 
 class SQLiteContextManager:
 
