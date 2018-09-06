@@ -956,7 +956,7 @@ class DataProviderHelper:
                 else:
                     pvalue = input_shape.get_prop(pname)
                     
-                    if "$params" not in pname:
+                    if not ("$params" in pname or "$parent" in pname):
                         _cache[pname] = pvalue
                     
                 try:
