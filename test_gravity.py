@@ -10,7 +10,7 @@ class FakeContentReader:
         pass 
 
     def list_sql(self, method, path):
-        return ["get", "get.data", "get.data.items", "get.data.items.product", "get.paging"]
+        return ["$", "$.data", "$.data.items", "$.data.items.product", "$.paging"]
 
     def get_routes_config(self, path):
         return None
@@ -23,40 +23,40 @@ class TestGravity(unittest.TestCase):
     def tearDown(self):
         pass
         
-    def test_simple_get_descriptor_check(self):
-        descriptor_get = self._gravity.create_descriptor("get", "get1")
+    def test_simple_get_trunk_check(self):
+        truck = self._gravity.create_trunk("get", "get1")
         
-        self.assertTrue(descriptor_get["name"] == "get")
-        self.assertTrue(descriptor_get["method"] == "get")
+        self.assertTrue(truck["name"] == "$")
+        self.assertTrue(truck["method"] == "$")
         
-        descritpor_branches = descriptor_get["branches"]
-        self.assertEqual(len(descritpor_branches), 2)
+        branches = truck["branches"]
+        self.assertEqual(len(branches), 2)
         
-        descriptor_get_data = descritpor_branches[0]
-        descriptor_get_page = descritpor_branches[1]
-        self.assertTrue(descriptor_get_data["name"] == "data")
-        self.assertTrue(descriptor_get_page["name"] == "paging")
+        branch_data = branches[0]
+        branch_page = branches[1]
+        self.assertTrue(branch_data["name"] == "data")
+        self.assertTrue(branch_page["name"] == "paging")
 
-        self.assertTrue(descriptor_get_data["method"] == "get.data")
-        self.assertTrue(descriptor_get_page["method"] == "get.paging")
+        self.assertTrue(branch_data["method"] == "$.data")
+        self.assertTrue(branch_page["method"] == "$.paging")
 
-        descritpor_branches = descriptor_get_data["branches"]    
-        self.assertEqual(len(descritpor_branches), 1)
+        branches = branch_data["branches"]    
+        self.assertEqual(len(branches), 1)
 
-        descriptor_get_data_items = descritpor_branches[0]
-        self.assertTrue(descriptor_get_data_items["name"] == "items")
-        self.assertTrue(descriptor_get_data_items["method"] == "get.data.items")
+        branch_data_items = branches[0]
+        self.assertTrue(branch_data_items["name"] == "items")
+        self.assertTrue(branch_data_items["method"] == "$.data.items")
 
-        descritpor_branches = descriptor_get_data_items["branches"]
-        self.assertEqual(len(descritpor_branches), 1)
+        branches = branch_data_items["branches"]
+        self.assertEqual(len(branches), 1)
 
-        descriptor_get_data_items_product = descritpor_branches[0]       
-        self.assertTrue(descriptor_get_data_items_product["name"] == "product")
-        self.assertTrue(descriptor_get_data_items_product["method"] == "get.data.items.product")
+        branch_data_items_product = branches[0]       
+        self.assertTrue(branch_data_items_product["name"] == "product")
+        self.assertTrue(branch_data_items_product["method"] == "$.data.items.product")
         
     def test_simple_get_shape_check(self):
-        descriptor_get = self._gravity.create_descriptor("get", "get1")    
-        input_shape = create_context(descriptor_get, "", None, None, None, None, None, None)
+        trunk = self._gravity.create_trunk("get", "get1")    
+        input_shape = create_context(trunk, "", None, None, None, None, None, None)
         
         self.assertIsNotNone(input_shape._shapes["data"])
         self.assertIsNotNone(input_shape._shapes["paging"])

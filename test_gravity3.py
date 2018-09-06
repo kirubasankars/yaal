@@ -27,7 +27,7 @@ select {{id1}}
         return None
 
     def list_sql(self, method, path):        
-        return ["get"]
+        return ["$"]
 
     def get_routes_config(self, path):
         return None
@@ -45,7 +45,7 @@ select {{id2}}
         return None
 
     def list_sql(self, method, path):        
-        return ["get"]
+        return ["$"]
 
     def get_routes_config(self, path):
         return None
@@ -59,47 +59,47 @@ class TestGravity(unittest.TestCase):
     def tearDown(self):
         pass
         
-    def test_descriptor_with_parameters_query_check(self):
+    def test_trunk_with_parameters_query_check(self):
         gravity = Gravity("/path", FakeContentReader(), True)  
-        descriptor_get = gravity.create_descriptor("get", "get1")
+        trunk = gravity.create_trunk("get", "get1")
         
-        parameters = descriptor_get["parameters"]
+        parameters = trunk["parameters"]
         self.assertIn("id1", parameters)
         self.assertIn("id2", parameters)
         self.assertIs(type(parameters), dict)
 
-        queries = descriptor_get["actions"]        
-        self.assertIs(type(queries), list)
-        self.assertEqual(1, len(queries))
-        query0 = queries[0]
-        query0_parameters = query0["parameters"]        
-        self.assertEqual(1, len(query0_parameters))        
-        self.assertEqual("select {{id1}}", query0["content"].lstrip().rstrip())        
+        leafs = trunk["leafs"]        
+        self.assertIs(type(leafs), list)
+        self.assertEqual(1, len(leafs))
+        leaf0 = leafs[0]
+        leaf0_parameters = leaf0["parameters"]        
+        self.assertEqual(1, len(leaf0_parameters))        
+        self.assertEqual("select {{id1}}", leaf0["content"].lstrip().rstrip())        
 
-    def test_descriptor_with_parameters_queries_check(self):                
+    def test_trunk_with_parameters_queries_check(self):                
         gravity = Gravity("/path", FakeContentReader1(), True)  
-        descriptor_get = gravity.create_descriptor("get", "get1")
+        trunk = gravity.create_trunk("get", "get1")
         
-        parameters = descriptor_get["parameters"]
+        parameters = trunk["parameters"]
         self.assertIn("id1", parameters)
         self.assertIn("id2", parameters)
         self.assertIs(type(parameters), dict)
 
-        queries = descriptor_get["actions"]    
-        self.assertIs(type(queries), list)
-        self.assertEqual(2, len(queries))
-        query0 = queries[0]
-        query0_parameters = query0["parameters"]    
-        self.assertEqual(2, len(query0_parameters))
-        self.assertEqual("integer", query0_parameters[0]["type"])
-        self.assertEqual("bool", query0_parameters[1]["type"])
+        leafs = trunk["leafs"]    
+        self.assertIs(type(leafs), list)
+        self.assertEqual(2, len(leafs))
+        leaf0 = leafs[0]
+        leaf0_parameters = leaf0["parameters"]    
+        self.assertEqual(2, len(leaf0_parameters))
+        self.assertEqual("integer", leaf0_parameters[0]["type"])
+        self.assertEqual("bool", leaf0_parameters[1]["type"])
 
-        query1 = queries[1]
-        query1_parameters = query1["parameters"]    
-        self.assertEqual(1, len(query1_parameters))
-        self.assertEqual("bool", query1_parameters[0]["type"])
+        leaf1 = leafs[1]
+        leaf1_parameters = leaf1["parameters"]    
+        self.assertEqual(1, len(leaf1_parameters))
+        self.assertEqual("bool", leaf1_parameters[0]["type"])
 
-        s = create_context(descriptor_get, "", None, None, None, None, None, None)
+        s = create_context(trunk, "", None, None, None, None, None, None)
 
 if __name__ == "__main__":
     unittest.main()
