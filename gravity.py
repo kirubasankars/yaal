@@ -175,12 +175,12 @@ def _build_branch(branch, is_trunk, branchmap_by_files, content_reader, input_mo
         
         before_descriptor = {
             "path" : "api",
-            "method" : "init"
+            "method" : "$"
         }
         _build_branch(before_descriptor, False, {}, content_reader, None, None, connections)
 
         if _actionsstr in before_descriptor and before_descriptor[_actionsstr]:
-            branch["init"] = before_descriptor
+            branch["before"] = before_descriptor
 
     output_properties = None      
     if output_model is not None:
@@ -337,7 +337,7 @@ def create_trunk(method, path, content_reader):
         parameter_query_validator = None
 
     if parameter_path:
-        parameter_path_validator = Draft4Validator(schema = parameter_query, format_checker = FormatChecker())
+        parameter_path_validator = Draft4Validator(schema = parameter_path, format_checker = FormatChecker())
     else:
         parameter_path_validator = None
 
@@ -428,8 +428,8 @@ def _execute_branch(branch, data_providers, context, parent_rows, parent_partiti
             for name, pro in data_providers.items():
                 pro.begin()
 
-            if "init" in branch:
-                rs, errors =  _execute_branch(branch["init"], data_providers, context, [], output_partition_by, data_provider_helper)
+            if "before" in branch:
+                rs, errors =  _execute_branch(branch["before"], data_providers, context, [], output_partition_by, data_provider_helper)
                 if errors:
                     return None, errors    
 
