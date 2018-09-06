@@ -979,19 +979,18 @@ class FileContentReader:
         self._root_path = root_path
 
     def get_sql(self, method, path):
-        file_path = os.path.join(*[self._root_path, path, method + ".sql"])
+        file_path = path_join(*[self._root_path, path, method + ".sql"])
         return self._get(file_path)
     
     def get_routes_config(self, path):
-        routes_path = os.path.join(*[self._root_path, path])
+        routes_path = path_join(*[self._root_path, path])
         return self._get_config(routes_path)
 
     def get_config(self, method, path):
-            
-        input_path = os.path.join(*[self._root_path, path, method, "$.input"])        
+        input_path = path_join(*[self._root_path, path, method, "$.input"])        
         input_config = self._get_config(input_path)
 
-        output_path = os.path.join(*[self._root_path, path, method, "$.output"])        
+        output_path = path_join(*[self._root_path, path, method, "$.output"])        
         output_config = self._get_config(output_path)
 
         if input_config is None and output_config is None:
@@ -1001,7 +1000,7 @@ class FileContentReader:
 
     def list_sql(self, method, path):
         try:     
-            files = os.listdir(os.path.join(*[self._root_path, path, method]))
+            files = os.listdir(path_join(*[self._root_path, path, method]))
             ffiles = [f.replace(".sql", "") for f in files if f.endswith(".sql")]        
         except:
             ffiles = None
@@ -1065,7 +1064,7 @@ class Gravity:
         return create_trunk(method, path, self._content_reader)
     
     def get_trunk(self, method, route, path):        
-        k = os.path.join(*[route, method])
+        k = path_join(*[route, method])
         if self._debug == False and k in self._trunks:
             return self._trunks[k]
         
