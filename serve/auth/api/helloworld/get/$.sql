@@ -1,3 +1,3 @@
---query(sqlite3)--
+--(tags)--
 
-select 'hello, world' as message
+select * from (VALUES (1, 'one'), (2, 'two'), (3, 'three')) as t(a,b)

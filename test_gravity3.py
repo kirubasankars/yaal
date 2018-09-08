@@ -23,10 +23,10 @@ select {{id1}}
 --query()--
         """
     
-    def get_config(self, method, path):
+    def get_config(self, path):
         return None
 
-    def list_sql(self, method, path):        
+    def list_sql(self, path):        
         return ["$"]
 
     def get_routes_config(self, path):
@@ -41,10 +41,10 @@ select {{id1}}, {{id2}}
 select {{id2}}
         """
     
-    def get_config(self, method, path):
+    def get_config(self, path):
         return None
 
-    def list_sql(self, method, path):        
+    def list_sql(self, path):        
         return ["$"]
 
     def get_routes_config(self, path):
@@ -61,7 +61,7 @@ class TestGravity(unittest.TestCase):
         
     def test_trunk_with_parameters_query_check(self):
         gravity = Gravity("/path", FakeContentReader(), True)  
-        trunk = gravity.create_trunk("get", "get1")
+        trunk = gravity.create_trunk("get1/get")
         
         parameters = trunk["parameters"]
         self.assertIn("id1", parameters)
@@ -78,7 +78,7 @@ class TestGravity(unittest.TestCase):
 
     def test_trunk_with_parameters_queries_check(self):                
         gravity = Gravity("/path", FakeContentReader1(), True)  
-        trunk = gravity.create_trunk("get", "get1")
+        trunk = gravity.create_trunk("get1/get")
         
         parameters = trunk["parameters"]
         self.assertIn("id1", parameters)
