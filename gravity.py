@@ -259,14 +259,14 @@ def _build_branch(branch, is_trunk, branchmap_by_files, content_reader, input_mo
     else:
         branch["branches"] = None
 
-def create_trunk(method, path, content_reader):
+def create_trunk(path, content_reader):
     path = path_join(*["api", path])
-    ordered_files = _order_list_by_dots(content_reader.list_sql(method, path))       
+    ordered_files = _order_list_by_dots(content_reader.list_sql(path))       
     if len(ordered_files) == 0: 
         return None # found zero sql files, then return no api available
 
     trunkmap = _build_trunkmap_by_files(ordered_files)        
-    config = content_reader.get_config(method, path)
+    config = content_reader.get_config(path)
     
     input_model_str, output_model_str, input_body_str = "input.model", "output.model", "body"    
     parameter_query_str, parameter_path_str, parameter_header_str, parameter_cookie_str = "query", "path", "header", "cookie"
@@ -316,7 +316,7 @@ def create_trunk(method, path, content_reader):
     trunk = {
         "name" : "$",
         "method" : "$",
-        "path" : path_join(*[path, method]),        
+        "path" : path,        
         "trunk": True,
         "parameters_model" : {
             "query" : parameter_query,
@@ -366,10 +366,11 @@ def create_trunk(method, path, content_reader):
     
     return trunk
 
-def _get_leafs_output(branch, data_providers, context, data_provider_helper):
+def _execute_leafs(branch, data_providers, context, data_provider_helper):
     errors = []
     
     actions, data_provider = branch["leafs"], data_providers["db"]
+    typestr = "$type"
     paramsstr, headerstr, cookiestr, errorstr, breakstr = "$params", "$header", "$cookie", "$error", "$break"
     
     rs = []
@@ -388,26 +389,27 @@ def _get_leafs_output(branch, data_providers, context, data_provider_helper):
             
             if len(output) >= 1:
                 output0 = output[0]
-                if errorstr in output0 or paramsstr in output0 or headerstr in output0 or cookiestr in output0 or breakstr in output0: 
-                    if errorstr in output0 and output0[errorstr] == 1:
+                if typestr in output0:
+                    type_value = output0[typestr] 
+                    if type_value == errorstr:
                         if "$http_status_code" in output0:
                             context.set_prop("$response.status_code", output0["$http_status_code"])                        
                         errors.extend(output)
                         return None, errors
-                    elif breakstr in output0 and output0[breakstr] == 1:
+                    elif type_value == breakstr:
                         for o in output:
-                            del o[breakstr]
+                            del o[typestr]
                         return output, None
-                    elif paramsstr in output0 and output0[paramsstr] == 1:
+                    elif type_value == paramsstr:
                         params = context.get_prop(paramsstr)
                         for k, v in output0.items():
                             params.set_prop(k, v)
-                    elif cookiestr in output0 and output0[cookiestr] == 1:                        
+                    elif  type_value == cookiestr:                        
                         cookie = context.get_prop("$response.$cookie")
                         for c in output:
                             if "name" in c and "value" in c:
                                 cookie.set_prop(c["name"], c)
-                    elif headerstr in output0 and output0[headerstr] == 1:
+                    elif  type_value == headerstr:
                         header = context.get_prop("$response.$header")                        
                         for h in output:
                             if "name" in h and "value" in h:
@@ -437,13 +439,13 @@ def _execute_branch(branch, data_providers, context, parent_rows, parent_partiti
             length = int(context.get_prop("$length"))
             for i in range(0, length):
                 item_ctx = context.get_prop("@" + str(i))                    
-                rs, errors = _get_leafs_output(branch, data_providers, item_ctx, data_provider_helper)
+                rs, errors = _execute_leafs(branch, data_providers, item_ctx, data_provider_helper)
                 output.extend(rs)
                 if errors:
                     return None, errors
         
         elif input_type == "object":                
-            output, errors = _get_leafs_output(branch, data_providers, context, data_provider_helper)
+            output, errors = _execute_leafs(branch, data_providers, context, data_provider_helper)
             if errors:
                 return None, errors
             if use_parent_rows == True and parent_partition_by is None:
@@ -699,8 +701,8 @@ def create_context(descriptor, path, body, params, query, path_values, header, c
             for k, v in path_values.items():
                 path_shape.set_prop(k, v)
 
-        header_shape = Shape(header_schema, {}, None, None, header_validator)
-        cookie_shape = Shape(cookie_schema, {}, None, None, cookie_validator)
+        header_shape = Shape(header_schema, header, None, None, header_validator)
+        cookie_shape = Shape(cookie_schema, cookie, None, None, cookie_validator)
 
         request_extras = {
             "$query" : query_shape,
@@ -830,7 +832,9 @@ class Shape:
 
             if prop[0] == "$":
 
-                if prop == "$parent" or prop == "$length" or prop == "$index":
+                if prop == "$json" or prop == "$parent" or prop == "$length" or prop == "$index":
+                    if prop == "$json":
+                        return json.dumps(self._data)
                     if prop == "$parent":
                         return parent
                     if prop == "$length":
@@ -904,8 +908,7 @@ class Shape:
                     errors.append(m)
 
         return errors
-       
-                
+                     
     def get_data(self):
         return self._data
 
@@ -986,11 +989,11 @@ class FileContentReader:
         routes_path = path_join(*[self._root_path, path])
         return self._get_config(routes_path)
 
-    def get_config(self, method, path):
-        input_path = path_join(*[self._root_path, path, method, "$.input"])        
+    def get_config(self, path):
+        input_path = path_join(*[self._root_path, path, "$.input"])        
         input_config = self._get_config(input_path)
 
-        output_path = path_join(*[self._root_path, path, method, "$.output"])        
+        output_path = path_join(*[self._root_path, path, "$.output"])        
         output_config = self._get_config(output_path)
 
         if input_config is None and output_config is None:
@@ -998,9 +1001,9 @@ class FileContentReader:
 
         return { "input.model" : input_config, "output.model" : output_config }
 
-    def list_sql(self, method, path):
+    def list_sql(self, path):
         try:     
-            files = os.listdir(path_join(*[self._root_path, path, method]))
+            files = os.listdir(path_join(*[self._root_path, path]))
             ffiles = [f.replace(".sql", "") for f in files if f.endswith(".sql")]        
         except:
             ffiles = None
@@ -1060,15 +1063,15 @@ class Gravity:
         else:
             return None
 
-    def create_trunk(self, method, path):        
-        return create_trunk(method, path, self._content_reader)
+    def create_trunk(self, path):        
+        return create_trunk(path, self._content_reader)
     
-    def get_trunk(self, method, route, path):        
-        k = path_join(*[route, method])
+    def get_trunk(self, route, path):        
+        k = path_join(*[route])
         if self._debug == False and k in self._trunks:
             return self._trunks[k]
         
-        trunk  = self.create_trunk(method, path) 
+        trunk  = self.create_trunk(path) 
         self._trunks[k] = trunk      
         return trunk
 
