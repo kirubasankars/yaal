@@ -1,7 +1,7 @@
 import os, json 
 import copy
 from flask import Flask, request, abort, send_from_directory
-from gravity import get_namespace, create_context, get_trunk_json
+from gravity import get_namespace, create_context, get_descriptor_json
 
 app = Flask(__name__)
 root_path  = "serve"
@@ -23,17 +23,17 @@ def namespace_serve_api(namespace, path):
     g = get_namespace(namespace, root_path, True)
     
     method = request.method.lower()
-    trunk_path, route_path, path_values = g.get_trunk_path_by_route(path)    
-    trunk = g.get_trunk(path_join(*[route_path, method]), path_join(*[trunk_path, method]))
+    descriptor_path, route_path, path_values = g.get_descriptor_path_by_route(path)    
+    descriptor = g.get_descriptor(path_join(*[route_path, method]), path_join(*[descriptor_path, method]))
     
-    if not trunk:
+    if not descriptor:
         return abort(404)   
 
     if "debug" in request.args:        
-        return get_trunk_json(trunk)
+        return get_descriptor_json(descriptor)
 
-    ctx = create_gravity_context(request, path_values, namespace, path, trunk)
-    rs = g.get_result_json(trunk, ctx)
+    ctx = create_gravity_context(request, path_values, namespace, path, descriptor)
+    rs = g.get_result_json(descriptor, ctx)
     
     r = ctx.get_prop("$response")
     header = r.get_prop("$header")
