@@ -1,3 +1,3 @@
---($path.id1 string, $path.id string)--
+--($header)--
 
-SELECT {{$path.id1}} as id1, {{$path.id}} as id
+SELECT {{$header}}::json as json, '$json' as "$type"

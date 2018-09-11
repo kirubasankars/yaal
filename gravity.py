@@ -34,7 +34,7 @@ def _build_leafs(branch, content, connections_used):
             if parameter_meta_m is not None:
                 gm = parameter_meta_m.groups(1)
                 if len(gm) > 0:
-                    parameter_name = gm[0].lower()
+                    parameter_name = gm[0]
                 if len(gm) > 1:
                     parameter_type = gm[2]                
                 meta[parameter_name] = {
@@ -87,7 +87,7 @@ def _build_leafs(branch, content, connections_used):
 
 def _build_leaf_parameters(leaf, descriptor):
     content = leaf["content"]
-    parameter_names = [x.lower() for x in parameter_rx.findall(content)]
+    parameter_names = [x for x in parameter_rx.findall(content)]
     descriptor_parameters = descriptor["parameters"]
 
     params = []
@@ -396,6 +396,8 @@ def _execute_leafs(branch, data_providers, context, data_provider_helper):
                             context.set_prop("$response.status_code", output0["$http_status_code"])                        
                         errors.extend(output)
                         return None, errors
+                    elif type_value == "$json":
+                        return [o["json"] for o in output], None
                     elif type_value == breakstr:
                         for o in output:
                             del o[typestr]
@@ -968,8 +970,13 @@ class DataProviderHelper:
                             pvalue = int(pvalue)
                         elif ptype == "string":
                             pvalue = str(pvalue)
+                        elif ptype == "json":
+                            pvalue = json.dumps(pvalue.get_data())
                         else:
-                            pvalue = get_value_converter(pvalue)
+                            if type(pvalue) == Shape:
+                                pvalue = json.dumps(pvalue.get_data())
+                            else:
+                                pvalue = get_value_converter(pvalue)
                     values.append(pvalue)
                 except:
                     values.append(pvalue)
