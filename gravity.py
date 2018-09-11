@@ -85,23 +85,24 @@ def _build_leafs(branch, content, connections_used):
 
     branch["leafs"] = leafs
 
-def _build_leaf_parameters(leaf, descriptor):
+def _build_leaf_parameters(leaf, branch_descriptor):
     content = leaf["content"]
     parameter_names = [x for x in parameter_rx.findall(content)]
-    descriptor_parameters = descriptor["parameters"]
+    parameters = branch_descriptor["parameters"]
 
     params = []
-    for p in parameter_names:
-        leaf_parameter = None
-        if descriptor_parameters is not None and p in descriptor_parameters:
-            descriptor_parameter = descriptor_parameters[p]
-            leaf_parameter = {
-                "name": p,
-                "type": descriptor_parameter["type"]
-            }
-            params.append(leaf_parameter)                            
-        else:
-            raise TypeError("type missing for {{" + p + "}} in the " + descriptor["method"] + ".sql")
+    if parameters is not None:
+        for p in parameter_names:
+            leaf_parameter = None
+            if p in parameters:
+                descriptor_parameter = parameters[p]
+                leaf_parameter = {
+                    "name": p,
+                    "type": descriptor_parameter["type"]
+                }
+                params.append(leaf_parameter)                            
+            else:
+                raise TypeError("type missing for {{" + p + "}} in the " + branch_descriptor["method"] + ".sql")
     
     if len(params) != 0:
         leaf["parameters"] = params    
@@ -420,20 +421,20 @@ def _execute_leafs(branch, data_providers, context, data_provider_helper):
                     rs = output
     return rs, None
 
-def _execute_branch(branch, data_providers, context, parent_rows, parent_partition_by, data_provider_helper):
+def _execute_branch(branch, data_providers, context, parent_rows, parent_partition_by):
     input_type, output_partition_by = branch["input_type"], branch["partition_by"]
     use_parent_rows, default_data_provider =  branch["use_parent_rows"], data_providers["db"]
     output = []
-
-    root = ("trunk" in branch)    
+    data_provider_helper = DataProviderHelper(parameter_rx)
+    truck = ("trunk" in branch)    
     
     try:
-        if root:
+        if truck:
             for name, pro in data_providers.items():
                 pro.begin()
 
             if "before" in branch:
-                rs, errors =  _execute_branch(branch["before"], data_providers, context, [], output_partition_by, data_provider_helper)
+                rs, errors =  _execute_branch(branch["before"], data_providers, context, [], output_partition_by)
                 if errors:
                     return None, errors    
 
@@ -464,7 +465,7 @@ def _execute_branch(branch, data_providers, context, parent_rows, parent_partiti
                     if context is not None:
                         sub_node_shape = context.get_prop(sub_node_name)
 
-                    sub_node_output, errors = _execute_branch(branch_descriptor, data_providers, sub_node_shape, output, output_partition_by, data_provider_helper)                    
+                    sub_node_output, errors = _execute_branch(branch_descriptor, data_providers, sub_node_shape, output, output_partition_by)                    
                     if errors:
                         return None, errors
 
@@ -494,7 +495,7 @@ def _execute_branch(branch, data_providers, context, parent_rows, parent_partiti
                 pass
 
     except Exception as e:
-        if root:
+        if truck:
             default_data_provider.error()
             
             for name, pro in data_providers.items():
@@ -505,7 +506,7 @@ def _execute_branch(branch, data_providers, context, parent_rows, parent_partiti
                     pass
         raise e
     finally:
-        if root:
+        if truck:
             default_data_provider.end()
             error = None
             for name, pro in data_providers.items():
@@ -602,8 +603,7 @@ def get_result(trunk, get_data_provider, ctx):
         }        
         for c in trunk["connections"]:            
             data_providers[c] = get_data_provider(c)
-        
-        data_provider_helper = DataProviderHelper(parameter_rx)        
+                
         rs, errors = _execute_branch(trunk, data_providers, ctx, [], None, data_provider_helper)
         
         if errors:
@@ -626,7 +626,7 @@ def _default_date_time_converter(o):
 def get_result_json(descriptor, get_data_providers, context):
     return json.dumps(get_result(descriptor, get_data_providers, context), default= _default_date_time_converter)
 
-def get_trunk_json(descriptor):
+def get_descriptor_json(descriptor):
     d = copy.deepcopy(descriptor)
     del d["_validators"]    
     return json.dumps(d)    
@@ -1044,7 +1044,7 @@ class Gravity:
         self._root_path = root_path
         self._debug = debug or False
        
-        self._trunks = {}
+        self._descriptors = {}
         
         self._data_providers = {
             "db": PostgresContextManager({
@@ -1070,19 +1070,19 @@ class Gravity:
         else:
             return None
 
-    def create_trunk(self, path):        
+    def create_descriptor(self, path):        
         return create_trunk(path, self._content_reader)
     
-    def get_trunk(self, route, path):        
+    def get_descriptor(self, route, path):        
         k = path_join(*[route])
-        if self._debug == False and k in self._trunks:
-            return self._trunks[k]
+        if self._debug == False and k in self._descriptors:
+            return self._descriptors[k]
         
-        trunk  = self.create_trunk(path) 
-        self._trunks[k] = trunk      
-        return trunk
+        descriptor  = self.create_descriptor(path) 
+        self._descriptors[k] = descriptor      
+        return descriptor
 
-    def get_trunk_path_by_route(self, path):
+    def get_descriptor_path_by_route(self, path):
         path_values = {} 
         if self._routes:
             for r in self._routes:
