@@ -1,3 +1,0 @@
-path:
-  type: object
-  required: ["id", "id1"]

@@ -93,4 +93,4 @@ def create_gravity_context(request, path_values, namespace, path, descriptor):
     return create_context(descriptor, path, request_body, params, query, path_values, headers, cookies)    
 
 if __name__ == "__main__":
-    app.run(debug=False)
+    app.run(debug=True)
