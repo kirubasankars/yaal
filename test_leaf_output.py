@@ -1,122 +1,131 @@
 import unittest
+
 from gravity import _execute_leafs, create_context
 
 
 class FakeExecutionContext:
-    
+
     def begin(self):
         pass
 
     def end(self):
         pass
-    
+
     def error(self):
         pass
 
     def execute(self, trunk, input_shape, helper):
         if trunk["content"] == "error":
-            return [{ "$http_status_code" : 400 , "$type" : "$error", "message" : "message1" }, { "$type" : "$error", "message" : "message2", '$http_status_code': 400 }], 0
+            return [{"$http_status_code": 400, "$type": "$error", "message": "message1"},
+                    {"$type": "$error", "message": "message2", '$http_status_code': 400}], 0
 
         if trunk["content"] == "cookie":
-            return [{ "$type" : "$cookie", "name" : "name1", "value" : "value" }, { "$type" : "$cookie", "name" : "name2", "value" : "value" }], 0
+            return [{"$type": "$cookie", "name": "name1", "value": "value"},
+                    {"$type": "$cookie", "name": "name2", "value": "value"}], 0
 
         if trunk["content"] == "header":
-            return [{  "$type" : "$header", "name" : "name1", "value" : "value" }, { "$type" : "$header", "name" : "name2", "value" : "value" }], 0
+            return [{"$type": "$header", "name": "name1", "value": "value"},
+                    {"$type": "$header", "name": "name2", "value": "value"}], 0
 
         if trunk["content"] == "params":
-            return [{ "$type" : "$params", "a" : "1", "b" : "2" }], 1
+            return [{"$type": "$params", "a": "1", "b": "2"}], 1
 
         if trunk["content"] == "break":
-            return [{ "$type": "$break" , "a" : "1", "b" : "2" }], 1
+            return [{"$type": "$break", "a": "1", "b": "2"}], 1
 
 
 class TestGravity(unittest.TestCase):
-    
+
     def setUp(self):
         pass
 
     def tearDown(self):
         pass
-        
+
     def test_trunk_with_error(self):
         trunk = {
-            "leafs" : [
+            "leafs": [
                 {
-                    "content" : "error"
+                    "content": "error"
                 }
             ],
-            "input_type" : "object",
-            "output_type" : "array",
-            "_validators" : None
+            "input_type": "object",
+            "output_type": "array",
+            "_validators": None
         }
-        
+
         ctx = create_context(trunk, "", "user", None, None, None, None, None)
 
         p = {
-            "db" : FakeExecutionContext()
+            "db": FakeExecutionContext()
         }
 
         rs, errors = _execute_leafs(trunk, p, ctx, None)
 
-        self.assertListEqual(errors, [{ "$type" : "$error", "message" : "message1", '$http_status_code': 400 }, { "$type" : "$error", "message" : "message2", '$http_status_code': 400 }])
+        self.assertListEqual(errors, [{"$type": "$error", "message": "message1", '$http_status_code': 400},
+                                      {"$type": "$error", "message": "message2", '$http_status_code': 400}])
         self.assertEqual(ctx.get_prop("$response.status_code"), 400)
 
     def test_trunk_with_cookie(self):
         trunk = {
-            "leafs" : [
+            "leafs": [
                 {
-                    "content" : "cookie"
-                }                
+                    "content": "cookie"
+                }
             ],
-            "input_type" : "object",
-            "output_type" : "array",
-            "_validators" : None
+            "input_type": "object",
+            "output_type": "array",
+            "_validators": None
         }
-        
+
         ctx = create_context(trunk, "", "user", None, None, None, None, None)
 
         p = {
-            "db" : FakeExecutionContext()
+            "db": FakeExecutionContext()
         }
 
         _execute_leafs(trunk, p, ctx, None)
 
-        self.assertDictEqual(ctx.get_prop("$response.$cookie").get_data(), {'name1': {"$type" :'$cookie', 'name': 'name1', 'value': 'value'}, 'name2': {"$type" :'$cookie', 'name': 'name2', 'value': 'value'}})
+        self.assertDictEqual(ctx.get_prop("$response.$cookie").get_data(),
+                             {'name1': {"$type": '$cookie', 'name': 'name1', 'value': 'value'},
+                              'name2': {"$type": '$cookie', 'name': 'name2', 'value': 'value'}})
 
     def test_trunk_with_header(self):
         trunk = {
-            "leafs" : [
+            "leafs": [
                 {
-                    "content" : "header"
-                }                
+                    "content": "header"
+                }
             ],
-            "input_type" : "object",
-            "output_type" : "array",
-            "_validators" : None
+            "input_type": "object",
+            "output_type": "array",
+            "_validators": None
         }
-        
+
         ctx = create_context(trunk, "", "user", None, None, None, None, None)
 
         p = {
-            "db" : FakeExecutionContext()
+            "db": FakeExecutionContext()
         }
 
         _execute_leafs(trunk, p, ctx, None)
 
-        self.assertDictEqual(ctx.get_prop("$response.$header").get_data(), {'name1': {"$type" :'$header', 'name': 'name1', 'value': 'value'}, 'name2': {"$type" :'$header', 'name': 'name2', 'value': 'value'}})
+        self.assertDictEqual(ctx.get_prop("$response.$header").get_data(),
+                             {'name1': {"$type": '$header', 'name': 'name1', 'value': 'value'},
+                              'name2': {"$type": '$header', 'name': 'name2', 'value': 'value'}})
 
     def test_trunk_with_params(self):
         trunk = {
             "leafs": [
                 {
                     "content": "params"
-                }                
+                }
             ],
             "input_type": "object",
             "output_type": "array",
             "_validators": None
         }
-        
+
         ctx = create_context(trunk, "namespace", "path", None, None, None, None, None)
 
         p = {
@@ -135,17 +144,17 @@ class TestGravity(unittest.TestCase):
                 {
                     "content": "break",
                     "connection": "db"
-                }                
+                }
             ],
             "input_type": "object",
             "output_type": "array",
             "_validators": None
         }
-        
+
         ctx = create_context(trunk, "", "user", None, None, None, None, None)
 
         p = {
-            "db" : FakeExecutionContext()
+            "db": FakeExecutionContext()
         }
 
         rs, errors = _execute_leafs(trunk, p, ctx, None)
@@ -156,22 +165,22 @@ class TestGravity(unittest.TestCase):
         trunk = {
             "leafs": [
                 {
-                    "content" : "break",
-                    "connection" : "db1"
-                }                
+                    "content": "break",
+                    "connection": "db1"
+                }
             ],
             "input_type": "object",
             "output_type": "array",
             "_validators": None
         }
-        
+
         ctx = create_context(trunk, "", "user", None, None, None, None, None)
 
         p = {
-            "db" : FakeExecutionContext()
+            "db": FakeExecutionContext()
         }
 
-        with self.assertRaises(Exception): _execute_leafs(trunk, p, ctx, None)   
+        with self.assertRaises(Exception): _execute_leafs(trunk, p, ctx, None)
 
 
 if __name__ == "__main__":

@@ -1,15 +1,16 @@
 import unittest
-from gravity import Gravity,create_context, get_result
+
+from gravity import Gravity, create_context, get_result
 
 
 class FakeExecutionContext:
-    
+
     def begin(self):
         pass
 
     def end(self):
         pass
-    
+
     def error(self):
         pass
 
@@ -21,18 +22,18 @@ class FakeContentReader:
 
     def get_sql(self, method, path):
         return "INSERT"
-    
+
     def get_config(self, path):
         return {
-            "input.model" : {
-                "payload" : {
-                    "type" : "object",
-                    "properties" : {
+            "input.model": {
+                "payload": {
+                    "type": "object",
+                    "properties": {
                         "items": {
-                            "type" : "array",
-                            "properties" : {                            
-                                "product" : {
-                                    "type" : "object"
+                            "type": "array",
+                            "properties": {
+                                "product": {
+                                    "type": "object"
                                 }
                             }
                         }
@@ -50,22 +51,22 @@ class FakeContentReader:
 
 
 class TestGravity(unittest.TestCase):
-    
-    def setUp(self):        
-        self._gravity = Gravity("/path", FakeContentReader(), True)        
+
+    def setUp(self):
+        self._gravity = Gravity("/path", FakeContentReader(), True)
 
     def tearDown(self):
         pass
-        
+
     def test_simple_post_descriptor_check(self):
         trunk = self._gravity.create_descriptor("post1/post")
-        
+
         self.assertTrue(trunk["name"] == "$")
         self.assertTrue(trunk["method"] == "$")
-        
+
         branches = trunk["branches"]
         self.assertEqual(len(branches), 1)
-                
+
         branch_data_items = branches[0]
         self.assertTrue(branch_data_items["name"] == "items")
         self.assertTrue(branch_data_items["method"] == "$.items")
@@ -73,12 +74,12 @@ class TestGravity(unittest.TestCase):
         branches = branch_data_items["branches"]
         self.assertEqual(branches, None)
 
-    def test_simple_get_shape_check(self):        
-        trunk = self._gravity.create_descriptor("post1/post")        
+    def test_simple_get_shape_check(self):
+        trunk = self._gravity.create_descriptor("post1/post")
         input_shape = create_context(trunk, "", None, None, None, None, None, None)
-        
-        self.assertIsNotNone(input_shape._shapes["items"])        
-        self.assertEqual(len(input_shape._shapes["items"]._shapes),0)
+
+        self.assertIsNotNone(input_shape._shapes["items"])
+        self.assertEqual(len(input_shape._shapes["items"]._shapes), 0)
 
     @staticmethod
     def get_data_provider(name):
@@ -91,6 +92,7 @@ class TestGravity(unittest.TestCase):
         rs = get_result(descriptor, self.get_data_provider, input_shape)
 
         self.assertListEqual(rs, [d])
+
 
 if __name__ == "__main__":
     unittest.main()

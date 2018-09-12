@@ -1,8 +1,6 @@
-
 from gravity import Gravity, create_context, get_result_json
 
 if __name__ == '__main__':
-
     path = "film/get"
     root_path = "serve/auth"
     app = Gravity(root_path, None, False)
