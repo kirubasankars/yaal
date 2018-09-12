@@ -1,9 +1,13 @@
-import os, copy, datetime, re, json, yaml
-from collections import defaultdict
-from jsonschema import FormatChecker, Draft4Validator
-
+import os
+import copy
+import datetime
+import re
+import json
+import yaml
 import sqlite3
+from collections import defaultdict
 
+from jsonschema import FormatChecker, Draft4Validator
 from gravity_postgres import PostgresContextManager
 
 parameters_meta_rx = re.compile(r"--\((.*)\)--")
@@ -157,10 +161,10 @@ def _build_trunk_map_by_files(name_list: list):
 
 def _build_branch(branch: dict, is_trunk: bool, branch_map_by_files: list, content_reader, payload: dict,
                   output_model: dict, connections: list):
-    _properties_str, _type_str, _partition_by_str, _parent_rows_str = "properties", "type", "partition_by", \
-                                                                      "parent_rows"
-    _output_type_str, _use_parent_rows_str, _parameters_str, _leafs_str = "output_type", "use_parent_rows", \
-                                                                          "parameters", "leafs"
+
+    _properties_str, _type_str, _partition_by_str = "properties", "type", "partition_by"
+    _output_type_str, _use_parent_rows_str = "output_type", "use_parent_rows"
+    _parameters_str, _leafs_str, _parent_rows_str = "parameters", "leafs", "parent_rows"
 
     path, method = branch["path"], branch["method"]
     content = content_reader.get_sql(method, path)
@@ -662,7 +666,7 @@ def get_namespace(name, root_path, debug):
         return namespaces[name]
 
 
-def create_context(descriptor, path, payload, params, query, path_values, header, cookie):
+def create_context(descriptor, namespace, path, payload, query, path_values, header, cookie):
     validators = descriptor["_validators"]
 
     parameters_model_str = "parameters_model"
@@ -742,6 +746,10 @@ def create_context(descriptor, path, payload, params, query, path_values, header
     }
     response_shape = Shape({}, None, None, response_extras, None)
 
+    params = {
+        "namespace": namespace,
+        "path": path
+    }
     params_shape = Shape({}, params, None, None, None)
 
     extras = {
@@ -1092,7 +1100,7 @@ class Gravity:
 
     def get_data_provider(self, name):
         if name in self._data_providers:
-            return self._data_providers[name].getContext()
+            return self._data_providers[name].get_context()
         else:
             return None
 
@@ -1139,7 +1147,7 @@ class SQLiteDataProvider:
         self._con = None
 
     @staticmethod
-    def _sqlite_dict_factory(self, cursor, row):
+    def _sqlite_dict_factory(cursor, row):
         d = {}
         for idx, col in enumerate(cursor.description):
             d[col[0]] = row[idx]
