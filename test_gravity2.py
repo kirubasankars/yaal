@@ -23,7 +23,7 @@ class FakeContentReader:
     def get_config(self, path):
         return {
             "input.model" : {
-                "body" : {
+                "payload" : {
                     "type" : "object",
                     "properties" : {
                         "items": {
@@ -54,7 +54,7 @@ class TestGravity(unittest.TestCase):
         pass
         
     def test_simple_post_descriptor_check(self):
-        trunk = self._gravity.create_trunk("post1/post")
+        trunk = self._gravity.create_descriptor("post1/post")
         
         self.assertTrue(trunk["name"] == "$")
         self.assertTrue(trunk["method"] == "$")
@@ -70,7 +70,7 @@ class TestGravity(unittest.TestCase):
         self.assertEqual(branches, None)
 
     def test_simple_get_shape_check(self):        
-        trunk = self._gravity.create_trunk("post1/post")        
+        trunk = self._gravity.create_descriptor("post1/post")        
         input_shape = create_context(trunk, "", None, None, None, None, None, None)
         
         self.assertIsNotNone(input_shape._shapes["items"])        
@@ -80,7 +80,7 @@ class TestGravity(unittest.TestCase):
         return FakeExecutionContext()
 
     def test_run(self):
-        descriptor_post = self._gravity.create_trunk("post1/post")        
+        descriptor_post = self._gravity.create_descriptor("post1/post")        
         d = {"items":[{"a":1}, {"b":1}]}
         input_shape = create_context(descriptor_post, "", d, None, None, None, None, None)            
         rs = get_result(descriptor_post, self.get_data_provider, input_shape)

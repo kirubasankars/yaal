@@ -166,7 +166,7 @@ def _build_branch(branch, is_trunk, branchmap_by_files, content_reader, input_mo
         input_model[_propertiesstr] = {}
 
     if is_trunk:
-        branch["input_model"] = input_model
+        branch["payload"] = input_model
         
     branch["input_type"] = input_model[_typestr]
     input_properties = input_model[_propertiesstr]
@@ -264,22 +264,22 @@ def create_trunk(path, content_reader):
     path = path_join(*["api", path])
     ordered_files = _order_list_by_dots(content_reader.list_sql(path))       
     if len(ordered_files) == 0: 
-        return None # found zero sql files, then return no api available
+        return None
 
     trunkmap = _build_trunkmap_by_files(ordered_files)        
     config = content_reader.get_config(path)
     
-    input_model_str, output_model_str, input_body_str = "input.model", "output.model", "body"    
-    parameter_query_str, parameter_path_str, parameter_header_str, parameter_cookie_str = "query", "path", "header", "cookie"
-    input_model, output_model = None, None 
+    input_model_str, output_model_str = "input.model", "output.model"
+    parameter_query_str, parameter_path_str, parameter_header_str, parameter_cookie_str, payload_str = "query", "path", "header", "cookie", "payload"
+    payload_model, output_model = None, None 
     parameter_query, parameter_path, parameter_header, parameter_cookie = None, None, None, None
     
     if config is not None:
         if input_model_str in config:
             input_config = config[input_model_str]
             if input_config is not None:
-                if input_body_str in input_config:
-                    input_model = input_config[input_body_str]
+                if payload_str in input_config:
+                    payload_model = input_config[payload_str]
 
                 if parameter_query_str in input_config:
                     parameter_query = input_config[parameter_query_str]
@@ -327,10 +327,10 @@ def create_trunk(path, content_reader):
         }
     }
 
-    if input_model:
-        request_body_validator = Draft4Validator(schema = input_model, format_checker = FormatChecker())
+    if payload_model:
+        payload_validator = Draft4Validator(schema = payload_model, format_checker = FormatChecker())
     else:
-        request_body_validator = None
+        payload_validator = None
 
     if parameter_query:
         parameter_query_validator = Draft4Validator(schema = parameter_query, format_checker = FormatChecker())
@@ -353,7 +353,7 @@ def create_trunk(path, content_reader):
         parameter_cookie_validator = None
 
     connections = []
-    _build_branch(trunk, True, trunkmap["$"], content_reader, input_model, output_model, connections)    
+    _build_branch(trunk, True, trunkmap["$"], content_reader, payload_model, output_model, connections)    
     trunk["connections"] = list(set(connections))
 
     validators = {
@@ -361,7 +361,7 @@ def create_trunk(path, content_reader):
         "path" : parameter_path_validator,
         "header" : parameter_header_validator,
         "cookie" : parameter_cookie_validator,
-        "input_model" : request_body_validator
+        "payload" : payload_validator
     }
     trunk["_validators"] = validators
     
@@ -421,7 +421,7 @@ def _execute_leafs(branch, data_providers, context, data_provider_helper):
                     rs = output
     return rs, None
 
-def _execute_branch(branch, data_providers, context, parent_rows, parent_partition_by):
+def _execute_branch(branch, data_providers, context, parent_rows, parent_partition_by): 
     input_type, output_partition_by = branch["input_type"], branch["partition_by"]
     use_parent_rows, default_data_provider =  branch["use_parent_rows"], data_providers["db"]
     output = []
@@ -604,7 +604,7 @@ def get_result(trunk, get_data_provider, ctx):
         for c in trunk["connections"]:            
             data_providers[c] = get_data_provider(c)
                 
-        rs, errors = _execute_branch(trunk, data_providers, ctx, [], None, data_provider_helper)
+        rs, errors = _execute_branch(trunk, data_providers, ctx, [], None)
         
         if errors:
             status_code = ctx.get_prop(statuscodestr)
@@ -640,11 +640,11 @@ def get_namespace(name, root_path, debug):
         namespaces[name] = Gravity(root_path, None, debug)         
         return namespaces[name]
 
-def create_context(descriptor, path, body, params, query, path_values, header, cookie):
+def create_context(descriptor, path, payload, params, query, path_values, header, cookie):
         validators = descriptor["_validators"]
         
         parameters_modelstr = "parameters_model"        
-        query_str, path_str, header_str, cookie_str, input_model_str = "query", "path", "header", "cookie", "input_model"
+        query_str, path_str, header_str, cookie_str, payload_str = "query", "path", "header", "cookie", "payload"
 
         if parameters_modelstr in descriptor:
             parameters_model = descriptor[parameters_modelstr]
@@ -686,12 +686,12 @@ def create_context(descriptor, path, body, params, query, path_values, header, c
             cookie_schema = None
             cookie_validator = None
 
-        if input_model_str in descriptor:
-            requestbody_schema = descriptor[input_model_str]
-            requestbody_validator = validators[input_model_str]
+        if payload_str in descriptor:
+            payload_schema = descriptor[payload_str]
+            payload_validator = validators[payload_str]
         else:
-            requestbody_schema = None
-            requestbody_validator = None
+            payload_schema = None
+            payload_validator = None
         
         query_shape = Shape(query_schema, None, None, None, query_validator)
         if query:
@@ -732,7 +732,7 @@ def create_context(descriptor, path, body, params, query, path_values, header, c
             "$response" : response_shape
         }
 
-        return Shape(requestbody_schema, body, None, extras, requestbody_validator)
+        return Shape(payload_schema, payload, None, extras, payload_validator)
 
 def _build_routes(routes):
     _routes = []
