@@ -1,13 +1,13 @@
-import os, json 
-import copy
+import os
 from flask import Flask, request, abort, send_from_directory
 from gravity import get_namespace, create_context, get_descriptor_json
 
 app = Flask(__name__)
-root_path  = "serve"
+root_path = "serve"
 path_join = os.path.join
 
-@app.route("/_<namespace>/", methods=["GET"], defaults = { "path" : "" })
+
+@app.route("/_<namespace>/", methods=["GET"], defaults={"path": ""})
 @app.route("/_<namespace>/<path:path>", methods=["GET"])
 def serve_app(namespace, path):
     static_file_dir = os.path.join(root_path, namespace, "app")
@@ -16,7 +16,8 @@ def serve_app(namespace, path):
  
     return send_from_directory(static_file_dir, path)
 
-@app.route("/_<namespace>/api/", methods=["GET"], defaults = { "path" : "" })
+
+@app.route("/_<namespace>/api/", methods=["GET"], defaults={"path": ""})
 @app.route("/_<namespace>/api/<path:path>", methods=["GET", "POST", "PUT", "DELETE"])
 def namespace_serve_api(namespace, path):
 
@@ -59,38 +60,35 @@ def namespace_serve_api(namespace, path):
     
     return resp
 
-def create_gravity_context(request, path_values, namespace, path, descriptor):
-    if request.mimetype == "application/json":
+
+def create_gravity_context(req, path_values, namespace, path, descriptor):
+    if req.mimetype == "application/json":
         try:
-            request_body = request.get_json()
-        except:
+            request_body = req.get_json()
+        except Exception:
             request_body = None
     else:
         request_body = None
 
-    if request.mimetype == "multipart/form-data":
+    if req.mimetype == "multipart/form-data":
         request_body = request_body or {}
-        for k, v in request.form.items():
+        for k, v in req.form.items():
             request_body[k] = v
 
-    params = {
-        "namespace": namespace,
-        "path": path         
-    }
-
     query = {}
-    for k,v in request.args.items():
+    for k, v in req.args.items():
         query[k] = v 
 
     headers = {}
-    for k, v in request.headers.items():
+    for k, v in req.headers.items():
         headers[k] = v
 
     cookies = {}
-    for k, v in request.cookies.items():
+    for k, v in req.cookies.items():
         cookies[k] = v
 
-    return create_context(descriptor, path, request_body, params, query, path_values, headers, cookies)    
+    return create_context(descriptor, namespace, path, request_body, query, path_values, headers, cookies)
+
 
 if __name__ == "__main__":
     app.run(debug=True)

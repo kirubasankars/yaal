@@ -7,14 +7,16 @@ class PostgresContextManager:
     def __init__(self, options):
         self._options =  options
 
-    def getContext(self):
+    def get_context(self):
         return PostgresDataProvider(self._options)
+
 
 class PostgresDataProvider:
 
     def __init__(self, options):
-        self._db_name = options["db_name"]  
-        
+        self._db_name = options["db_name"]
+        self._conn = None
+
     def begin(self):
         self._conn = pg.connect("dbname='" + self._db_name + "' user='postgres' password='admin'")
 
@@ -31,9 +33,10 @@ class PostgresDataProvider:
         self._conn.rollback()
         self._conn.close()
         self._conn = None
-    
-    def get_value_converter(self, ptype, value):        
-        if ptype == "blob":        
+
+    @staticmethod
+    def get_value_converter(param_type, value):
+        if param_type == "blob":
             return pg.Binary(value)        
         return value
         
