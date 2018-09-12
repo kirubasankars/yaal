@@ -92,7 +92,7 @@ def _build_leafs(branch, content, connections_used):
     branch["leafs"] = leafs
 
 
-def _build_leaf_parameters(leaf: dict, branch_descriptor: dict):
+def _build_leaf_parameters(leaf, branch_descriptor):
     content = leaf["content"]
     parameter_names = [x for x in parameter_rx.findall(content)]
     parameters = branch_descriptor["parameters"]
@@ -115,7 +115,7 @@ def _build_leaf_parameters(leaf: dict, branch_descriptor: dict):
         leaf["parameters"] = params
 
 
-def _order_list_by_dots(names: list):
+def _order_list_by_dots(names):
     if names is None:
         return []
 
@@ -137,7 +137,7 @@ def _order_list_by_dots(names: list):
     return ordered
 
 
-def _build_branch_map_by_files(branch_map: dict, item: str):
+def _build_branch_map_by_files(branch_map, item):
     if item == "":
         return
     dot = item.find(".")
@@ -152,16 +152,16 @@ def _build_branch_map_by_files(branch_map: dict, item: str):
             branch_map[item] = {}
 
 
-def _build_trunk_map_by_files(name_list: list):
-    treemap = {}
+def _build_trunk_map_by_files(name_list):
+    trunk_map = {}
     if name_list is not None:
         for item in name_list:
-            _build_branch_map_by_files(treemap, item)
-    return treemap
+            _build_branch_map_by_files(trunk_map, item)
+    return trunk_map
 
 
-def _build_branch(branch: dict, is_trunk: bool, branch_map_by_files: dict, content_reader, payload: dict,
-                  output_model: dict, connections: list):
+def _build_branch(branch, is_trunk, map_by_files, content_reader, payload,
+                  output_model: dict, connections):
     _properties_str, _type_str, _partition_by_str = "properties", "type", "partition_by"
     _output_type_str, _use_parent_rows_str = "output_type", "use_parent_rows"
     _parameters_str, _leafs_str, _parent_rows_str = "parameters", "leafs", "parent_rows"
@@ -236,9 +236,9 @@ def _build_branch(branch: dict, is_trunk: bool, branch_map_by_files: dict, conte
     if _leafs_str not in branch:
         branch[_leafs_str] = None
 
-    for k in branch_map_by_files:
+    for k in map_by_files:
         if k not in branch_map:
-            branch_map[k] = branch_map_by_files[k]
+            branch_map[k] = map_by_files[k]
 
     branches = []
     for branch_name in branch_map:
@@ -274,7 +274,7 @@ def _build_branch(branch: dict, is_trunk: bool, branch_map_by_files: dict, conte
         branch["branches"] = None
 
 
-def create_trunk(path: str, content_reader):
+def create_trunk(path, content_reader):
     path = path_join(*["api", path])
     ordered_files = _order_list_by_dots(content_reader.list_sql(path))
     if len(ordered_files) == 0:
