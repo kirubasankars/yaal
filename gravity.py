@@ -1,18 +1,19 @@
-import os
 import copy
 import datetime
-import re
 import json
-import yaml
+import os
+import re
 import sqlite3
 from collections import defaultdict
 
+import yaml
 from jsonschema import FormatChecker, Draft4Validator
+
 from gravity_postgres import PostgresContextManager
 
 parameters_meta_rx = re.compile(r"--\((.*)\)--")
 parameter_meta_rx = re.compile(r"\s*([A-Za-z0-9_.$-]+)(\s+(\w+))?\s*")
-parameter_rx = re.compile(r"\{\{([A-Za-z0-9_.$-]*?)\}\}", re.MULTILINE)
+parameter_rx = re.compile(r"{{([A-Za-z0-9_.$-]*?)}}", re.MULTILINE)
 query_rx = re.compile(r"--query\(([a-zA-Z0-9.$_]*?)\)--")
 
 path_join = os.path.join
@@ -159,9 +160,8 @@ def _build_trunk_map_by_files(name_list: list):
     return treemap
 
 
-def _build_branch(branch: dict, is_trunk: bool, branch_map_by_files: list, content_reader, payload: dict,
+def _build_branch(branch: dict, is_trunk: bool, branch_map_by_files: dict, content_reader, payload: dict,
                   output_model: dict, connections: list):
-
     _properties_str, _type_str, _partition_by_str = "properties", "type", "partition_by"
     _output_type_str, _use_parent_rows_str = "output_type", "use_parent_rows"
     _parameters_str, _leafs_str, _parent_rows_str = "parameters", "leafs", "parent_rows"
