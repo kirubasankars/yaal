@@ -61,7 +61,7 @@ class TestGravity(unittest.TestCase):
         
     def test_trunk_with_parameters_query_check(self):
         gravity = Gravity("/path", FakeContentReader(), True)  
-        trunk = gravity.create_trunk("get1/get")
+        trunk = gravity.create_descriptor("get1/get")
         
         parameters = trunk["parameters"]
         self.assertIn("id1", parameters)
@@ -78,7 +78,7 @@ class TestGravity(unittest.TestCase):
 
     def test_trunk_with_parameters_queries_check(self):                
         gravity = Gravity("/path", FakeContentReader1(), True)  
-        trunk = gravity.create_trunk("get1/get")
+        trunk = gravity.create_descriptor("get1/get")
         
         parameters = trunk["parameters"]
         self.assertIn("id1", parameters)

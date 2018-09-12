@@ -24,7 +24,7 @@ class TestGravity(unittest.TestCase):
         pass
         
     def test_simple_get_trunk_check(self):
-        truck = self._gravity.create_trunk("get1/get")
+        truck = self._gravity.create_descriptor("get1/get")
         
         self.assertTrue(truck["name"] == "$")
         self.assertTrue(truck["method"] == "$")
@@ -55,7 +55,7 @@ class TestGravity(unittest.TestCase):
         self.assertTrue(branch_data_items_product["method"] == "$.data.items.product")
         
     def test_simple_get_shape_check(self):
-        trunk = self._gravity.create_trunk("get1/get")    
+        trunk = self._gravity.create_descriptor("get1/get")    
         input_shape = create_context(trunk, "", None, None, None, None, None, None)
         
         self.assertIsNotNone(input_shape._shapes["data"])
