@@ -1,6 +1,7 @@
 import unittest
 from gravity import Gravity,create_context, get_result
 
+
 class FakeExecutionContext:
     
     def begin(self):
@@ -12,8 +13,9 @@ class FakeExecutionContext:
     def error(self):
         pass
 
-    def execute(self, node_executor, input_shape, helper):        
+    def execute(self, leaf, input_shape, helper):
         return [input_shape._data], 0
+
 
 class FakeContentReader:
 
@@ -41,9 +43,11 @@ class FakeContentReader:
 
     def list_sql(self, path):
         return ["$", "$.items"]
-    
-    def get_routes_config(self, path):
+
+    @staticmethod
+    def get_routes_config(path):
         return None
+
 
 class TestGravity(unittest.TestCase):
     
@@ -76,14 +80,15 @@ class TestGravity(unittest.TestCase):
         self.assertIsNotNone(input_shape._shapes["items"])        
         self.assertEqual(len(input_shape._shapes["items"]._shapes),0)
 
-    def get_data_provider(self, name):
+    @staticmethod
+    def get_data_provider(name):
         return FakeExecutionContext()
 
     def test_run(self):
-        descriptor_post = self._gravity.create_descriptor("post1/post")        
-        d = {"items":[{"a":1}, {"b":1}]}
-        input_shape = create_context(descriptor_post, "", d, None, None, None, None, None)            
-        rs = get_result(descriptor_post, self.get_data_provider, input_shape)
+        descriptor = self._gravity.create_descriptor("post1/post")
+        d = {"items": [{"a": 1}, {"b": 1}]}
+        input_shape = create_context(descriptor, "", "", d, None, None, None, None)
+        rs = get_result(descriptor, self.get_data_provider, input_shape)
 
         self.assertListEqual(rs, [d])
 

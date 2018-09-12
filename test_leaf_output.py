@@ -1,6 +1,7 @@
 import unittest
 from gravity import _execute_leafs, create_context
 
+
 class FakeExecutionContext:
     
     def begin(self):
@@ -28,6 +29,7 @@ class FakeExecutionContext:
         if trunk["content"] == "break":
             return [{ "$type": "$break" , "a" : "1", "b" : "2" }], 1
 
+
 class TestGravity(unittest.TestCase):
     
     def setUp(self):
@@ -48,7 +50,7 @@ class TestGravity(unittest.TestCase):
             "_validators" : None
         }
         
-        ctx = create_context(trunk, "user", None, None, None, None, None, None)
+        ctx = create_context(trunk, "", "user", None, None, None, None, None)
 
         p = {
             "db" : FakeExecutionContext()
@@ -71,7 +73,7 @@ class TestGravity(unittest.TestCase):
             "_validators" : None
         }
         
-        ctx = create_context(trunk, "user", None, None, None, None, None, None)
+        ctx = create_context(trunk, "", "user", None, None, None, None, None)
 
         p = {
             "db" : FakeExecutionContext()
@@ -93,7 +95,7 @@ class TestGravity(unittest.TestCase):
             "_validators" : None
         }
         
-        ctx = create_context(trunk, "user", None, None, None, None, None, None)
+        ctx = create_context(trunk, "", "user", None, None, None, None, None)
 
         p = {
             "db" : FakeExecutionContext()
@@ -105,40 +107,42 @@ class TestGravity(unittest.TestCase):
 
     def test_trunk_with_params(self):
         trunk = {
-            "leafs" : [
+            "leafs": [
                 {
-                    "content" : "params"
+                    "content": "params"
                 }                
             ],
-            "input_type" : "object",
-            "output_type" : "array",
-            "_validators" : None
+            "input_type": "object",
+            "output_type": "array",
+            "_validators": None
         }
         
-        ctx = create_context(trunk, "user", None, None, None, None, None, None)
+        ctx = create_context(trunk, "namespace", "path", None, None, None, None, None)
 
         p = {
-            "db" : FakeExecutionContext()
+            "db": FakeExecutionContext()
         }
 
         _execute_leafs(trunk, p, ctx, None)
 
-        self.assertDictEqual(ctx.get_prop("$params").get_data(), {'$last_inserted_id': 1, "$type" : '$params', 'a': '1', 'b': '2'})
+        d = ctx.get_prop("$params").get_data()
+        self.assertDictEqual(d, {"$last_inserted_id": 1, "namespace": 'namespace', "path": "path",
+                                 "$type": '$params', 'a': '1', 'b': '2'})
 
     def test_trunk_with_break(self):
         trunk = {
-            "leafs" : [
+            "leafs": [
                 {
-                    "content" : "break",
-                    "connection" : "db"
+                    "content": "break",
+                    "connection": "db"
                 }                
             ],
-            "input_type" : "object",
-            "output_type" : "array",
-            "_validators" : None
+            "input_type": "object",
+            "output_type": "array",
+            "_validators": None
         }
         
-        ctx = create_context(trunk, "user", None, None, None, None, None, None)
+        ctx = create_context(trunk, "", "user", None, None, None, None, None)
 
         p = {
             "db" : FakeExecutionContext()
@@ -150,24 +154,25 @@ class TestGravity(unittest.TestCase):
 
     def test_trunk_with_connection_missing(self):
         trunk = {
-            "leafs" : [
+            "leafs": [
                 {
                     "content" : "break",
                     "connection" : "db1"
                 }                
             ],
-            "input_type" : "object",
-            "output_type" : "array",
-            "_validators" : None
+            "input_type": "object",
+            "output_type": "array",
+            "_validators": None
         }
         
-        ctx = create_context(trunk, "user", None, None, None, None, None, None)
+        ctx = create_context(trunk, "", "user", None, None, None, None, None)
 
         p = {
             "db" : FakeExecutionContext()
         }
 
         with self.assertRaises(Exception): _execute_leafs(trunk, p, ctx, None)   
+
 
 if __name__ == "__main__":
     unittest.main()
