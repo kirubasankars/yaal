@@ -1,3 +1,3 @@
---($header)--
+--($header.Connection)--
 
-SELECT {{$header}}::json as json, '$json' as "$type"
+SELECT {{$header.Connection}} as json

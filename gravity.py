@@ -12,7 +12,7 @@ from jsonschema import FormatChecker, Draft4Validator
 from gravity_postgres import PostgresContextManager
 
 parameters_meta_rx = re.compile(r"--\((.*)\)--")
-parameter_meta_rx = re.compile(r"\s*([A-Za-z0-9_.$-]+)(\s+(\w+))?\s*")
+parameter_meta_rx = re.compile(r"\s*(?P<name>[A-Za-z0-9_.$-]+)(\s+(?P<type>\w+))?\s*")
 parameter_rx = re.compile(r"{{([A-Za-z0-9_.$-]*?)}}", re.MULTILINE)
 query_rx = re.compile(r"--query\(([a-zA-Z0-9.$_]*?)\)--")
 
@@ -38,11 +38,12 @@ def _build_leafs(branch, content, connections_used):
             parameter_meta_m = parameter_meta_rx.match(p)
 
             if parameter_meta_m is not None:
-                gm = parameter_meta_m.groups(1)
-                if len(gm) > 0:
-                    parameter_name = gm[0]
-                if len(gm) > 1:
-                    parameter_type = gm[2]
+                parameter_name = parameter_meta_m.group("name").lower()
+                p_type = parameter_meta_m.group("type")
+                if p_type is not None:
+                    parameter_type = parameter_meta_m.group("type").lower()
+                else:
+                    parameter_type = None
                 meta[parameter_name] = {
                     "name": parameter_name,
                     "type": parameter_type
@@ -94,13 +95,12 @@ def _build_leafs(branch, content, connections_used):
 
 def _build_leaf_parameters(leaf, branch_descriptor):
     content = leaf["content"]
-    parameter_names = [x for x in parameter_rx.findall(content)]
+    parameter_names = [x.lower() for x in parameter_rx.findall(content)]
     parameters = branch_descriptor["parameters"]
 
     params = []
     if parameters is not None:
         for p in parameter_names:
-            leaf_parameter = None
             if p in parameters:
                 descriptor_parameter = parameters[p]
                 leaf_parameter = {
@@ -160,8 +160,7 @@ def _build_trunk_map_by_files(name_list):
     return trunk_map
 
 
-def _build_branch(branch, is_trunk, map_by_files, content_reader, payload,
-                  output_model: dict, connections):
+def _build_branch(branch, is_trunk, map_by_files, content_reader, payload, output_model: dict, connections):
     _properties_str, _type_str, _partition_by_str = "properties", "type", "partition_by"
     _output_type_str, _use_parent_rows_str = "output_type", "use_parent_rows"
     _parameters_str, _leafs_str, _parent_rows_str = "parameters", "leafs", "parent_rows"
@@ -385,22 +384,22 @@ def create_trunk(path, content_reader):
 def _execute_leafs(branch, data_providers, context, data_provider_helper):
     errors = []
 
-    actions, data_provider = branch["leafs"], data_providers["db"]
+    leafs, data_provider = branch["leafs"], data_providers["db"]
     type_str = "$type"
     params_str, header_str, cookie_str, error_str, break_str = "$params", "$header", "$cookie", "$error", "$break"
 
     rs = []
-    if actions is not None:
-        for action in actions:
-            if "connection" in action:
-                connection = action["connection"]
+    if leafs is not None:
+        for leaf in leafs:
+            if "connection" in leaf:
+                connection = leaf["connection"]
                 if connection in data_providers:
-                    output, output_last_inserted_id = data_providers[connection].execute(action, context,
+                    output, output_last_inserted_id = data_providers[connection].execute(leaf, context,
                                                                                          data_provider_helper)
                 else:
                     raise Exception("connection string " + connection + " missing")
             else:
-                output, output_last_inserted_id = data_provider.execute(action, context, data_provider_helper)
+                output, output_last_inserted_id = data_provider.execute(leaf, context, data_provider_helper)
 
             context.get_prop("$params").set_prop("$last_inserted_id", output_last_inserted_id)
 
@@ -1006,6 +1005,8 @@ class DataProviderHelper:
                         else:
                             if type(param_value) == Shape:
                                 param_value = json.dumps(param_value.get_data())
+                            elif param_type is None:
+                                param_value = str(param_value)
                             else:
                                 param_value = get_value_converter(param_value)
                     values.append(param_value)

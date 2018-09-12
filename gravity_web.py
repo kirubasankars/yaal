@@ -73,22 +73,22 @@ def create_gravity_context(req, path_values, namespace, path, descriptor):
     if req.mimetype == "multipart/form-data":
         request_body = request_body or {}
         for k, v in req.form.items():
-            request_body[k] = v
+            request_body[k.lower()] = v
 
     query = {}
     for k, v in req.args.items():
-        query[k] = v 
+        query[k.lower()] = v
 
     headers = {}
     for k, v in req.headers.items():
-        headers[k] = v
+        headers[k.lower()] = v
 
     cookies = {}
     for k, v in req.cookies.items():
-        cookies[k] = v
+        cookies[k.lower()] = v
 
     return create_context(descriptor, namespace, path, request_body, query, path_values, headers, cookies)
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=False)
