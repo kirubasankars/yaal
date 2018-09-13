@@ -1,6 +1,6 @@
 type: object
 properties:
-  pagination:
+  Pagination:
     type: object
   data:
     type: array

@@ -87,11 +87,11 @@ class TestGravity(unittest.TestCase):
 
     def test_run(self):
         descriptor = self._gravity.create_descriptor("post1/post")
-        d = {"items": [{"a": 1}, {"b": 1}]}
+        d = {"Items": [{"A": 1}, {"b": 1}]}
         input_shape = create_context(descriptor, "", "", d, None, None, None, None)
         rs = get_result(descriptor, self.get_data_provider, input_shape)
 
-        self.assertListEqual(rs, [d])
+        self.assertListEqual(rs, [{"items": [{"a": 1}, {"b": 1}]}])
 
 
 if __name__ == "__main__":

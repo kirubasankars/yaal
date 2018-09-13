@@ -19,6 +19,28 @@ query_rx = re.compile(r"--query\(([a-zA-Z0-9.$_]*?)\)--")
 path_join = os.path.join
 
 
+def _to_lower_keys(obj):
+    if type(obj) == dict:
+        return {k.lower(): v for k, v in obj.items()}
+    if type(obj) == list and type(obj[0]) == dict:
+        return [_to_lower_keys(item) for item in obj]
+    return obj
+
+
+def _to_lower_keys_deep(obj):
+    if type(obj) == dict:
+        o = {}
+        for k, v in obj.items():
+            if type(v) == list or type(v) == dict:
+                o[k.lower()] = _to_lower_keys(v)
+            else:
+                o[k.lower()] = v
+        return o
+    if type(obj) == list and type(obj[0]) == dict:
+        return [_to_lower_keys(item) for item in obj]
+    return obj
+
+
 def _build_leafs(branch, content, connections_used):
     if content is None or content == '':
         return
@@ -252,9 +274,10 @@ def _build_branch(branch, is_trunk, map_by_files, content_reader, payload, outpu
 
         branch_output_model = None
 
+        branch_name = branch_name.lower()
         if branch_name not in input_properties:
             input_properties[branch_name] = {
-                _type_str: "object",
+                "type": "object",
                 _properties_str: {}
             }
         branch_payload = input_properties[branch_name]
@@ -292,16 +315,15 @@ def create_trunk(path, content_reader):
             input_config = config[input_model_str]
             if input_config is not None:
                 if payload_str in input_config:
-                    payload_model = input_config[payload_str]
-
+                    payload_model = _to_lower_keys_deep(input_config[payload_str])
                 if parameter_query_str in input_config:
-                    parameter_query = input_config[parameter_query_str]
+                    parameter_query = _to_lower_keys_deep(input_config[parameter_query_str])
                 if parameter_path_str in input_config:
-                    parameter_path = input_config[parameter_path_str]
+                    parameter_path = _to_lower_keys_deep(input_config[parameter_path_str])
                 if parameter_header_str in input_config:
-                    parameter_header = input_config[parameter_header_str]
+                    parameter_header = _to_lower_keys_deep(input_config[parameter_header_str])
                 if parameter_cookie_str in input_config:
-                    parameter_cookie = input_config[parameter_cookie_str]
+                    parameter_cookie = _to_lower_keys_deep(input_config[parameter_cookie_str])
 
         if output_model_str in config:
             output_model = config[output_model_str]
@@ -386,7 +408,8 @@ def _execute_leafs(branch, data_providers, context, data_provider_helper):
 
     leafs, data_provider = branch["leafs"], data_providers["db"]
     type_str = "$type"
-    params_str, header_str, cookie_str, error_str, break_str = "$params", "$header", "$cookie", "$error", "$break"
+    params_str, header_str, cookie_str, error_str, break_str, json_str = "params", "header", "cookie", "error",\
+                                                                         "break", "json"
 
     rs = []
     if leafs is not None:
@@ -412,14 +435,14 @@ def _execute_leafs(branch, data_providers, context, data_provider_helper):
                             context.set_prop("$response.status_code", output0["$http_status_code"])
                         errors.extend(output)
                         return None, errors
-                    elif type_value == "$json":
-                        return [o["json"] for o in output], None
+                    elif type_value == json_str:
+                        return [o[json_str] for o in output], None
                     elif type_value == break_str:
                         for o in output:
                             del o[type_str]
                         return output, None
                     elif type_value == params_str:
-                        params = context.get_prop(params_str)
+                        params = context.get_prop("$params")
                         for k, v in output0.items():
                             params.set_prop(k, v)
                     elif type_value == cookie_str:
@@ -476,10 +499,10 @@ def _execute_branch(branch, data_providers, context, parent_rows, parent_partiti
             branches = branch["branches"]
             if branches:
                 for branch_descriptor in branches:
-                    sub_node_name = branch_descriptor["name"]
+                    branch_name = branch_descriptor["name"].lower()
                     sub_node_shape = None
                     if context is not None:
-                        sub_node_shape = context.get_prop(sub_node_name)
+                        sub_node_shape = context.get_prop(branch_name)
 
                     sub_node_output, errors = _execute_branch(branch_descriptor, data_providers, sub_node_shape, output,
                                                               output_partition_by)
@@ -491,7 +514,7 @@ def _execute_branch(branch, data_providers, context, parent_rows, parent_partiti
 
                     if output_partition_by is None:
                         for row in output:
-                            row[sub_node_name] = sub_node_output
+                            row[branch_name] = sub_node_output
                     else:
                         sub_node_groups = defaultdict(list)
                         for row in sub_node_output:
@@ -505,7 +528,7 @@ def _execute_branch(branch, data_providers, context, parent_rows, parent_partiti
                         for idx, rows in groups.items():
                             row = rows[0]
                             partition_by = row[output_partition_by]
-                            row[sub_node_name] = sub_node_groups[partition_by]
+                            row[branch_name] = sub_node_groups[partition_by]
                             _output.append(row)
                         output = _output
             else:
@@ -718,18 +741,18 @@ def create_context(descriptor, namespace, path, payload, query, path_values, hea
         payload_schema = None
         payload_validator = None
 
-    query_shape = Shape(query_schema, None, None, None, query_validator)
+    query_shape = Shape(query_schema, None, True, None, None, query_validator)
     if query:
         for k, v in query.items():
-            query_shape.set_prop(k, v)
+            query_shape.set_prop(k.lower(), v)
 
-    path_shape = Shape(path_schema, None, None, None, path_validator)
+    path_shape = Shape(path_schema, None, True, None, None, path_validator)
     if path_values:
         for k, v in path_values.items():
-            path_shape.set_prop(k, v)
+            path_shape.set_prop(k.lower(), v)
 
-    header_shape = Shape(header_schema, header, None, None, header_validator)
-    cookie_shape = Shape(cookie_schema, cookie, None, None, cookie_validator)
+    header_shape = Shape(header_schema, header, True, None, None, header_validator)
+    cookie_shape = Shape(cookie_schema, cookie, True, None, None, cookie_validator)
 
     request_extras = {
         "$query": query_shape,
@@ -737,19 +760,19 @@ def create_context(descriptor, namespace, path, payload, query, path_values, hea
         "$header": header_shape,
         "$cookie": cookie_shape
     }
-    request_shape = Shape({}, None, None, request_extras, None)
+    request_shape = Shape({}, None, True, None, request_extras, None)
 
     response_extras = {
-        "$header": Shape(None, None, None, None, None),
-        "$cookie": Shape(None, None, None, None, None)
+        "$header": Shape(None, None, False, None, None, None),
+        "$cookie": Shape(None, None, False, None, None, None)
     }
-    response_shape = Shape({}, None, None, response_extras, None)
+    response_shape = Shape({}, None, False, None, response_extras, None)
 
     params = {
         "namespace": namespace,
         "path": path
     }
-    params_shape = Shape({}, params, None, None, None)
+    params_shape = Shape({}, params, False, None, None, None)
 
     extras = {
         "$params": params_shape,
@@ -761,7 +784,7 @@ def create_context(descriptor, namespace, path, payload, query, path_values, hea
         "$response": response_shape
     }
 
-    return Shape(payload_schema, payload, None, extras, payload_validator)
+    return Shape(payload_schema, payload, True, None, extras, payload_validator)
 
 
 def _build_routes(routes):
@@ -776,11 +799,13 @@ def _build_routes(routes):
 
 class Shape:
 
-    def __init__(self, schema, data, parent_shape, extras, validator):
+    def __init__(self, schema, data, readonly, parent_shape, extras, validator):
         self._array = False
         self._object = False
 
+        self._readonly = readonly
         self._data = data or {}
+        self._o_data = data
         self._parent = parent_shape
         self._schema = schema
         self._input_properties = None
@@ -795,44 +820,50 @@ class Shape:
 
         schema = schema or {}
 
-        _propertiesstr = "properties"
-        if _propertiesstr in schema:
-            input_properties = schema[_propertiesstr]
+        _properties_str = "properties"
+        if _properties_str in schema:
+            input_properties = schema[_properties_str]
             self._input_properties = input_properties
 
-        _typestr = "type"
-        if _typestr in schema:
-            _type = schema[_typestr]
+        _type_str = "type"
+        if _type_str in schema:
+            _type = schema[_type_str]
             if _type == "array":
                 self._array = True
                 if data is not None:
                     if type(data) != list:
                         raise TypeError("input expected as array. object is given.")
+                    else:
+                        if readonly:
+                            self._data = _to_lower_keys(data)
             else:
                 self._object = True
                 if data is not None:
                     if type(data) != dict:
                         raise TypeError("input expected as object. array is given.")
+                    else:
+                        if readonly:
+                            self._data = _to_lower_keys(data)
 
         if self._array:
             shapes = []
-            schema[_typestr] = "object"
+            schema[_type_str] = "object"
             idx = 0
             for item in self._data:
-                s = Shape(schema, item, self, extras, None)
+                s = Shape(schema, item, readonly, self, extras, None)
                 s._index = idx
                 shapes.append(s)
                 idx = idx + 1
-            schema[_typestr] = "array"
+            schema[_type_str] = "array"
         else:
             shapes = {}
             if input_properties is not None:
                 for k, v in input_properties.items():
-                    if type(v) == dict and _propertiesstr in v:
-                        dvalue = None
+                    if type(v) == dict and _properties_str in v:
+                        value = None
                         if k in self._data:
-                            dvalue = data.get(k)
-                        shapes[k] = Shape(v, dvalue, self, extras, None)
+                            value = self._data.get(k)
+                        shapes[k] = Shape(v, value, readonly, self, extras, None)
 
         self._shapes = shapes
 
@@ -866,7 +897,7 @@ class Shape:
 
                 if prop == "$json" or prop == "$parent" or prop == "$length" or prop == "$index":
                     if prop == "$json":
-                        return json.dumps(self._data)
+                        return json.dumps(self.get_data())
                     if prop == "$parent":
                         return parent
                     if prop == "$length":
@@ -889,10 +920,10 @@ class Shape:
                 return data[prop]
 
             if self._input_properties is not None and prop in self._input_properties:
-                defaultstr = "default"
+                default_str = "default"
                 input_type = self._input_properties[prop]
-                if defaultstr in input_type:
-                    return input_type[defaultstr]
+                if default_str in input_type:
+                    return input_type[default_str]
 
             return None
 
@@ -942,6 +973,8 @@ class Shape:
         return errors
 
     def get_data(self):
+        if self._readonly:
+            return self._o_data
         return self._data
 
     def check_and_cast(self, prop, value):
@@ -957,7 +990,7 @@ class Shape:
                         return str(value)
                     if parameter_type == "number" and not isinstance(value, float):
                         return float(value)
-                except:
+                except ValueError:
                     pass
         return value
 
@@ -967,13 +1000,14 @@ class DataProviderHelper:
     def __init__(self):
         self._cache = {}
 
-    def get_executable_content(self, chr, query):
+    @staticmethod
+    def get_executable_content(char, leaf):
         executable_content_str = "executable_content"
-        if executable_content_str in query:
-            return query[executable_content_str]
+        if executable_content_str in leaf:
+            return leaf[executable_content_str]
         else:
-            executable_content = parameter_rx.sub(chr, query["content"])
-            query[executable_content_str] = executable_content
+            executable_content = parameter_rx.sub(char, leaf["content"])
+            leaf[executable_content_str] = executable_content
             return executable_content
 
     def build_parameters(self, query, input_shape, get_value_converter):
@@ -1044,19 +1078,18 @@ class FileContentReader:
     def list_sql(self, path):
         try:
             files = os.listdir(path_join(*[self._root_path, path]))
-            ffiles = [f.replace(".sql", "") for f in files if f.endswith(".sql")]
+            return [f.replace(".sql", "") for f in files if f.endswith(".sql")]
         except FileNotFoundError:
-            ffiles = None
-        return ffiles
+            return None
 
-    def _get_config(self, filepath):
-        yaml_path = filepath + ".yaml"
+    def _get_config(self, file_path):
+        yaml_path = file_path + ".yaml"
         if os.path.exists(yaml_path):
             config_str = self._get(yaml_path)
             if config_str is not None and config_str != '':
                 return yaml.load(config_str)
 
-        json_path = filepath + ".json"
+        json_path = file_path + ".json"
         if os.path.exists(json_path):
             config_str = self._get(json_path)
             if config_str is not None and config_str != '':

@@ -1,6 +1,6 @@
 query:
   type: object
   properties:
-    page:
+    Page:
       type: string
       default: 1

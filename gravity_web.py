@@ -77,15 +77,15 @@ def create_gravity_context(req, path_values, namespace, path, descriptor):
 
     query = {}
     for k, v in req.args.items():
-        query[k.lower()] = v
+        query[k] = v
 
     headers = {}
     for k, v in req.headers.items():
-        headers[k.lower()] = v
+        headers[k] = v
 
     cookies = {}
     for k, v in req.cookies.items():
-        cookies[k.lower()] = v
+        cookies[k] = v
 
     return create_context(descriptor, namespace, path, request_body, query, path_values, headers, cookies)
 

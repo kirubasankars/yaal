@@ -1,3 +1,3 @@
---($header.Connection)--
+--($header, $header.host string)--
 
-SELECT {{$header.Connection}} as json
+SELECT {{$header}}::json as json, {{$header.host}} as host
