@@ -16,22 +16,22 @@ class FakeExecutionContext:
 
     def execute(self, trunk, input_shape, helper):
         if trunk["content"] == "error":
-            return [{"$http_status_code": 400, "$type": "$error", "message": "message1"},
-                    {"$type": "$error", "message": "message2", '$http_status_code': 400}], 0
+            return [{"$http_status_code": 400, "$type": "error", "message": "message1"},
+                    {"$type": "error", "message": "message2", '$http_status_code': 400}], 0
 
         if trunk["content"] == "cookie":
-            return [{"$type": "$cookie", "name": "name1", "value": "value"},
-                    {"$type": "$cookie", "name": "name2", "value": "value"}], 0
+            return [{"$type": "cookie", "name": "name1", "value": "value"},
+                    {"$type": "cookie", "name": "name2", "value": "value"}], 0
 
         if trunk["content"] == "header":
-            return [{"$type": "$header", "name": "name1", "value": "value"},
-                    {"$type": "$header", "name": "name2", "value": "value"}], 0
+            return [{"$type": "header", "name": "name1", "value": "value"},
+                    {"$type": "header", "name": "name2", "value": "value"}], 0
 
         if trunk["content"] == "params":
-            return [{"$type": "$params", "a": "1", "b": "2"}], 1
+            return [{"$type": "params", "a": "1", "b": "2"}], 1
 
         if trunk["content"] == "break":
-            return [{"$type": "$break", "a": "1", "b": "2"}], 1
+            return [{"$type": "break", "a": "1", "b": "2"}], 1
 
 
 class TestGravity(unittest.TestCase):
@@ -62,8 +62,8 @@ class TestGravity(unittest.TestCase):
 
         rs, errors = _execute_leafs(trunk, p, ctx, None)
 
-        self.assertListEqual(errors, [{"$type": "$error", "message": "message1", '$http_status_code': 400},
-                                      {"$type": "$error", "message": "message2", '$http_status_code': 400}])
+        self.assertListEqual(errors, [{"$type": "error", "message": "message1", '$http_status_code': 400},
+                                      {"$type": "error", "message": "message2", '$http_status_code': 400}])
         self.assertEqual(ctx.get_prop("$response.status_code"), 400)
 
     def test_trunk_with_cookie(self):
@@ -87,8 +87,8 @@ class TestGravity(unittest.TestCase):
         _execute_leafs(trunk, p, ctx, None)
 
         self.assertDictEqual(ctx.get_prop("$response.$cookie").get_data(),
-                             {'name1': {"$type": '$cookie', 'name': 'name1', 'value': 'value'},
-                              'name2': {"$type": '$cookie', 'name': 'name2', 'value': 'value'}})
+                             {'name1': {"$type": 'cookie', 'name': 'name1', 'value': 'value'},
+                              'name2': {"$type": 'cookie', 'name': 'name2', 'value': 'value'}})
 
     def test_trunk_with_header(self):
         trunk = {
@@ -111,8 +111,8 @@ class TestGravity(unittest.TestCase):
         _execute_leafs(trunk, p, ctx, None)
 
         self.assertDictEqual(ctx.get_prop("$response.$header").get_data(),
-                             {'name1': {"$type": '$header', 'name': 'name1', 'value': 'value'},
-                              'name2': {"$type": '$header', 'name': 'name2', 'value': 'value'}})
+                             {'name1': {"$type": 'header', 'name': 'name1', 'value': 'value'},
+                              'name2': {"$type": 'header', 'name': 'name2', 'value': 'value'}})
 
     def test_trunk_with_params(self):
         trunk = {
@@ -136,7 +136,7 @@ class TestGravity(unittest.TestCase):
 
         d = ctx.get_prop("$params").get_data()
         self.assertDictEqual(d, {"$last_inserted_id": 1, "namespace": 'namespace', "path": "path",
-                                 "$type": '$params', 'a': '1', 'b': '2'})
+                                 "$type": 'params', 'a': '1', 'b': '2'})
 
     def test_trunk_with_break(self):
         trunk = {
