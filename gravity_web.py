@@ -1,6 +1,6 @@
 import os
 from flask import Flask, request, abort, send_from_directory
-from gravity import get_namespace, create_context, get_descriptor_json
+from gravity import get_app, create_context, get_descriptor_json
 
 app = Flask(__name__)
 root_path = "serve"
@@ -20,8 +20,7 @@ def serve_app(namespace, path):
 @app.route("/_<namespace>/api/", methods=["GET"], defaults={"path": ""})
 @app.route("/_<namespace>/api/<path:path>", methods=["GET", "POST", "PUT", "DELETE"])
 def namespace_serve_api(namespace, path):
-
-    g = get_namespace(namespace, root_path, True)
+    g = get_app(namespace, root_path, False)
     
     method = request.method.lower()
     descriptor_path, route_path, path_values = g.get_descriptor_path_by_route(path)    

@@ -182,7 +182,7 @@ def _build_trunk_map_by_files(name_list):
     return trunk_map
 
 
-def _build_branch(branch, is_trunk, map_by_files, content_reader, payload, output_model: dict, connections):
+def _build_branch(branch, is_trunk, map_by_files, content_reader, payload, output_model, connections):
     _properties_str, _type_str, _partition_by_str = "properties", "type", "partition_by"
     _output_type_str, _use_parent_rows_str = "output_type", "use_parent_rows"
     _parameters_str, _leafs_str, _parent_rows_str = "parameters", "leafs", "parent_rows"
@@ -194,7 +194,7 @@ def _build_branch(branch, is_trunk, map_by_files, content_reader, payload, outpu
     if payload is None:
         payload = {
             "type": "object",
-            _properties_str: {}
+            "properties": {}
         }
     if _properties_str not in payload:
         payload[_properties_str] = {}
@@ -257,19 +257,19 @@ def _build_branch(branch, is_trunk, map_by_files, content_reader, payload, outpu
     if _leafs_str not in branch:
         branch[_leafs_str] = None
 
-    l_branch_map = _to_lower_keys_deep(branch_map)
+    lower_branch_map = _to_lower_keys(branch_map)
     for k in map_by_files:
-        if k not in l_branch_map:
+        if k not in lower_branch_map:
             branch_map[k] = map_by_files[k]
 
     branches = []
     for branch_name in branch_map:
 
         sub_branch_map = branch_map[branch_name]
-        branch_method_name = ".".join([method, branch_name])
+        branch_method_name = ".".join([method, branch_name]).lower()
         sub_branch = {
             "name": branch_name,
-            "method": branch_method_name.lower(),
+            "method": branch_method_name,
             "path": path
         }
 
@@ -279,7 +279,7 @@ def _build_branch(branch, is_trunk, map_by_files, content_reader, payload, outpu
         if branch_name not in input_properties:
             input_properties[branch_name] = {
                 "type": "object",
-                _properties_str: {}
+                "properties": {}
             }
         branch_payload = input_properties[branch_name]
 
@@ -677,16 +677,16 @@ def get_descriptor_json(descriptor):
     return json.dumps(d)
 
 
-namespaces = {}
+apps = {}
 
 
-def get_namespace(name, root_path, debug):
-    if not debug and name in namespaces:
-        return namespaces[name]
+def get_app(name, root_path, debug):
+    if not debug and name in apps:
+        return apps[name]
     else:
         root_path = path_join(*[root_path, name])
-        namespaces[name] = Gravity(root_path, None, debug)
-        return namespaces[name]
+        apps[name] = Gravity(root_path, None, debug)
+        return apps[name]
 
 
 def create_context(descriptor, namespace, path, payload, query, path_values, header, cookie):
