@@ -1,3 +1,3 @@
---($header, $header.host string)--
+--($query json)--
 
-SELECT {{$header}}::json as json, {{$header.host}} as host
+select {{$query}} as query

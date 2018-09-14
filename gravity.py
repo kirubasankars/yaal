@@ -151,7 +151,7 @@ def _order_list_by_dots(names):
         while True:
             try:
                 idx = dots.index(el)
-                ordered.append(names[idx])
+                ordered.append(names[idx].lower())
                 del names[idx]
                 del dots[idx]
             except:
@@ -257,8 +257,9 @@ def _build_branch(branch, is_trunk, map_by_files, content_reader, payload, outpu
     if _leafs_str not in branch:
         branch[_leafs_str] = None
 
+    l_branch_map = _to_lower_keys_deep(branch_map)
     for k in map_by_files:
-        if k not in branch_map:
+        if k not in l_branch_map:
             branch_map[k] = map_by_files[k]
 
     branches = []
@@ -268,7 +269,7 @@ def _build_branch(branch, is_trunk, map_by_files, content_reader, payload, outpu
         branch_method_name = ".".join([method, branch_name])
         sub_branch = {
             "name": branch_name,
-            "method": branch_method_name,
+            "method": branch_method_name.lower(),
             "path": path
         }
 
@@ -499,10 +500,10 @@ def _execute_branch(branch, data_providers, context, parent_rows, parent_partiti
             branches = branch["branches"]
             if branches:
                 for branch_descriptor in branches:
-                    branch_name = branch_descriptor["name"].lower()
+                    branch_name = branch_descriptor["name"]
                     sub_node_shape = None
                     if context is not None:
-                        sub_node_shape = context.get_prop(branch_name)
+                        sub_node_shape = context.get_prop(branch_name.lower())
 
                     sub_node_output, errors = _execute_branch(branch_descriptor, data_providers, sub_node_shape, output,
                                                               output_partition_by)
@@ -804,7 +805,10 @@ class Shape:
         self._object = False
 
         self._readonly = readonly
-        self._data = data or {}
+        if data:
+            self._data = data
+        else:
+            self._data = {}
         self._o_data = data
         self._parent = parent_shape
         self._schema = schema
@@ -833,9 +837,6 @@ class Shape:
                 if data is not None:
                     if type(data) != list:
                         raise TypeError("input expected as array. object is given.")
-                    else:
-                        if readonly:
-                            self._data = _to_lower_keys(data)
             else:
                 self._object = True
                 if data is not None:
@@ -973,8 +974,6 @@ class Shape:
         return errors
 
     def get_data(self):
-        if self._readonly:
-            return self._o_data
         return self._data
 
     def check_and_cast(self, prop, value):
