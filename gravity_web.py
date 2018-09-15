@@ -1,29 +1,33 @@
 import os
 from flask import Flask, request, abort, send_from_directory
-from gravity import get_app, create_context, get_descriptor_json
+from gravity import Gravity, get_descriptor_json
+from gravity_flask import create_gravity_context, create_flask_response
 
 app = Flask(__name__)
+
 root_path = "serve"
+g = Gravity(root_path, None, False)
+g.setup_data_provider("postgresql://postgres:admin@localhost/dvdrental")
+
 path_join = os.path.join
 
 
-@app.route("/_<namespace>/", methods=["GET"], defaults={"path": ""})
-@app.route("/_<namespace>/<path:path>", methods=["GET"])
-def serve_app(namespace, path):
-    static_file_dir = os.path.join(root_path, namespace, "app")
+@app.route("/", methods=["GET"], defaults={"path": ""})
+@app.route("/<path:path>", methods=["GET"])
+def serve_app(path):
+    static_file_dir = os.path.join(root_path, "app")
     if not os.path.isfile(os.path.join(static_file_dir, path)):
         path = os.path.join(path, "index.html")
  
     return send_from_directory(static_file_dir, path)
 
 
-@app.route("/_<namespace>/api/", methods=["GET"], defaults={"path": ""})
-@app.route("/_<namespace>/api/<path:path>", methods=["GET", "POST", "PUT", "DELETE"])
-def namespace_serve_api(namespace, path):
-    g = get_app(namespace, root_path, False)
-    
+@app.route("/api/", methods=["GET"], defaults={"path": ""})
+@app.route("/api/<path:path>", methods=["GET", "POST", "PUT", "DELETE"])
+def namespace_serve_api(path):
+
     method = request.method.lower()
-    descriptor_path, route_path, path_values = g.get_descriptor_path_by_route(path)    
+    descriptor_path, route_path, path_values = g.get_descriptor_path_by_route(path)
     descriptor = g.get_descriptor(path_join(*[route_path, method]), path_join(*[descriptor_path, method]))
     
     if not descriptor:
@@ -32,61 +36,10 @@ def namespace_serve_api(namespace, path):
     if "debug" in request.args:        
         return get_descriptor_json(descriptor)
 
-    ctx = create_gravity_context(request, path_values, namespace, path, descriptor)
+    ctx = create_gravity_context(request, path_values, "", path, descriptor)
     rs = g.get_result_json(descriptor, ctx)
-    
-    r = ctx.get_prop("$response")
-    header = r.get_prop("$header")
-    cookie = r.get_prop("$cookie")
 
-    resp = app.response_class(rs, content_type="application/json", status=r.get_prop("status_code"))
-
-    d = header.get_data()
-    for k, v in d.items():
-        resp.headers[k] = v["value"]
-    
-    d = cookie.get_data()
-    for k, v in d.items():
-        if "expires" in v:
-            expires = v["expires"]
-        else:
-            expires = None
-        if "path" in v:
-            p = v["path"]
-        else:
-            p = None
-        resp.set_cookie(k, v["value"], expires=expires, path=p)
-    
-    return resp
-
-
-def create_gravity_context(req, path_values, namespace, path, descriptor):
-    if req.mimetype == "application/json":
-        try:
-            request_body = req.get_json()
-        except Exception:
-            request_body = None
-    else:
-        request_body = None
-
-    if req.mimetype == "multipart/form-data":
-        request_body = request_body or {}
-        for k, v in req.form.items():
-            request_body[k.lower()] = v
-
-    query = {}
-    for k, v in req.args.items():
-        query[k] = v
-
-    headers = {}
-    for k, v in req.headers.items():
-        headers[k] = v
-
-    cookies = {}
-    for k, v in req.cookies.items():
-        cookies[k] = v
-
-    return create_context(descriptor, namespace, path, request_body, query, path_values, headers, cookies)
+    return create_flask_response(app, ctx, rs)
 
 
 if __name__ == "__main__":
