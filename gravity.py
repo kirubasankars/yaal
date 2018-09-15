@@ -4,7 +4,9 @@ import json
 import os
 import re
 import sqlite3
+import urllib
 from collections import defaultdict
+
 
 import yaml
 from jsonschema import FormatChecker, Draft4Validator
@@ -41,7 +43,7 @@ def _to_lower_keys_deep(obj):
     return obj
 
 
-def _build_leafs(branch, content, connections_used):
+def _build_leafs(branch, content):
     if content is None or content == '':
         return
 
@@ -76,7 +78,6 @@ def _build_leafs(branch, content, connections_used):
 
     leafs = []
     content = ""
-    connection = None
 
     for idx, line in enumerate(lines):
         if idx == 0 and parameters_first_line_m is not None:
@@ -88,15 +89,8 @@ def _build_leafs(branch, content, connections_used):
                 leaf = {
                     "content": content
                 }
-                if connection:
-                    leaf["connection"] = connection
-
                 _build_leaf_parameters(leaf, branch)
                 leafs.append(leaf)
-
-            connection = query_match.groups(0)[0].lstrip().rstrip()
-            if connection == "":
-                connection = None
 
             content = ""
         else:
@@ -106,9 +100,6 @@ def _build_leafs(branch, content, connections_used):
         leaf = {
             "content": content
         }
-        if connection:
-            leaf["connection"] = connection
-            connections_used.append(connection)
         _build_leaf_parameters(leaf, branch)
         leafs.append(leaf)
 
@@ -182,7 +173,7 @@ def _build_trunk_map_by_files(name_list):
     return trunk_map
 
 
-def _build_branch(branch, is_trunk, map_by_files, content_reader, payload, output_model, connections):
+def _build_branch(branch, is_trunk, map_by_files, content_reader, payload, output_model):
     _properties_str, _type_str, _partition_by_str = "properties", "type", "partition_by"
     _output_type_str, _use_parent_rows_str = "output_type", "use_parent_rows"
     _parameters_str, _leafs_str, _parent_rows_str = "parameters", "leafs", "parent_rows"
@@ -207,15 +198,6 @@ def _build_branch(branch, is_trunk, map_by_files, content_reader, payload, outpu
 
     if is_trunk:
         branch["output_model"] = output_model or {_type_str: "array", _properties_str: {}}
-
-        before_descriptor = {
-            "path": "api",
-            "method": "$"
-        }
-        _build_branch(before_descriptor, False, {}, content_reader, None, None, connections)
-
-        if _leafs_str in before_descriptor and before_descriptor[_leafs_str]:
-            branch["before"] = before_descriptor
 
     output_properties = None
     if output_model is not None:
@@ -249,7 +231,7 @@ def _build_branch(branch, is_trunk, map_by_files, content_reader, payload, outpu
         branch[_use_parent_rows_str] = False
         branch[_partition_by_str] = None
 
-    _build_leafs(branch, content, connections)
+    _build_leafs(branch, content)
 
     if _parameters_str not in branch:
         branch[_parameters_str] = None
@@ -287,8 +269,8 @@ def _build_branch(branch, is_trunk, map_by_files, content_reader, payload, outpu
             if branch_name in output_properties:
                 branch_output_model = output_properties[branch_name]
 
-        _build_branch(sub_branch, False, sub_branch_map, content_reader, branch_payload, branch_output_model,
-                      connections)
+        _build_branch(sub_branch, False, sub_branch_map, content_reader, branch_payload, branch_output_model)
+
         branches.append(sub_branch)
 
     if len(branches) != 0:
@@ -388,9 +370,7 @@ def create_trunk(path, content_reader):
     else:
         parameter_cookie_validator = None
 
-    connections = []
-    _build_branch(trunk, True, trunk_map["$"], content_reader, payload_model, output_model, connections)
-    trunk["connections"] = list(set(connections))
+    _build_branch(trunk, True, trunk_map["$"], content_reader, payload_model, output_model)
 
     validators = {
         "query": parameter_query_validator,
@@ -404,27 +384,17 @@ def create_trunk(path, content_reader):
     return trunk
 
 
-def _execute_leafs(branch, data_providers, context, data_provider_helper):
+def _execute_leafs(branch, data_provider, context, data_provider_helper):
     errors = []
 
-    leafs, data_provider = branch["leafs"], data_providers["db"]
+    leafs = branch["leafs"]
     type_str = "$type"
-    params_str, header_str, cookie_str, error_str, break_str, json_str = "params", "header", "cookie", "error",\
-                                                                         "break", "json"
+    params_str, header_str, cookie_str, error_str, break_str, json_str = "params", "header", "cookie", "error", "break", "json"
 
     rs = []
     if leafs is not None:
         for leaf in leafs:
-            if "connection" in leaf:
-                connection = leaf["connection"]
-                if connection in data_providers:
-                    output, output_last_inserted_id = data_providers[connection].execute(leaf, context,
-                                                                                         data_provider_helper)
-                else:
-                    raise Exception("connection string " + connection + " missing")
-            else:
-                output, output_last_inserted_id = data_provider.execute(leaf, context, data_provider_helper)
-
+            output, output_last_inserted_id = data_provider.execute(leaf, context, data_provider_helper)
             context.get_prop("$params").set_prop("$last_inserted_id", output_last_inserted_id)
 
             if len(output) >= 1:
@@ -461,34 +431,28 @@ def _execute_leafs(branch, data_providers, context, data_provider_helper):
     return rs, None
 
 
-def _execute_branch(branch, data_providers, context, parent_rows, parent_partition_by):
+def _execute_branch(branch, data_provider, context, parent_rows, parent_partition_by):
     input_type, output_partition_by = branch["input_type"], branch["partition_by"]
-    use_parent_rows, default_data_provider = branch["use_parent_rows"], data_providers["db"]
+    use_parent_rows = branch["use_parent_rows"]
     output = []
     data_provider_helper = DataProviderHelper()
     truck = ("trunk" in branch)
 
     try:
         if truck:
-            for name, pro in data_providers.items():
-                pro.begin()
-
-            if "before" in branch:
-                rs, errors = _execute_branch(branch["before"], data_providers, context, [], output_partition_by)
-                if errors:
-                    return None, errors
+            data_provider.begin()
 
         if input_type == "array":
             length = int(context.get_prop("$length"))
             for i in range(0, length):
                 item_ctx = context.get_prop("@" + str(i))
-                rs, errors = _execute_leafs(branch, data_providers, item_ctx, data_provider_helper)
+                rs, errors = _execute_leafs(branch, data_provider, item_ctx, data_provider_helper)
                 output.extend(rs)
                 if errors:
                     return None, errors
 
         elif input_type == "object":
-            output, errors = _execute_leafs(branch, data_providers, context, data_provider_helper)
+            output, errors = _execute_leafs(branch, data_provider, context, data_provider_helper)
             if errors:
                 return None, errors
             if use_parent_rows and parent_partition_by is None:
@@ -505,7 +469,7 @@ def _execute_branch(branch, data_providers, context, parent_rows, parent_partiti
                     if context is not None:
                         sub_node_shape = context.get_prop(branch_name.lower())
 
-                    sub_node_output, errors = _execute_branch(branch_descriptor, data_providers, sub_node_shape, output,
+                    sub_node_output, errors = _execute_branch(branch_descriptor, data_provider, sub_node_shape, output,
                                                               output_partition_by)
                     if errors:
                         return None, errors
@@ -537,28 +501,11 @@ def _execute_branch(branch, data_providers, context, parent_rows, parent_partiti
 
     except Exception as e:
         if truck:
-            default_data_provider.error()
-
-            for name, pro in data_providers.items():
-                try:
-                    if name != "db":
-                        pro.error()
-                finally:
-                    pass
+            data_provider.error()
         raise e
     finally:
         if truck:
-            default_data_provider.end()
-            error = None
-            for name, pro in data_providers.items():
-                try:
-                    if name != "db":
-                        pro.end()
-                except Exception as e:
-                    error = e
-
-            if error:
-                raise error
+            data_provider.end()
 
     return output, None
 
@@ -639,14 +586,9 @@ def get_result(trunk, get_data_provider, ctx):
         return {"errors": errors}
 
     try:
+        data_provider = get_data_provider()
 
-        data_providers = {
-            "db": get_data_provider("db")
-        }
-        for c in trunk["connections"]:
-            data_providers[c] = get_data_provider(c)
-
-        rs, errors = _execute_branch(trunk, data_providers, ctx, [], None)
+        rs, errors = _execute_branch(trunk, data_provider, ctx, [], None)
 
         if errors:
             status_code = ctx.get_prop(status_code_str)
@@ -677,19 +619,7 @@ def get_descriptor_json(descriptor):
     return json.dumps(d)
 
 
-apps = {}
-
-
-def get_app(name, root_path, debug):
-    if not debug and name in apps:
-        return apps[name]
-    else:
-        root_path = path_join(*[root_path, name])
-        apps[name] = Gravity(root_path, None, debug)
-        return apps[name]
-
-
-def create_context(descriptor, namespace, path, payload, query, path_values, header, cookie):
+def create_context(descriptor, app, path, payload, query, path_values, header, cookie):
     validators = descriptor["_validators"]
 
     parameters_model_str = "parameters_model"
@@ -770,7 +700,7 @@ def create_context(descriptor, namespace, path, payload, query, path_values, hea
     response_shape = Shape({}, None, False, None, response_extras, None)
 
     params = {
-        "namespace": namespace,
+        "app": app,
         "path": path
     }
     params_shape = Shape({}, params, False, None, None, None)
@@ -796,6 +726,44 @@ def _build_routes(routes):
             p = "^" + re.sub(r"<(.*?)>", r"(?P<\1>[^/]+)", path) + "/?$"
             _routes.append({"route": re.compile(p), "descriptor": r["descriptor"], "path": path})
         return _routes
+
+
+def _parse_rfc1738_args(name):
+    pattern = re.compile(r'''
+            (?P<name>[\w\+]+)://
+            (?:
+                (?P<username>[^:/]*)
+                (?::(?P<password>[^/]*))?
+            @)?
+            (?:
+                (?P<host>[^/:]*)
+                (?::(?P<port>[^/]*))?
+            )?
+            (?:/(?P<database>.*))?
+            '''
+                         , re.X)
+
+    m = pattern.match(name)
+    if m is not None:
+        components = m.groupdict()
+        if components['database'] is not None:
+            tokens = components['database'].split('?', 2)
+            components['database'] = tokens[0]
+            query = (len(tokens) > 1 and dict(urllib.parse_qsl(tokens[1]))) or None
+            # Py2K
+            if query is not None:
+                query = dict((k.encode('ascii'), query[k]) for k in query)
+            # end Py2K
+        else:
+            query = None
+        components['query'] = query
+
+        if components['password'] is not None:
+            components['password'] = urllib.parse.unquote_plus(components['password'])
+
+        return components.pop('name'), components
+    else:
+        raise Exception("Could not parse rfc1738 URL from string '%s'" % name)
 
 
 class Shape:
@@ -1109,20 +1077,9 @@ class Gravity:
 
     def __init__(self, root_path, content_reader, debug):
         self._root_path = root_path
-        self._debug = debug or False
-
         self._descriptors = {}
-
-        self._data_providers = {
-            "db": PostgresContextManager({
-                "root_path": root_path,
-                "db_name": "dvdrental"
-            }),
-            "sqlite3": SQLiteContextManager({
-                "root_path": root_path,
-                "db_name": "sqlite3.db"
-            })
-        }
+        self._data_provider = None
+        self._debug = debug
 
         if content_reader is None:
             self._content_reader = FileContentReader(self._root_path)
@@ -1131,18 +1088,23 @@ class Gravity:
 
         self._routes = _build_routes(self._content_reader.get_routes_config("api/routes"))
 
-    def get_data_provider(self, name):
-        if name in self._data_providers:
-            return self._data_providers[name].get_context()
-        else:
-            return None
+    def setup_data_provider(self, database_uri):
+        provider_name, options = _parse_rfc1738_args(database_uri)
+        if provider_name == "postgresql":
+            self._data_provider = PostgresContextManager(options)
+        elif provider_name == "sqlite3":
+            self._data_provider = SQLiteContextManager(options)
+        return None
+
+    def get_data_provider(self):
+        return self._data_provider.get_context()
 
     def create_descriptor(self, path):
         return create_trunk(path, self._content_reader)
 
     def get_descriptor(self, route, path):
         k = path_join(*[route])
-        if self._debug == False and k in self._descriptors:
+        if not self._debug and k in self._descriptors:
             return self._descriptors[k]
 
         descriptor = self.create_descriptor(path)
@@ -1176,7 +1138,9 @@ class SQLiteContextManager:
 class SQLiteDataProvider:
 
     def __init__(self, options):
-        self._db_path = options["root_path"] + "/db/" + options["db_name"]
+        self._database = options["database"]
+        if self._database == "":
+            self._database = ":memory:"
         self._con = None
 
     @staticmethod
@@ -1187,7 +1151,7 @@ class SQLiteDataProvider:
         return d
 
     def begin(self):
-        self._con = sqlite3.connect(self._db_path)
+        self._con = sqlite3.connect(self._database)
         self._con.row_factory = self._sqlite_dict_factory
 
     def end(self):
@@ -1201,9 +1165,10 @@ class SQLiteDataProvider:
             self._con = None
 
     def error(self):
-        self._con.rollback()
-        self._con.close()
-        self._con = None
+        if self._con:
+            self._con.rollback()
+            self._con.close()
+            self._con = None
 
     def get_value(self, ptype, value):
         if ptype == "blob":
