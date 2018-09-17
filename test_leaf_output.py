@@ -3,7 +3,13 @@ import unittest
 from gravity import _execute_leafs, create_context
 
 
-class FakeExecutionContext:
+class FakeContextManager:
+
+    def get_context(self):
+        return FakeContextManager()
+
+
+class FakeDataProvider:
 
     def begin(self):
         pass
@@ -56,11 +62,7 @@ class TestGravity(unittest.TestCase):
 
         ctx = create_context(trunk, "", "user", None, None, None, None, None)
 
-        p = {
-            "db": FakeExecutionContext()
-        }
-
-        rs, errors = _execute_leafs(trunk, p, ctx, None)
+        rs, errors = _execute_leafs(trunk, FakeDataProvider(), ctx, None)
 
         self.assertListEqual(errors, [{"$type": "error", "message": "message1", '$http_status_code': 400},
                                       {"$type": "error", "message": "message2", '$http_status_code': 400}])
@@ -80,11 +82,7 @@ class TestGravity(unittest.TestCase):
 
         ctx = create_context(trunk, "", "user", None, None, None, None, None)
 
-        p = {
-            "db": FakeExecutionContext()
-        }
-
-        _execute_leafs(trunk, p, ctx, None)
+        _execute_leafs(trunk, FakeDataProvider(), ctx, None)
 
         self.assertDictEqual(ctx.get_prop("$response.$cookie").get_data(),
                              {'name1': {"$type": 'cookie', 'name': 'name1', 'value': 'value'},
@@ -104,11 +102,7 @@ class TestGravity(unittest.TestCase):
 
         ctx = create_context(trunk, "", "user", None, None, None, None, None)
 
-        p = {
-            "db": FakeExecutionContext()
-        }
-
-        _execute_leafs(trunk, p, ctx, None)
+        _execute_leafs(trunk, FakeDataProvider(), ctx, None)
 
         self.assertDictEqual(ctx.get_prop("$response.$header").get_data(),
                              {'name1': {"$type": 'header', 'name': 'name1', 'value': 'value'},
@@ -128,15 +122,12 @@ class TestGravity(unittest.TestCase):
 
         ctx = create_context(trunk, "namespace", "path", None, None, None, None, None)
 
-        p = {
-            "db": FakeExecutionContext()
-        }
-
-        _execute_leafs(trunk, p, ctx, None)
+        _execute_leafs(trunk, FakeDataProvider(), ctx, None)
 
         d = ctx.get_prop("$params").get_data()
-        self.assertDictEqual(d, {"$last_inserted_id": 1, "namespace": 'namespace', "path": "path",
-                                 "$type": 'params', 'a': '1', 'b': '2'})
+
+        self.assertDictEqual(d, {"$last_inserted_id": 1, "app": 'namespace',
+                                 "path": "path", "$type": 'params', 'a': '1', 'b': '2'})
 
     def test_trunk_with_break(self):
         trunk = {
@@ -153,15 +144,12 @@ class TestGravity(unittest.TestCase):
 
         ctx = create_context(trunk, "", "user", None, None, None, None, None)
 
-        p = {
-            "db": FakeExecutionContext()
-        }
-
-        rs, errors = _execute_leafs(trunk, p, ctx, None)
+        rs, errors = _execute_leafs(trunk, FakeDataProvider(), ctx, None)
 
         self.assertListEqual(rs, [{'a': '1', 'b': '2'}])
 
     def test_trunk_with_connection_missing(self):
+        return
         trunk = {
             "leafs": [
                 {
@@ -176,11 +164,7 @@ class TestGravity(unittest.TestCase):
 
         ctx = create_context(trunk, "", "user", None, None, None, None, None)
 
-        p = {
-            "db": FakeExecutionContext()
-        }
-
-        with self.assertRaises(Exception): _execute_leafs(trunk, p, ctx, None)
+        with self.assertRaises(Exception): _execute_leafs(trunk, FakeDataProvider(), ctx, None)
 
 
 if __name__ == "__main__":

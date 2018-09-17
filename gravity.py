@@ -5,13 +5,17 @@ import os
 import re
 import sqlite3
 import urllib
+# import logging
 from collections import defaultdict
-
 
 import yaml
 from jsonschema import FormatChecker, Draft4Validator
-
 from gravity_postgres import PostgresContextManager
+
+# logger = logging.getLogger("gravity")
+# logger.setLevel(logging.DEBUG)
+# stream_handler = logging.StreamHandler
+# logger.addHandler(stream_handler)
 
 parameters_meta_rx = re.compile(r"--\((.*)\)--")
 parameter_meta_rx = re.compile(r"\s*(?P<name>[A-Za-z0-9_.$-]+)(\s+(?P<type>\w+))?\s*")
@@ -577,7 +581,7 @@ def _output_mapper(output_type, output_modal, branches, result):
     return mapped_result
 
 
-def get_result(trunk, get_data_provider, ctx):
+def get_result(descriptor, get_data_provider, ctx):
     errors = ctx.get_prop("$request").validate()
 
     status_code_str = "$response.status_code"
@@ -588,7 +592,7 @@ def get_result(trunk, get_data_provider, ctx):
     try:
         data_provider = get_data_provider()
 
-        rs, errors = _execute_branch(trunk, data_provider, ctx, [], None)
+        rs, errors = _execute_branch(descriptor, data_provider, ctx, [], None)
 
         if errors:
             status_code = ctx.get_prop(status_code_str)
@@ -596,7 +600,7 @@ def get_result(trunk, get_data_provider, ctx):
                 ctx.set_prop(status_code_str, 400)
             return {"errors": errors}
 
-        rs = _output_mapper(trunk["output_type"], trunk["output_model"], trunk["branches"], rs)
+        rs = _output_mapper(descriptor["output_type"], descriptor["output_model"], descriptor["branches"], rs)
         ctx.set_prop(status_code_str, 200)
 
         return rs
@@ -619,7 +623,7 @@ def get_descriptor_json(descriptor):
     return json.dumps(d)
 
 
-def create_context(descriptor, app, path, payload, query, path_values, header, cookie):
+def create_context(descriptor, app, path, payload=None, query=None, path_values=None, header=None, cookie=None):
     validators = descriptor["_validators"]
 
     parameters_model_str = "parameters_model"
@@ -1122,8 +1126,8 @@ class Gravity:
                     return r["descriptor"], r["path"], path_values
         return path, path, None
 
-    def get_result_json(self, trunk, context):
-        return get_result_json(trunk, self.get_data_provider, context)
+    def get_result_json(self, descriptor, context):
+        return get_result_json(descriptor, self.get_data_provider, context)
 
 
 class SQLiteContextManager:
