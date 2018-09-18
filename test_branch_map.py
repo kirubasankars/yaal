@@ -1,6 +1,6 @@
 import unittest
 
-from gravity import _build_trunk_map_by_files, _order_list_by_dots
+from yaal import _build_trunk_map_by_files, _order_list_by_dots
 
 
 class TestBranchMap(unittest.TestCase):

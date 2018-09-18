@@ -1,6 +1,6 @@
 import unittest
 
-from gravity import _execute_leafs, create_context
+from yaal import _execute_leafs, create_context
 
 
 class FakeContextManager:
@@ -20,23 +20,23 @@ class FakeDataProvider:
     def error(self):
         pass
 
-    def execute(self, trunk, input_shape, helper):
-        if trunk["content"] == "error":
+    def execute(self, leaf, input_shape, helper):
+        if leaf["content"] == "error":
             return [{"$http_status_code": 400, "$type": "error", "message": "message1"},
                     {"$type": "error", "message": "message2", '$http_status_code': 400}], 0
 
-        if trunk["content"] == "cookie":
+        if leaf["content"] == "cookie":
             return [{"$type": "cookie", "name": "name1", "value": "value"},
                     {"$type": "cookie", "name": "name2", "value": "value"}], 0
 
-        if trunk["content"] == "header":
+        if leaf["content"] == "header":
             return [{"$type": "header", "name": "name1", "value": "value"},
                     {"$type": "header", "name": "name2", "value": "value"}], 0
 
-        if trunk["content"] == "params":
+        if leaf["content"] == "params":
             return [{"$type": "params", "a": "1", "b": "2"}], 1
 
-        if trunk["content"] == "break":
+        if leaf["content"] == "break":
             return [{"$type": "break", "a": "1", "b": "2"}], 1
 
 
@@ -49,7 +49,7 @@ class TestGravity(unittest.TestCase):
         pass
 
     def test_trunk_with_error(self):
-        trunk = {
+        descriptor = {
             "leafs": [
                 {
                     "content": "error"
@@ -60,16 +60,16 @@ class TestGravity(unittest.TestCase):
             "_validators": None
         }
 
-        ctx = create_context(trunk, "", "user", None, None, None, None, None)
+        ctx = create_context(descriptor, "", "user", None, None, None, None, None)
 
-        rs, errors = _execute_leafs(trunk, FakeDataProvider(), ctx, None)
+        rs, errors = _execute_leafs(descriptor, FakeDataProvider(), ctx, None)
 
         self.assertListEqual(errors, [{"$type": "error", "message": "message1", '$http_status_code': 400},
                                       {"$type": "error", "message": "message2", '$http_status_code': 400}])
         self.assertEqual(ctx.get_prop("$response.status_code"), 400)
 
     def test_trunk_with_cookie(self):
-        trunk = {
+        descriptor = {
             "leafs": [
                 {
                     "content": "cookie"
@@ -80,16 +80,16 @@ class TestGravity(unittest.TestCase):
             "_validators": None
         }
 
-        ctx = create_context(trunk, "", "user", None, None, None, None, None)
+        ctx = create_context(descriptor, "", "user", None, None, None, None, None)
 
-        _execute_leafs(trunk, FakeDataProvider(), ctx, None)
+        _execute_leafs(descriptor, FakeDataProvider(), ctx, None)
 
         self.assertDictEqual(ctx.get_prop("$response.$cookie").get_data(),
                              {'name1': {"$type": 'cookie', 'name': 'name1', 'value': 'value'},
                               'name2': {"$type": 'cookie', 'name': 'name2', 'value': 'value'}})
 
     def test_trunk_with_header(self):
-        trunk = {
+        descriptor = {
             "leafs": [
                 {
                     "content": "header"
@@ -100,16 +100,16 @@ class TestGravity(unittest.TestCase):
             "_validators": None
         }
 
-        ctx = create_context(trunk, "", "user", None, None, None, None, None)
+        ctx = create_context(descriptor, "", "user", None, None, None, None, None)
 
-        _execute_leafs(trunk, FakeDataProvider(), ctx, None)
+        _execute_leafs(descriptor, FakeDataProvider(), ctx, None)
 
         self.assertDictEqual(ctx.get_prop("$response.$header").get_data(),
                              {'name1': {"$type": 'header', 'name': 'name1', 'value': 'value'},
                               'name2': {"$type": 'header', 'name': 'name2', 'value': 'value'}})
 
     def test_trunk_with_params(self):
-        trunk = {
+        descriptor = {
             "leafs": [
                 {
                     "content": "params"
@@ -120,9 +120,9 @@ class TestGravity(unittest.TestCase):
             "_validators": None
         }
 
-        ctx = create_context(trunk, "namespace", "path", None, None, None, None, None)
+        ctx = create_context(descriptor, "namespace", "path", None, None, None, None, None)
 
-        _execute_leafs(trunk, FakeDataProvider(), ctx, None)
+        _execute_leafs(descriptor, FakeDataProvider(), ctx, None)
 
         d = ctx.get_prop("$params").get_data()
 
@@ -130,7 +130,7 @@ class TestGravity(unittest.TestCase):
                                  "path": "path", "$type": 'params', 'a': '1', 'b': '2'})
 
     def test_trunk_with_break(self):
-        trunk = {
+        descriptor = {
             "leafs": [
                 {
                     "content": "break",
@@ -142,15 +142,14 @@ class TestGravity(unittest.TestCase):
             "_validators": None
         }
 
-        ctx = create_context(trunk, "", "user", None, None, None, None, None)
-
-        rs, errors = _execute_leafs(trunk, FakeDataProvider(), ctx, None)
+        ctx = create_context(descriptor, "", "user", None, None, None, None, None)
+        rs, errors = _execute_leafs(descriptor, FakeDataProvider(), ctx, None)
 
         self.assertListEqual(rs, [{'a': '1', 'b': '2'}])
 
     def test_trunk_with_connection_missing(self):
         return
-        trunk = {
+        descriptor = {
             "leafs": [
                 {
                     "content": "break",
@@ -162,9 +161,9 @@ class TestGravity(unittest.TestCase):
             "_validators": None
         }
 
-        ctx = create_context(trunk, "", "user", None, None, None, None, None)
+        ctx = create_context(descriptor, "", "user", None, None, None, None, None)
 
-        with self.assertRaises(Exception): _execute_leafs(trunk, FakeDataProvider(), ctx, None)
+        with self.assertRaises(Exception): _execute_leafs(descriptor, FakeDataProvider(), ctx, None)
 
 
 if __name__ == "__main__":
