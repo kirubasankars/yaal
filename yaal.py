@@ -439,10 +439,10 @@ def _execute_branch(branch, data_provider, context, parent_rows, parent_partitio
     use_parent_rows = branch["use_parent_rows"]
     output = []
     data_provider_helper = DataProviderHelper()
-    truck = ("trunk" in branch)
+    is_truck = ("trunk" in branch)
 
     try:
-        if truck:
+        if is_truck:
             data_provider.begin()
 
         if input_type == "array":
@@ -458,56 +458,57 @@ def _execute_branch(branch, data_provider, context, parent_rows, parent_partitio
             output, errors = _execute_leafs(branch, data_provider, context, data_provider_helper)
             if errors:
                 return None, errors
-            if use_parent_rows and parent_partition_by is None:
-                raise Exception("parent _partition_by is can't be empty when child wanted to use parent rows")
 
-            if use_parent_rows:
-                output = copy.deepcopy(parent_rows)
+        if use_parent_rows and parent_partition_by is None:
+            raise Exception("parent _partition_by is can't be empty when child wanted to use parent rows")
 
-            branches = branch["branches"]
-            if branches:
-                for branch_descriptor in branches:
-                    branch_name = branch_descriptor["name"]
-                    sub_node_shape = None
-                    if context is not None:
-                        sub_node_shape = context.get_prop(branch_name.lower())
+        if use_parent_rows:
+            output = copy.deepcopy(parent_rows)
 
-                    sub_node_output, errors = _execute_branch(branch_descriptor, data_provider, sub_node_shape, output,
-                                                              output_partition_by)
-                    if errors:
-                        return None, errors
+        branches = branch["branches"]
+        if branches:
+            for branch_descriptor in branches:
+                branch_name = branch_descriptor["name"]
+                sub_node_shape = None
+                if context is not None:
+                    sub_node_shape = context.get_prop(branch_name.lower())
 
-                    if not branch["leafs"] and not output:
-                        output.append({})
+                sub_node_output, errors = _execute_branch(branch_descriptor, data_provider, sub_node_shape, output,
+                                                          output_partition_by)
+                if errors:
+                    return None, errors
 
-                    if output_partition_by is None:
-                        for row in output:
-                            row[branch_name] = sub_node_output
-                    else:
-                        sub_node_groups = defaultdict(list)
-                        for row in sub_node_output:
-                            sub_node_groups[row[output_partition_by]].append(row)
+                if not branch["leafs"] and not output:
+                    output.append({})
 
-                        groups = defaultdict(list)
-                        for row in output:
-                            groups[row[output_partition_by]].append(row)
+                if output_partition_by is None:
+                    for row in output:
+                        row[branch_name] = sub_node_output
+                else:
+                    sub_node_groups = defaultdict(list)
+                    for row in sub_node_output:
+                        sub_node_groups[row[output_partition_by]].append(row)
 
-                        _output = []
-                        for idx, rows in groups.items():
-                            row = rows[0]
-                            partition_by = row[output_partition_by]
-                            row[branch_name] = sub_node_groups[partition_by]
-                            _output.append(row)
-                        output = _output
-            else:
-                pass
+                    groups = defaultdict(list)
+                    for row in output:
+                        groups[row[output_partition_by]].append(row)
+
+                    _output = []
+                    for idx, rows in groups.items():
+                        row = rows[0]
+                        partition_by = row[output_partition_by]
+                        row[branch_name] = sub_node_groups[partition_by]
+                        _output.append(row)
+                    output = _output
+        else:
+            pass
 
     except Exception as e:
-        if truck:
+        if is_truck:
             data_provider.error()
         raise e
     finally:
-        if truck:
+        if is_truck:
             data_provider.end()
 
     return output, None
@@ -832,11 +833,13 @@ class Shape:
             shapes = {}
             if input_properties is not None:
                 for k, v in input_properties.items():
-                    if type(v) == dict and _properties_str in v:
-                        value = None
-                        if k in self._data:
-                            value = self._data.get(k)
-                        shapes[k] = Shape(v, value, readonly, self, extras, None)
+                    if type(v) == dict and _type_str in v:
+                        _type_value = v[_type_str]
+                        if _type_value == "array" or _type_value == "object":
+                            value = None
+                            if k in self._data:
+                                value = self._data.get(k)
+                            shapes[k] = Shape(v, value, readonly, self, extras, None)
 
         self._shapes = shapes
 
