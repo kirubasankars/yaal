@@ -3,7 +3,7 @@ import unittest
 from yaal import _execute_branch, create_context
 
 
-class FakeDataProvider:
+class FakeDataProviderSimple:
 
     def begin(self):
         pass
@@ -18,7 +18,7 @@ class FakeDataProvider:
         return [], 0
 
 
-class FakeDataProvider1:
+class FakeDataProviderDeep:
 
     def begin(self):
         pass
@@ -52,7 +52,7 @@ class FakeDataProviderParentRows:
 
 class TestGravity(unittest.TestCase):
 
-    def test_execute_branch(self):
+    def test_execute_branch_simple(self):
         descriptor = {
             "leafs": [],
             "input_type": "object",
@@ -64,12 +64,12 @@ class TestGravity(unittest.TestCase):
         }
 
         ctx = create_context(descriptor, "app", "path")
-        rs, errors = _execute_branch(descriptor, FakeDataProvider(), ctx, [], None)
+        rs, errors = _execute_branch(descriptor, FakeDataProviderSimple(), ctx, [], None)
 
         self.assertListEqual(rs, [])
         self.assertEqual(errors, None)
 
-    def test_execute_branches(self):
+    def test_execute_branches_deep(self):
         descriptor = {
             "name": "$",
             "method": "$",
@@ -110,12 +110,12 @@ class TestGravity(unittest.TestCase):
         }
 
         ctx = create_context(descriptor, "app", "path", payload={"items": [{}]})
-        rs, errors = _execute_branch(descriptor, FakeDataProvider1(), ctx, [], None)
+        rs, errors = _execute_branch(descriptor, FakeDataProviderDeep(), ctx, [], None)
 
         self.assertListEqual(rs, [{"items": [{'name': 'kiruba'}, {'name': 'sankar'}]}])
         self.assertEqual(errors, None)
 
-    def test_execute_branches1(self):
+    def test_execute_branches_deep2(self):
         descriptor = {
             "name": "$",
             "method": "$",
@@ -158,7 +158,7 @@ class TestGravity(unittest.TestCase):
         }
 
         ctx = create_context(descriptor, "app", "path", payload={"items": [{}, {}]})
-        rs, errors = _execute_branch(descriptor, FakeDataProvider1(), ctx, [], None)
+        rs, errors = _execute_branch(descriptor, FakeDataProviderDeep(), ctx, [], None)
 
         self.assertListEqual(rs, [{'name': 'kiruba',
                                    'items': [{'name': 'kiruba'}, {'name': 'sankar'}, {'name': 'kiruba'},
