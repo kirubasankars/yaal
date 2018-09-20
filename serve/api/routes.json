@@ -1,6 +1,6 @@
 [
     {
-        "route" : "scope/<id1>/<id>",
-        "descriptor" : "scope"
+      "route": "test/<id>",
+      "descriptor": "test"
     }
 ]
