@@ -410,7 +410,14 @@ def _execute_leafs(branch, data_provider, context, data_provider_helper):
                         errors.extend(output)
                         return None, errors
                     elif type_value == json_str:
-                        return [o[json_str] for o in output], None
+                        json_list = []
+                        if type(output0[json_str]) == str:
+                            for o in output:
+                                json_list.append(json.loads(o[json_str]))
+                        else:
+                            json_list.extend([o[json_str] for o in output])
+                        return json_list, None
+
                     elif type_value == break_str:
                         for o in output:
                             del o[type_str]

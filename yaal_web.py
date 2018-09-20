@@ -3,13 +3,19 @@ from flask import Flask, request, abort, send_from_directory
 from yaal import Yaal, get_descriptor_json
 from yaal_flask import create_gravity_context, create_flask_response
 
+path_join = os.path.join
+
 app = Flask(__name__)
 
-root_path = "serve/api"
-g = Yaal(root_path, None, False)
-g.setup_data_provider("postgresql://postgres:admin@localhost/dvdrental")
+root_path = "serve"
+app.config.from_pyfile(path_join(*[root_path, "config.cfg"]))
 
-path_join = os.path.join
+database_url_str = "DATABASE_URL"
+if database_url_str not in app.config:
+    app.config["DATABASE_URL"] = "sqlite3:///"
+
+y = Yaal(path_join(*[root_path, "api"]), None, True)
+y.setup_data_provider(app.config["DATABASE_URL"])
 
 
 @app.route("/", methods=["GET"], defaults={"path": ""})
@@ -18,7 +24,7 @@ def serve_app(path):
     static_file_dir = os.path.join(root_path, "app")
     if not os.path.isfile(os.path.join(static_file_dir, path)):
         path = os.path.join(path, "index.html")
- 
+
     return send_from_directory(static_file_dir, path)
 
 
@@ -27,8 +33,8 @@ def serve_app(path):
 def namespace_serve_api(path):
 
     method = request.method.lower()
-    descriptor_path, route_path, path_values = g.get_descriptor_path_by_route(path)
-    descriptor = g.get_descriptor(path_join(*[route_path, method]), path_join(*[descriptor_path, method]))
+    descriptor_path, route_path, path_values = y.get_descriptor_path_by_route(path)
+    descriptor = y.get_descriptor(path_join(*[route_path, method]), path_join(*[descriptor_path, method]))
     
     if not descriptor:
         return abort(404)   
@@ -37,7 +43,7 @@ def namespace_serve_api(path):
         return get_descriptor_json(descriptor)
 
     ctx = create_gravity_context(request, path_values, "", path, descriptor)
-    rs = g.get_result_json(descriptor, ctx)
+    rs = y.get_result_json(descriptor, ctx)
 
     return create_flask_response(app, ctx, rs)
 
