@@ -5,17 +5,17 @@ import os
 import re
 import sqlite3
 import urllib
-# import logging
+import logging
 from collections import defaultdict
 
 import yaml
 from jsonschema import FormatChecker, Draft4Validator
 from yaal_postgres import PostgresContextManager
 
-# logger = logging.getLogger("yaal")
-# logger.setLevel(logging.DEBUG)
-# stream_handler = logging.StreamHandler
-# logger.addHandler(stream_handler)
+logger = logging.getLogger("yaal")
+logger.setLevel(logging.ERROR)
+stream_handler = logging.StreamHandler
+logger.addHandler(stream_handler)
 
 parameters_meta_rx = re.compile(r"--\((.*)\)--")
 parameter_meta_rx = re.compile(r"\s*(?P<name>[A-Za-z0-9_.$-]+)(\s+(?P<type>\w+))?\s*")
@@ -510,13 +510,13 @@ def _execute_branch(branch, data_provider, context, parent_rows, parent_partitio
         else:
             pass
 
+        if is_truck:
+            data_provider.end()
     except Exception as e:
+        # logger.error(e)
         if is_truck:
             data_provider.error()
         raise e
-    finally:
-        if is_truck:
-            data_provider.end()
 
     return output, None
 
