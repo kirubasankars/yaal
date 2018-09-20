@@ -5,16 +5,15 @@ from yaal_flask import create_gravity_context, create_flask_response
 
 path_join = os.path.join
 
-app = Flask(__name__)
+DATABASE_URL = "sqlite3:///"
+YAAL_DEBUG = False
 
+app = Flask(__name__)
 root_path = "serve"
+app.config.from_object(__name__)
 app.config.from_pyfile(path_join(*[root_path, "config.cfg"]))
 
-database_url_str = "DATABASE_URL"
-if database_url_str not in app.config:
-    app.config["DATABASE_URL"] = "sqlite3:///"
-
-y = Yaal(path_join(*[root_path, "api"]), None, True)
+y = Yaal(path_join(*[root_path, "api"]), None, app.config["YAAL_DEBUG"])
 y.setup_data_provider(app.config["DATABASE_URL"])
 
 
@@ -37,9 +36,9 @@ def namespace_serve_api(path):
     descriptor = y.get_descriptor(path_join(*[route_path, method]), path_join(*[descriptor_path, method]))
     
     if not descriptor:
-        return abort(404)   
+        return abort(404)
 
-    if "debug" in request.args:        
+    if "debug" in request.args and app.config["YAAL_DEBUG"]:
         return get_descriptor_json(descriptor)
 
     ctx = create_gravity_context(request, path_values, "", path, descriptor)

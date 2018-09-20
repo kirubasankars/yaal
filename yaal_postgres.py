@@ -41,6 +41,7 @@ class PostgresDataProvider:
             self._conn.rollback()
             self._conn.close()
             self._pool.putconn(self._conn, close=True)
+            self._conn = None
 
     @staticmethod
     def get_value_converter(param_type, value):
