@@ -1,15 +1,16 @@
 import copy
 import datetime
 import json
+import logging
 import os
 import re
 import sqlite3
 import urllib
-import logging
 from collections import defaultdict
 
 import yaml
 from jsonschema import FormatChecker, Draft4Validator
+
 from yaal_postgres import PostgresContextManager
 
 logger = logging.getLogger("yaal")
@@ -631,7 +632,7 @@ def get_descriptor_json(descriptor):
     return json.dumps(d)
 
 
-def create_context(descriptor, app, path, payload=None, query=None, path_values=None, header=None, cookie=None):
+def create_context(descriptor, payload=None, query=None, path_values=None, header=None, cookie=None):
     validators = descriptor["_validators"]
 
     parameters_model_str = "parameters_model"
@@ -712,8 +713,7 @@ def create_context(descriptor, app, path, payload=None, query=None, path_values=
     response_shape = Shape({}, None, False, None, response_extras, None)
 
     params = {
-        "app": app,
-        "path": path
+        "path": descriptor["path"]
     }
     params_shape = Shape({}, params, False, None, None, None)
 

@@ -54,6 +54,7 @@ class TestGravity(unittest.TestCase):
 
     def test_execute_branch_simple(self):
         descriptor = {
+            "path": "user",
             "leafs": [],
             "input_type": "object",
             "output_type": "array",
@@ -63,7 +64,7 @@ class TestGravity(unittest.TestCase):
             "branches": None
         }
 
-        ctx = create_context(descriptor, "app", "path")
+        ctx = create_context(descriptor)
         rs, errors = _execute_branch(descriptor, FakeDataProviderSimple(), ctx, [], None)
 
         self.assertListEqual(rs, [])
@@ -73,6 +74,7 @@ class TestGravity(unittest.TestCase):
         descriptor = {
             "name": "$",
             "method": "$",
+            "path": "path",
             "leafs": [
 
             ],
@@ -109,7 +111,7 @@ class TestGravity(unittest.TestCase):
             ]
         }
 
-        ctx = create_context(descriptor, "app", "path", payload={"items": [{}]})
+        ctx = create_context(descriptor, payload={"items": [{}]})
         rs, errors = _execute_branch(descriptor, FakeDataProviderDeep(), ctx, [], None)
 
         self.assertListEqual(rs, [{"items": [{'name': 'kiruba'}, {'name': 'sankar'}]}])
@@ -119,6 +121,7 @@ class TestGravity(unittest.TestCase):
         descriptor = {
             "name": "$",
             "method": "$",
+            "path": "path",
             "leafs": [
                 {
                     "content": "select"
@@ -157,7 +160,7 @@ class TestGravity(unittest.TestCase):
             ]
         }
 
-        ctx = create_context(descriptor, "app", "path", payload={"items": [{}, {}]})
+        ctx = create_context(descriptor, payload={"items": [{}, {}]})
         rs, errors = _execute_branch(descriptor, FakeDataProviderDeep(), ctx, [], None)
 
         self.assertListEqual(rs, [{'name': 'kiruba',
@@ -171,6 +174,7 @@ class TestGravity(unittest.TestCase):
         descriptor = {
             "name": "$",
             "method": "$",
+            "path": "path",
             "leafs": [
                 {
                     "content": "parent"
@@ -209,7 +213,7 @@ class TestGravity(unittest.TestCase):
             ]
         }
 
-        ctx = create_context(descriptor, "app", "path", payload={"items": [{}, {}]})
+        ctx = create_context(descriptor, payload={"items": [{}, {}]})
         rs, errors = _execute_branch(descriptor, FakeDataProviderParentRows(), ctx, [], None)
 
         self.assertListEqual(rs, [{'id': 1, 'name': 'kiruba', 'items': [{'id': 1, 'name': 'kiruba'}]},
