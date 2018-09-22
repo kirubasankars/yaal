@@ -598,23 +598,19 @@ def get_result(descriptor, get_data_provider, ctx):
         ctx.set_prop(status_code_str, 400)
         return {"errors": errors}
 
-    try:
-        data_provider = get_data_provider()
+    data_provider = get_data_provider()
+    rs, errors = _execute_branch(descriptor, data_provider, ctx, [], None)
 
-        rs, errors = _execute_branch(descriptor, data_provider, ctx, [], None)
+    if errors:
+        status_code = ctx.get_prop(status_code_str)
+        if not status_code:
+            ctx.set_prop(status_code_str, 400)
+        return {"errors": errors}
 
-        if errors:
-            status_code = ctx.get_prop(status_code_str)
-            if not status_code:
-                ctx.set_prop(status_code_str, 400)
-            return {"errors": errors}
+    rs = _output_mapper(descriptor["output_type"], descriptor["output_model"], descriptor["branches"], rs)
+    ctx.set_prop(status_code_str, 200)
 
-        rs = _output_mapper(descriptor["output_type"], descriptor["output_model"], descriptor["branches"], rs)
-        ctx.set_prop(status_code_str, 200)
-
-        return rs
-    except Exception as e:
-        return {"errors": e.args[0]}
+    return rs
 
 
 def _default_date_time_converter(o):

@@ -31,12 +31,11 @@ def serve_app(path):
 @app.route("/api/", methods=["GET"], defaults={"path": ""})
 @app.route("/api/<path:path>", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 def namespace_serve_api(path):
-
     method = request.method.lower()
 
     descriptor_path, route_path, path_values = y.get_descriptor_path_by_route(path)
     descriptor = y.get_descriptor(path_join(*[route_path, method]), path_join(*[descriptor_path, method]))
-    
+
     if not descriptor:
         return abort(404)
 
@@ -50,4 +49,4 @@ def namespace_serve_api(path):
 
 
 if __name__ == "__main__":
-    app.run(debug=False)
+    app.run(debug=app.config["YAAL_DEBUG"])
