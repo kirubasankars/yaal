@@ -1,12 +1,13 @@
 import os
 from flask import Flask, request, abort, send_from_directory
 from yaal import Yaal, get_descriptor_json
-from yaal_flask import create_gravity_context, create_flask_response
+from yaal_flask import create_yaal_context, create_flask_response
 
 path_join = os.path.join
 
 DATABASE_URL = "sqlite3:///"
 YAAL_DEBUG = False
+CORS_ENABLED = False
 
 app = Flask(__name__)
 root_path = "serve"
@@ -28,10 +29,11 @@ def serve_app(path):
 
 
 @app.route("/api/", methods=["GET"], defaults={"path": ""})
-@app.route("/api/<path:path>", methods=["GET", "POST", "PUT", "DELETE"])
+@app.route("/api/<path:path>", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 def namespace_serve_api(path):
 
     method = request.method.lower()
+
     descriptor_path, route_path, path_values = y.get_descriptor_path_by_route(path)
     descriptor = y.get_descriptor(path_join(*[route_path, method]), path_join(*[descriptor_path, method]))
     
@@ -41,7 +43,7 @@ def namespace_serve_api(path):
     if "debug" in request.args and app.config["YAAL_DEBUG"]:
         return get_descriptor_json(descriptor)
 
-    ctx = create_gravity_context(request, path_values, "", path, descriptor)
+    ctx = create_yaal_context(request, path_values, descriptor)
     rs = y.get_result_json(descriptor, ctx)
 
     return create_flask_response(app, ctx, rs)

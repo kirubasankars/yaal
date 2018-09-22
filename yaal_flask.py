@@ -27,19 +27,19 @@ def create_flask_response(flask_app, context, result):
     return resp
 
 
-def create_gravity_context(req, path_values, app, path, descriptor):
+def create_yaal_context(req, path_values, descriptor):
     if req.mimetype == "application/json":
         try:
-            request_body = req.get_json()
+            payload = req.get_json()
         except Exception:
-            request_body = None
+            payload = None
     else:
-        request_body = None
+        payload = None
 
     if req.mimetype == "multipart/form-data":
-        request_body = request_body or {}
+        payload = payload or {}
         for k, v in req.form.items():
-            request_body[k.lower()] = v
+            payload[k.lower()] = v
 
     query = {}
     for k, v in req.args.items():
@@ -53,4 +53,4 @@ def create_gravity_context(req, path_values, app, path, descriptor):
     for k, v in req.cookies.items():
         cookies[k] = v
 
-    return create_context(descriptor, app, path, request_body, query, path_values, headers, cookies)
+    return create_context(descriptor, payload, query, path_values, headers, cookies)

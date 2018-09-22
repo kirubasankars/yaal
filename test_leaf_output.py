@@ -50,6 +50,7 @@ class TestGravity(unittest.TestCase):
 
     def test_trunk_with_error(self):
         descriptor = {
+            "path" : "user",
             "leafs": [
                 {
                     "content": "error"
@@ -60,7 +61,7 @@ class TestGravity(unittest.TestCase):
             "_validators": None
         }
 
-        ctx = create_context(descriptor, "", "user", None, None, None, None, None)
+        ctx = create_context(descriptor)
 
         rs, errors = _execute_leafs(descriptor, FakeDataProvider(), ctx, None)
 
@@ -75,12 +76,13 @@ class TestGravity(unittest.TestCase):
                     "content": "cookie"
                 }
             ],
+            "path": "user",
             "input_type": "object",
             "output_type": "array",
             "_validators": None
         }
 
-        ctx = create_context(descriptor, "", "user", None, None, None, None, None)
+        ctx = create_context(descriptor)
 
         _execute_leafs(descriptor, FakeDataProvider(), ctx, None)
 
@@ -97,10 +99,11 @@ class TestGravity(unittest.TestCase):
             ],
             "input_type": "object",
             "output_type": "array",
-            "_validators": None
+            "_validators": None,
+            "path": "user"
         }
 
-        ctx = create_context(descriptor, "", "user", None, None, None, None, None)
+        ctx = create_context(descriptor)
 
         _execute_leafs(descriptor, FakeDataProvider(), ctx, None)
 
@@ -117,16 +120,17 @@ class TestGravity(unittest.TestCase):
             ],
             "input_type": "object",
             "output_type": "array",
-            "_validators": None
+            "_validators": None,
+            "path": "path"
         }
 
-        ctx = create_context(descriptor, "namespace", "path", None, None, None, None, None)
+        ctx = create_context(descriptor)
 
         _execute_leafs(descriptor, FakeDataProvider(), ctx, None)
 
         d = ctx.get_prop("$params").get_data()
 
-        self.assertDictEqual(d, {"$last_inserted_id": 1, "app": 'namespace',
+        self.assertDictEqual(d, {"$last_inserted_id": 1,
                                  "path": "path", "$type": 'params', 'a': '1', 'b': '2'})
 
     def test_trunk_with_break(self):
@@ -139,10 +143,11 @@ class TestGravity(unittest.TestCase):
             ],
             "input_type": "object",
             "output_type": "array",
-            "_validators": None
+            "_validators": None,
+            "path": "user"
         }
 
-        ctx = create_context(descriptor, "", "user", None, None, None, None, None)
+        ctx = create_context(descriptor)
         rs, errors = _execute_leafs(descriptor, FakeDataProvider(), ctx, None)
 
         self.assertListEqual(rs, [{'a': '1', 'b': '2'}])
@@ -158,10 +163,11 @@ class TestGravity(unittest.TestCase):
             ],
             "input_type": "object",
             "output_type": "array",
-            "_validators": None
+            "_validators": None,
+            "path": "user"
         }
 
-        ctx = create_context(descriptor, "", "user", None, None, None, None, None)
+        ctx = create_context(descriptor)
 
         with self.assertRaises(Exception): _execute_leafs(descriptor, FakeDataProvider(), ctx, None)
 

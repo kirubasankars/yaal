@@ -49,7 +49,7 @@ class TestGravity(unittest.TestCase):
         self.assertTrue(descriptor["name"] == "$")
         self.assertTrue(descriptor["method"] == "$")
 
-        ctx = create_context(descriptor, "app", "name/get", payload={"Name": "Kiruba"})
+        ctx = create_context(descriptor, payload={"Name": "Kiruba"})
 
         r = get_result(descriptor, g.get_data_provider, ctx)
 

@@ -103,7 +103,7 @@ class TestGravity(unittest.TestCase):
         self.assertEqual(1, len(leaf1_parameters))
         self.assertEqual("bool", leaf1_parameters[0]["type"])
 
-        s = create_context(descriptor, "", None, None, None, None, None, None)
+        s = create_context(descriptor)
 
 
 if __name__ == "__main__":
