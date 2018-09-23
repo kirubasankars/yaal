@@ -71,7 +71,7 @@ class TestGravity(unittest.TestCase):
         self.assertTrue(branch_data_items["name"] == "items")
         self.assertTrue(branch_data_items["method"] == "$.items")
 
-        branches = branch_data_items["branches"]
+        branches = branch_data_items.get("branches")
         self.assertEqual(branches, None)
 
     def test_simple_get_shape_check(self):
