@@ -1,1 +1,3 @@
-select version() as verison
+--($header)--
+
+select {{$header}}::json as headers

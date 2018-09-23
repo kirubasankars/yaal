@@ -40,7 +40,7 @@ def namespace_serve_api(path):
         return abort(404)
 
     if "debug" in request.args and app.config["YAAL_DEBUG"]:
-        return get_descriptor_json(descriptor)
+        return app.response_class(get_descriptor_json(descriptor), content_type="application/json")
 
     ctx = create_yaal_context(request, path_values, descriptor)
     rs = y.get_result_json(descriptor, ctx)

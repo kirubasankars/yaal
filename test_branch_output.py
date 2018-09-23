@@ -83,11 +83,13 @@ class TestGravity(unittest.TestCase):
             "_validators": None,
             "partition_by": None,
             "use_parent_rows": None,
-            "payload": {
-                "type": "object",
-                "properties": {
-                    "items": {
-                        "type": "array"
+            "model": {
+                "payload": {
+                    "type": "object",
+                    "properties": {
+                        "items": {
+                            "type": "array"
+                        }
                     }
                 }
             },
@@ -130,13 +132,13 @@ class TestGravity(unittest.TestCase):
             "input_type": "object",
             "output_type": "array",
             "_validators": None,
-            "partition_by": None,
-            "use_parent_rows": None,
-            "payload": {
-                "type": "object",
-                "properties": {
-                    "items": {  # items are expected as available on branches
-                        "type": "array"
+            "model": {
+                "payload": {
+                    "type": "object",
+                    "properties": {
+                        "items": {  # items are expected as available on branches
+                            "type": "array"
+                        }
                     }
                 }
             },
@@ -148,9 +150,6 @@ class TestGravity(unittest.TestCase):
                     "name": "items",
                     "method": "$.items",
                     "input_type": "array",
-                    "partition_by": None,
-                    "use_parent_rows": None,
-                    "branches": None,
                     "leafs": [
                         {
                             "content": "select"
@@ -184,12 +183,13 @@ class TestGravity(unittest.TestCase):
             "output_type": "array",
             "_validators": None,
             "partition_by": "id",
-            "use_parent_rows": None,
-            "payload": {
-                "type": "object",
-                "properties": {
-                    "items": {  # items are expected as available on branches
-                        "type": "array"
+            "model": {
+                "payload": {
+                    "type": "object",
+                    "properties": {
+                        "items": {  # items are expected as available on branches
+                            "type": "array"
+                        }
                     }
                 }
             },
@@ -201,9 +201,7 @@ class TestGravity(unittest.TestCase):
                     "name": "items",
                     "method": "$.items",
                     "input_type": "array",
-                    "partition_by": None,
                     "use_parent_rows": True,
-                    "branches": None,
                     "leafs": [
                         {
                             "content": "select"

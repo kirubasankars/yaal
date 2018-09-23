@@ -27,29 +27,31 @@ path_join = os.path.join
 
 
 def _to_lower_keys(obj):
-    if type(obj) == dict:
-        return {k.lower(): v for k, v in obj.items()}
-    if type(obj) == list and type(obj[0]) == dict:
-        return [_to_lower_keys(item) for item in obj]
+    if obj:
+        if type(obj) == dict:
+            return {k.lower(): v for k, v in obj.items()}
+        elif type(obj) == list and type(obj[0]) == dict:
+            return [_to_lower_keys(item) for item in obj]
     return obj
 
 
 def _to_lower_keys_deep(obj):
-    if type(obj) == dict:
-        o = {}
-        for k, v in obj.items():
-            if type(v) == list or type(v) == dict:
-                o[k.lower()] = _to_lower_keys(v)
-            else:
-                o[k.lower()] = v
-        return o
-    if type(obj) == list and type(obj[0]) == dict:
-        return [_to_lower_keys(item) for item in obj]
+    if obj:
+        if type(obj) == dict:
+            o = {}
+            for k, v in obj.items():
+                if type(v) == list or type(v) == dict:
+                    o[k.lower()] = _to_lower_keys(v)
+                else:
+                    o[k.lower()] = v
+            return o
+        elif type(obj) == list and type(obj[0]) == dict:
+            return [_to_lower_keys(item) for item in obj]
     return obj
 
 
 def _build_leafs(branch, content):
-    if content is None or content == '':
+    if not content:
         return
 
     lines = content.splitlines()
@@ -61,15 +63,15 @@ def _build_leafs(branch, content):
     parameters_first_line_m = parameters_meta_rx.match(first_line)
 
     meta = {}
-    if parameters_first_line_m is not None:
+    if parameters_first_line_m:
         params_meta = parameters_first_line_m.groups(1)[0].split(",")
         for p in params_meta:
             parameter_meta_m = parameter_meta_rx.match(p)
 
-            if parameter_meta_m is not None:
+            if parameter_meta_m:
                 parameter_name = parameter_meta_m.group("name").lower()
                 p_type = parameter_meta_m.group("type")
-                if p_type is not None:
+                if p_type:
                     parameter_type = parameter_meta_m.group("type").lower()
                 else:
                     parameter_type = None
@@ -78,18 +80,16 @@ def _build_leafs(branch, content):
                     "type": parameter_type
                 }
         branch["parameters"] = meta
-    else:
-        branch["parameters"] = None
 
     leafs = []
     content = ""
 
     for idx, line in enumerate(lines):
-        if idx == 0 and parameters_first_line_m is not None:
+        if idx == 0 and parameters_first_line_m:
             continue
 
         query_match = query_rx.match(line)
-        if query_match is not None:
+        if query_match:
             if content.lstrip().rstrip() is not "":
                 leaf = {
                     "content": content
@@ -114,10 +114,10 @@ def _build_leafs(branch, content):
 def _build_leaf_parameters(leaf, branch_descriptor):
     content = leaf["content"]
     parameter_names = [x.lower() for x in parameter_rx.findall(content)]
-    parameters = branch_descriptor["parameters"]
+    parameters = branch_descriptor.get("parameters")
 
     params = []
-    if parameters is not None:
+    if parameters:
         for p in parameter_names:
             if p in parameters:
                 descriptor_parameter = parameters[p]
@@ -134,7 +134,7 @@ def _build_leaf_parameters(leaf, branch_descriptor):
 
 
 def _order_list_by_dots(names):
-    if names is None:
+    if not names:
         return []
 
     dots = [x.count(".") for x in names]
@@ -172,13 +172,13 @@ def _build_branch_map_by_files(branch_map, item):
 
 def _build_trunk_map_by_files(name_list):
     trunk_map = {}
-    if name_list is not None:
+    if name_list:
         for item in name_list:
             _build_branch_map_by_files(trunk_map, item)
     return trunk_map
 
 
-def _build_branch(branch, is_trunk, map_by_files, content_reader, payload, output_model):
+def _build_branch(branch, map_by_files, content_reader, payload_model, output_model):
     _properties_str, _type_str, _partition_by_str = "properties", "type", "partition_by"
     _output_type_str, _use_parent_rows_str = "output_type", "use_parent_rows"
     _parameters_str, _leafs_str, _parent_rows_str = "parameters", "leafs", "parent_rows"
@@ -187,25 +187,14 @@ def _build_branch(branch, is_trunk, map_by_files, content_reader, payload, outpu
     content = content_reader.get_sql(method, path)
     branch_map = {}
 
-    if payload is None:
-        payload = {
-            "type": "object",
-            "properties": {}
-        }
-    if _properties_str not in payload:
-        payload[_properties_str] = {}
+    if _properties_str not in payload_model:
+        payload_model[_properties_str] = {}
 
-    if is_trunk:
-        branch["payload"] = payload
-
-    branch["input_type"] = payload[_type_str]
-    input_properties = payload[_properties_str]
-
-    if is_trunk:
-        branch["output_model"] = output_model or {_type_str: "array", _properties_str: {}}
+    branch["input_type"] = payload_model[_type_str]
+    input_properties = payload_model[_properties_str]
 
     output_properties = None
-    if output_model is not None:
+    if output_model:
         if _type_str in output_model:
             branch[_output_type_str] = output_model[_type_str]
         else:
@@ -216,15 +205,11 @@ def _build_branch(branch, is_trunk, map_by_files, content_reader, payload, outpu
 
         if _parent_rows_str in output_model:
             branch[_use_parent_rows_str] = output_model[_parent_rows_str]
-        else:
-            branch[_use_parent_rows_str] = None
 
         if _partition_by_str in output_model:
             branch[_partition_by_str] = output_model[_partition_by_str]
-        else:
-            branch[_partition_by_str] = None
 
-        if output_properties is not None:
+        if output_properties:
             for k in output_properties:
                 v = output_properties[k]
                 if type(v) == dict and _type_str in v:
@@ -234,15 +219,8 @@ def _build_branch(branch, is_trunk, map_by_files, content_reader, payload, outpu
     else:
         branch[_output_type_str] = "array"
         branch[_use_parent_rows_str] = False
-        branch[_partition_by_str] = None
 
     _build_leafs(branch, content)
-
-    if _parameters_str not in branch:
-        branch[_parameters_str] = None
-
-    if _leafs_str not in branch:
-        branch[_leafs_str] = None
 
     lower_branch_map = _to_lower_keys(branch_map)
     for k in map_by_files:
@@ -270,18 +248,15 @@ def _build_branch(branch, is_trunk, map_by_files, content_reader, payload, outpu
             }
         branch_payload = input_properties[branch_name]
 
-        if output_properties is not None:
-            if branch_name in output_properties:
-                branch_output_model = output_properties[branch_name]
+        if output_properties and branch_name in output_properties:
+            branch_output_model = output_properties[branch_name]
 
-        _build_branch(sub_branch, False, sub_branch_map, content_reader, branch_payload, branch_output_model)
+        _build_branch(sub_branch, sub_branch_map, content_reader, branch_payload, branch_output_model)
 
         branches.append(sub_branch)
 
-    if len(branches) != 0:
+    if branches:
         branch["branches"] = branches
-    else:
-        branch["branches"] = None
 
 
 def create_trunk(path, content_reader):
@@ -293,46 +268,51 @@ def create_trunk(path, content_reader):
     config = content_reader.get_config(path)
 
     input_model_str, output_model_str = "input.model", "output.model"
-    parameter_query_str, parameter_path_str, parameter_header_str, parameter_cookie_str, payload_str = "query", "path", "header", "cookie", "payload"
+    query_str, path_str, header_str, cookie_str, payload_str = "query", "path", "header", "cookie", "payload"
     payload_model, output_model = None, None
-    parameter_query, parameter_path, parameter_header, parameter_cookie = None, None, None, None
+    query_model, path_model, header_model, cookie_model = None, None, None, None
 
-    if config is not None:
-        if input_model_str in config:
-            input_config = config[input_model_str]
-            if input_config is not None:
-                if payload_str in input_config:
-                    payload_model = _to_lower_keys_deep(input_config[payload_str])
-                if parameter_query_str in input_config:
-                    parameter_query = _to_lower_keys_deep(input_config[parameter_query_str])
-                if parameter_path_str in input_config:
-                    parameter_path = _to_lower_keys_deep(input_config[parameter_path_str])
-                if parameter_header_str in input_config:
-                    parameter_header = _to_lower_keys_deep(input_config[parameter_header_str])
-                if parameter_cookie_str in input_config:
-                    parameter_cookie = _to_lower_keys_deep(input_config[parameter_cookie_str])
+    if config:
+        input_model = config.get(input_model_str)
+        if input_model:
+            payload_model = _to_lower_keys_deep(input_model.get(payload_str))
+            query_model = _to_lower_keys_deep(input_model.get(query_str))
+            path_model = _to_lower_keys_deep(input_model.get(path_str))
+            header_model = _to_lower_keys_deep(input_model.get(header_str))
+            cookie_model = _to_lower_keys_deep(input_model.get(cookie_str))
 
-        if output_model_str in config:
-            output_model = config[output_model_str]
+        output_model = config.get(output_model_str)
 
-    if not parameter_query:
-        parameter_query = {
+    if not query_model:
+        query_model = {
             "type": "object",
             "properties": {}
         }
-    if not parameter_path:
-        parameter_path = {
+    if not path_model:
+        path_model = {
             "type": "object",
             "properties": {}
         }
-    if not parameter_header:
-        parameter_header = {
+    if not header_model:
+        header_model = {
             "type": "object",
             "properties": {}
         }
-    if not parameter_cookie:
-        parameter_cookie = {
+    if not cookie_model:
+        cookie_model = {
             "type": "object",
+            "properties": {}
+        }
+
+    if not payload_model:
+        payload_model = {
+            "type": "object",
+            "properties": {}
+        }
+
+    if not output_model:
+        output_model = {
+            "type": "array",
             "properties": {}
         }
 
@@ -341,11 +321,13 @@ def create_trunk(path, content_reader):
         "method": "$",
         "path": path,
         "trunk": True,
-        "parameters_model": {
-            "query": parameter_query,
-            "path": parameter_path,
-            "header": parameter_header,
-            "cookie": parameter_cookie
+        "model": {
+            "query": query_model,
+            "path": path_model,
+            "header": header_model,
+            "cookie": cookie_model,
+            "payload": payload_model,
+            "output": output_model
         }
     }
 
@@ -354,27 +336,27 @@ def create_trunk(path, content_reader):
     else:
         payload_validator = None
 
-    if parameter_query:
-        parameter_query_validator = Draft4Validator(schema=parameter_query, format_checker=FormatChecker())
+    if query_model:
+        parameter_query_validator = Draft4Validator(schema=query_model, format_checker=FormatChecker())
     else:
         parameter_query_validator = None
 
-    if parameter_path:
-        parameter_path_validator = Draft4Validator(schema=parameter_path, format_checker=FormatChecker())
+    if path_model:
+        parameter_path_validator = Draft4Validator(schema=path_model, format_checker=FormatChecker())
     else:
         parameter_path_validator = None
 
-    if parameter_header:
-        parameter_header_validator = Draft4Validator(schema=parameter_header, format_checker=FormatChecker())
+    if header_model:
+        parameter_header_validator = Draft4Validator(schema=header_model, format_checker=FormatChecker())
     else:
         parameter_header_validator = None
 
-    if parameter_cookie:
-        parameter_cookie_validator = Draft4Validator(schema=parameter_cookie, format_checker=FormatChecker())
+    if cookie_model:
+        parameter_cookie_validator = Draft4Validator(schema=cookie_model, format_checker=FormatChecker())
     else:
         parameter_cookie_validator = None
 
-    _build_branch(trunk, True, trunk_map["$"], content_reader, payload_model, output_model)
+    _build_branch(trunk, trunk_map["$"], content_reader, payload_model, output_model)
 
     validators = {
         "query": parameter_query_validator,
@@ -391,12 +373,12 @@ def create_trunk(path, content_reader):
 def _execute_leafs(branch, data_provider, context, data_provider_helper):
     errors = []
 
-    leafs = branch["leafs"]
+    leafs = branch.get("leafs")
     type_str = "$type"
     params_str, header_str, cookie_str, error_str, break_str, json_str = "params", "header", "cookie", "error", "break", "json"
 
     rs = []
-    if leafs is not None:
+    if leafs:
         for leaf in leafs:
             output, output_last_inserted_id = data_provider.execute(leaf, context, data_provider_helper)
             context.get_prop("$params").set_prop("$last_inserted_id", output_last_inserted_id)
@@ -443,8 +425,8 @@ def _execute_leafs(branch, data_provider, context, data_provider_helper):
 
 
 def _execute_branch(branch, data_provider, context, parent_rows, parent_partition_by):
-    input_type, output_partition_by = branch["input_type"], branch["partition_by"]
-    use_parent_rows = branch["use_parent_rows"]
+    input_type, output_partition_by = branch["input_type"], branch.get("partition_by")
+    use_parent_rows = branch.get("use_parent_rows")
     output = []
     data_provider_helper = DataProviderHelper()
     is_truck = ("trunk" in branch)
@@ -467,18 +449,18 @@ def _execute_branch(branch, data_provider, context, parent_rows, parent_partitio
             if errors:
                 return None, errors
 
-        if use_parent_rows and parent_partition_by is None:
+        if use_parent_rows and not parent_partition_by:
             raise Exception("parent _partition_by is can't be empty when child wanted to use parent rows")
 
         if use_parent_rows:
             output = copy.deepcopy(parent_rows)
 
-        branches = branch["branches"]
+        branches = branch.get("branches")
         if branches:
             for branch_descriptor in branches:
                 branch_name = branch_descriptor["name"]
                 sub_node_shape = None
-                if context is not None:
+                if context:
                     sub_node_shape = context.get_prop(branch_name.lower())
 
                 sub_node_output, errors = _execute_branch(branch_descriptor, data_provider, sub_node_shape, output,
@@ -486,10 +468,10 @@ def _execute_branch(branch, data_provider, context, parent_rows, parent_partitio
                 if errors:
                     return None, errors
 
-                if not branch["leafs"] and not output:
+                if not branch.get("leafs") and not output:
                     output.append({})
 
-                if output_partition_by is None:
+                if not output_partition_by:
                     for row in output:
                         row[branch_name] = sub_node_output
                 else:
@@ -549,13 +531,13 @@ def _output_mapper(output_type, output_modal, branches, result):
                 else:
                     branch_output_model = None
 
-                branch_descriptor_branches = branch_descriptor["branches"]
+                branch_descriptor_branches = branch_descriptor.get("branches")
 
                 if branch_name in row:
                     mapped_tree[branch_name] = _output_mapper(branch_output_type, branch_output_model,
                                                               branch_descriptor_branches, row[branch_name])
 
-        if output_properties is not None:
+        if output_properties:
             prop_count = 0
             for k, v in output_properties.items():
                 if type(v) == dict and (_type_str in v or _mapped_str in v):
@@ -607,7 +589,7 @@ def get_result(descriptor, get_data_provider, ctx):
             ctx.set_prop(status_code_str, 400)
         return {"errors": errors}
 
-    rs = _output_mapper(descriptor["output_type"], descriptor["output_model"], descriptor["branches"], rs)
+    rs = _output_mapper(descriptor["output_type"], descriptor["model"]["output"], descriptor.get("branches"), rs)
     ctx.set_prop(status_code_str, 200)
 
     return rs
@@ -629,41 +611,46 @@ def get_descriptor_json(descriptor):
 
 
 def create_context(descriptor, payload=None, query=None, path_values=None, header=None, cookie=None):
-    validators = descriptor["_validators"]
-
-    parameters_model_str = "parameters_model"
+    model_str = "model"
     query_str, path_str, header_str, cookie_str, payload_str = "query", "path", "header", "cookie", "payload"
 
-    if parameters_model_str in descriptor:
-        parameters_model = descriptor[parameters_model_str]
-
-        if query_str in parameters_model:
-            query_schema = parameters_model[query_str]
+    model = descriptor.get(model_str)
+    validators = descriptor.get("_validators")
+    if model and validators:
+        if query_str in model:
+            query_schema = model[query_str]
             query_validator = validators[query_str]
         else:
             query_schema = None
             query_validator = None
 
-        if path_str in parameters_model:
-            path_schema = parameters_model[path_str]
+        if path_str in model:
+            path_schema = model[path_str]
             path_validator = validators[path_str]
         else:
             path_schema = None
             path_validator = None
 
-        if header_str in parameters_model:
-            header_schema = parameters_model[header_str]
+        if header_str in model:
+            header_schema = model[header_str]
             header_validator = validators[header_str]
         else:
             header_schema = None
             header_validator = None
 
-        if cookie_str in parameters_model:
-            cookie_schema = parameters_model[cookie_str]
+        if cookie_str in model:
+            cookie_schema = model[cookie_str]
             cookie_validator = validators[cookie_str]
         else:
             cookie_schema = None
             cookie_validator = None
+
+        if payload_str in model:
+            payload_schema = model[payload_str]
+            payload_validator = validators[payload_str]
+        else:
+            payload_schema = None
+            payload_validator = None
     else:
         query_schema = None
         query_validator = None
@@ -673,11 +660,6 @@ def create_context(descriptor, payload=None, query=None, path_values=None, heade
         header_validator = None
         cookie_schema = None
         cookie_validator = None
-
-    if payload_str in descriptor:
-        payload_schema = descriptor[payload_str]
-        payload_validator = validators[payload_str]
-    else:
         payload_schema = None
         payload_validator = None
 
@@ -781,11 +763,8 @@ class Shape:
         self._object = False
 
         self._readonly = readonly
-        if data:
-            self._data = data
-        else:
-            self._data = {}
-        self._o_data = data
+        self._data = data or {}
+        self._o_data = data or {}
         self._parent = parent_shape
         self._schema = schema
         self._input_properties = None
@@ -810,17 +789,15 @@ class Shape:
             _type = schema[_type_str]
             if _type == "array":
                 self._array = True
-                if data is not None:
-                    if type(data) != list:
-                        raise TypeError("input expected as array. object is given.")
+                if data and type(data) != list:
+                    raise TypeError("input expected as array. object is given.")
             else:
                 self._object = True
-                if data is not None:
+                if data:
                     if type(data) != dict:
                         raise TypeError("input expected as object. array is given.")
                     else:
-                        if readonly:
-                            self._data = _to_lower_keys(data)
+                        self._data = _to_lower_keys(data)
 
         if self._array:
             shapes = []
@@ -834,15 +811,12 @@ class Shape:
             schema[_type_str] = "array"
         else:
             shapes = {}
-            if input_properties is not None:
+            if input_properties:
                 for k, v in input_properties.items():
-                    if type(v) == dict and _type_str in v:
-                        _type_value = v[_type_str]
-                        if _type_value == "array" or _type_value == "object":
-                            value = None
-                            if k in self._data:
-                                value = self._data.get(k)
-                            shapes[k] = Shape(v, value, readonly, self, extras, None)
+                    if type(v) == dict:
+                        _type_value = v.get(_type_str)
+                        if _type_value and _type_value == "array" or _type_value == "object":
+                            shapes[k] = Shape(v, self._data.get(k), readonly, self, extras, None)
 
         self._shapes = shapes
 
@@ -924,7 +898,9 @@ class Shape:
                 if path in self._extras:
                     self._extras[path].set_prop(remaining_path, value)
         else:
-            self._data[prop] = self.check_and_cast(prop, value)
+            v = self.check_and_cast(prop, value)
+            self._data[prop.lower()] = v
+            self._o_data[prop] = v
 
     def validate(self, include_extras):
         errors = []
@@ -952,7 +928,7 @@ class Shape:
         return errors
 
     def get_data(self):
-        return self._data
+        return self._o_data
 
     def check_and_cast(self, prop, value):
         if self._input_properties is not None and prop in self._input_properties:
@@ -1016,7 +992,7 @@ class DataProviderHelper:
                         else:
                             if type(param_value) == Shape:
                                 param_value = json.dumps(param_value.get_data())
-                            elif param_type is None:
+                            elif not param_type:
                                 param_value = str(param_value)
                             else:
                                 param_value = get_value_converter(param_value)
@@ -1047,7 +1023,7 @@ class FileContentReader:
         output_path = path_join(*[self._root_path, path, "$.output"])
         output_config = self._get_config(output_path)
 
-        if input_config is None and output_config is None:
+        if not (input_config and output_config):
             return None
 
         return {"input.model": input_config, "output.model": output_config}
@@ -1091,7 +1067,7 @@ class Yaal:
         self._data_provider = None
         self._debug = debug
 
-        if content_reader is None:
+        if not content_reader:
             self._content_reader = FileContentReader(self._root_path)
         else:
             self._content_reader = content_reader
