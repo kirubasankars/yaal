@@ -21,7 +21,7 @@ logger.addHandler(stream_handler)
 parameters_meta_rx = re.compile(r"--\((.*)\)--")
 parameter_meta_rx = re.compile(r"\s*(?P<name>[A-Za-z0-9_.$-]+)(\s+(?P<type>\w+))?\s*")
 parameter_rx = re.compile(r"{{([A-Za-z0-9_.$-]*?)}}", re.MULTILINE)
-query_rx = re.compile(r"--query\(([a-zA-Z0-9.$_]*?)\)--")
+query_rx = re.compile(r"--query(\(([a-zA-Z0-9.$_]*?)\))?--")
 
 path_join = os.path.join
 
@@ -50,7 +50,13 @@ def _to_lower_keys_deep(obj):
     return obj
 
 
-def _build_leafs(branch, content):
+def _build_twig(branch, content):
+    if content.lstrip().rstrip():
+        twig = {"content": content}
+        return _build_twig_parameters(twig, branch)
+
+
+def _build_twigs(branch, content):
     if not content:
         return
 
@@ -81,7 +87,7 @@ def _build_leafs(branch, content):
                 }
         branch["parameters"] = meta
 
-    leafs = []
+    twigs = []
     content = ""
 
     for idx, line in enumerate(lines):
@@ -90,29 +96,23 @@ def _build_leafs(branch, content):
 
         query_match = query_rx.match(line)
         if query_match:
-            if content.lstrip().rstrip() is not "":
-                leaf = {
-                    "content": content
-                }
-                _build_leaf_parameters(leaf, branch)
-                leafs.append(leaf)
+            twig = _build_twig(branch, content)
+            if twig:
+                twigs.append(twig)
 
             content = ""
         else:
             content = "\r\n".join([content, line])
 
-    if content.lstrip().rstrip() is not "":
-        leaf = {
-            "content": content
-        }
-        _build_leaf_parameters(leaf, branch)
-        leafs.append(leaf)
+    twig = _build_twig(branch, content)
+    if twig:
+        twigs.append(twig)
 
-    branch["leafs"] = leafs
+    branch["twigs"] = twigs
 
 
-def _build_leaf_parameters(leaf, branch_descriptor):
-    content = leaf["content"]
+def _build_twig_parameters(twig, branch_descriptor):
+    content = twig["content"]
     parameter_names = [x.lower() for x in parameter_rx.findall(content)]
     parameters = branch_descriptor.get("parameters")
 
@@ -121,16 +121,18 @@ def _build_leaf_parameters(leaf, branch_descriptor):
         for p in parameter_names:
             if p in parameters:
                 descriptor_parameter = parameters[p]
-                leaf_parameter = {
+                twig_parameter = {
                     "name": p,
                     "type": descriptor_parameter["type"]
                 }
-                params.append(leaf_parameter)
+                params.append(twig_parameter)
             else:
                 raise TypeError("type missing for {{" + p + "}} in the " + branch_descriptor["method"] + ".sql")
 
     if len(params) != 0:
-        leaf["parameters"] = params
+        twig["parameters"] = params
+
+    return twig
 
 
 def _order_list_by_dots(names):
@@ -181,7 +183,7 @@ def _build_trunk_map_by_files(name_list):
 def _build_branch(branch, map_by_files, content_reader, payload_model, output_model):
     _properties_str, _type_str, _partition_by_str = "properties", "type", "partition_by"
     _output_type_str, _use_parent_rows_str = "output_type", "use_parent_rows"
-    _parameters_str, _leafs_str, _parent_rows_str = "parameters", "leafs", "parent_rows"
+    _parameters_str, _twig_str, _parent_rows_str = "parameters", "twig", "parent_rows"
 
     path, method = branch["path"], branch["method"]
     content = content_reader.get_sql(method, path)
@@ -220,7 +222,7 @@ def _build_branch(branch, map_by_files, content_reader, payload_model, output_mo
         branch[_output_type_str] = "array"
         branch[_use_parent_rows_str] = False
 
-    _build_leafs(branch, content)
+    _build_twigs(branch, content)
 
     lower_branch_map = _to_lower_keys(branch_map)
     for k in map_by_files:
@@ -320,7 +322,6 @@ def create_trunk(path, content_reader):
         "name": "$",
         "method": "$",
         "path": path,
-        "trunk": True,
         "model": {
             "query": query_model,
             "path": path_model,
@@ -370,17 +371,17 @@ def create_trunk(path, content_reader):
     return trunk
 
 
-def _execute_leafs(branch, data_provider, context, data_provider_helper):
+def _execute_twigs(branch, data_provider, context, data_provider_helper):
     errors = []
 
-    leafs = branch.get("leafs")
+    twigs = branch.get("twigs")
     type_str = "$type"
     params_str, header_str, cookie_str, error_str, break_str, json_str = "params", "header", "cookie", "error", "break", "json"
 
     rs = []
-    if leafs:
-        for leaf in leafs:
-            output, output_last_inserted_id = data_provider.execute(leaf, context, data_provider_helper)
+    if twigs:
+        for twig in twigs:
+            output, output_last_inserted_id = data_provider.execute(twig, context, data_provider_helper)
             context.get_prop("$params").set_prop("$last_inserted_id", output_last_inserted_id)
 
             if len(output) >= 1:
@@ -424,28 +425,27 @@ def _execute_leafs(branch, data_provider, context, data_provider_helper):
     return rs, None
 
 
-def _execute_branch(branch, data_provider, context, parent_rows, parent_partition_by):
+def _execute_branch(branch, is_trunk, data_provider, context, parent_rows, parent_partition_by):
     input_type, output_partition_by = branch["input_type"], branch.get("partition_by")
     use_parent_rows = branch.get("use_parent_rows")
     output = []
     data_provider_helper = DataProviderHelper()
-    is_truck = ("trunk" in branch)
 
     try:
-        if is_truck:
+        if is_trunk:
             data_provider.begin()
 
         if input_type == "array":
             length = int(context.get_prop("$length"))
             for i in range(0, length):
                 item_ctx = context.get_prop("@" + str(i))
-                rs, errors = _execute_leafs(branch, data_provider, item_ctx, data_provider_helper)
+                rs, errors = _execute_twigs(branch, data_provider, item_ctx, data_provider_helper)
                 output.extend(rs)
                 if errors:
                     return None, errors
 
         elif input_type == "object":
-            output, errors = _execute_leafs(branch, data_provider, context, data_provider_helper)
+            output, errors = _execute_twigs(branch, data_provider, context, data_provider_helper)
             if errors:
                 return None, errors
 
@@ -463,12 +463,13 @@ def _execute_branch(branch, data_provider, context, parent_rows, parent_partitio
                 if context:
                     sub_node_shape = context.get_prop(branch_name.lower())
 
-                sub_node_output, errors = _execute_branch(branch_descriptor, data_provider, sub_node_shape, output,
+                sub_node_output, errors = _execute_branch(branch_descriptor, False, data_provider, sub_node_shape,
+                                                          output,
                                                           output_partition_by)
                 if errors:
                     return None, errors
 
-                if not branch.get("leafs") and not output:
+                if not branch.get("twigs") and not output:
                     output.append({})
 
                 if not output_partition_by:
@@ -493,11 +494,11 @@ def _execute_branch(branch, data_provider, context, parent_rows, parent_partitio
         else:
             pass
 
-        if is_truck:
+        if is_trunk:
             data_provider.end()
     except Exception as e:
         # logger.error(e)
-        if is_truck:
+        if is_trunk:
             data_provider.error()
         raise e
 
@@ -581,7 +582,7 @@ def get_result(descriptor, get_data_provider, ctx):
         return {"errors": errors}
 
     data_provider = get_data_provider()
-    rs, errors = _execute_branch(descriptor, data_provider, ctx, [], None)
+    rs, errors = _execute_branch(descriptor, True, data_provider, ctx, [], None)
 
     if errors:
         status_code = ctx.get_prop(status_code_str)
@@ -954,13 +955,13 @@ class DataProviderHelper:
         self._cache = {}
 
     @staticmethod
-    def get_executable_content(char, leaf):
+    def get_executable_content(char, twig):
         executable_content_str = "executable_content"
-        if executable_content_str in leaf:
-            return leaf[executable_content_str]
+        if executable_content_str in twig:
+            return twig[executable_content_str]
         else:
-            executable_content = parameter_rx.sub(char, leaf["content"])
-            leaf[executable_content_str] = executable_content
+            executable_content = parameter_rx.sub(char, twig["content"])
+            twig[executable_content_str] = executable_content
             return executable_content
 
     def build_parameters(self, query, input_shape, get_value_converter):

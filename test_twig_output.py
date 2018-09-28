@@ -1,6 +1,6 @@
 import unittest
 
-from yaal import _execute_leafs, create_context
+from yaal import _execute_twigs, create_context
 
 
 class FakeContextManager:
@@ -63,7 +63,7 @@ class TestGravity(unittest.TestCase):
 
         ctx = create_context(descriptor)
 
-        rs, errors = _execute_leafs(descriptor, FakeDataProvider(), ctx, None)
+        rs, errors = _execute_twigs(descriptor, FakeDataProvider(), ctx, None)
 
         self.assertListEqual(errors, [{"$type": "error", "message": "message1", '$http_status_code': 400},
                                       {"$type": "error", "message": "message2", '$http_status_code': 400}])
@@ -84,7 +84,7 @@ class TestGravity(unittest.TestCase):
 
         ctx = create_context(descriptor)
 
-        _execute_leafs(descriptor, FakeDataProvider(), ctx, None)
+        _execute_twigs(descriptor, FakeDataProvider(), ctx, None)
 
         self.assertDictEqual(ctx.get_prop("$response.$cookie").get_data(),
                              {'name1': {"$type": 'cookie', 'name': 'name1', 'value': 'value'},
@@ -105,7 +105,7 @@ class TestGravity(unittest.TestCase):
 
         ctx = create_context(descriptor)
 
-        _execute_leafs(descriptor, FakeDataProvider(), ctx, None)
+        _execute_twigs(descriptor, FakeDataProvider(), ctx, None)
 
         self.assertDictEqual(ctx.get_prop("$response.$header").get_data(),
                              {'name1': {"$type": 'header', 'name': 'name1', 'value': 'value'},
@@ -126,7 +126,7 @@ class TestGravity(unittest.TestCase):
 
         ctx = create_context(descriptor)
 
-        _execute_leafs(descriptor, FakeDataProvider(), ctx, None)
+        _execute_twigs(descriptor, FakeDataProvider(), ctx, None)
 
         d = ctx.get_prop("$params").get_data()
 
@@ -148,7 +148,7 @@ class TestGravity(unittest.TestCase):
         }
 
         ctx = create_context(descriptor)
-        rs, errors = _execute_leafs(descriptor, FakeDataProvider(), ctx, None)
+        rs, errors = _execute_twigs(descriptor, FakeDataProvider(), ctx, None)
 
         self.assertListEqual(rs, [{'a': '1', 'b': '2'}])
 
@@ -169,7 +169,7 @@ class TestGravity(unittest.TestCase):
 
         ctx = create_context(descriptor)
 
-        with self.assertRaises(Exception): _execute_leafs(descriptor, FakeDataProvider(), ctx, None)
+        with self.assertRaises(Exception): _execute_twigs(descriptor, FakeDataProvider(), ctx, None)
 
 
 if __name__ == "__main__":
