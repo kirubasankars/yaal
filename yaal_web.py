@@ -15,7 +15,8 @@ app.config.from_object(__name__)
 app.config.from_pyfile(path_join(*[root_path, "config.cfg"]))
 
 y = Yaal(path_join(*[root_path, "api"]), None, app.config["YAAL_DEBUG"])
-y.setup_data_provider(app.config["DATABASE_URL"])
+for name, db_url in app.config["DATA_PROVIDERS"].items():
+    y.setup_data_provider(name, db_url)
 
 
 @app.route("/", methods=["GET"], defaults={"path": ""})

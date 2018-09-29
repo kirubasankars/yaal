@@ -14,14 +14,13 @@ from jsonschema import FormatChecker, Draft4Validator
 from yaal_postgres import PostgresContextManager
 
 logger = logging.getLogger("yaal")
-logger.setLevel(logging.ERROR)
-stream_handler = logging.StreamHandler
-logger.addHandler(stream_handler)
+logger.setLevel(logging.INFO)
 
 parameters_meta_rx = re.compile(r"--\((.*)\)--")
 parameter_meta_rx = re.compile(r"\s*(?P<name>[A-Za-z0-9_.$-]+)(\s+(?P<type>\w+))?\s*")
 parameter_rx = re.compile(r"{{([A-Za-z0-9_.$-]*?)}}", re.MULTILINE)
-query_rx = re.compile(r"--query(\(([a-zA-Z0-9.$_]*?)\))?--")
+query_rx = re.compile(r"--query(\(.*\))?--")
+query_name_rx = re.compile(r"--query(\((?P<name>[a-zA-Z0-9.$_]*?)\))?--")
 
 path_join = os.path.join
 
@@ -50,62 +49,63 @@ def _to_lower_keys_deep(obj):
     return obj
 
 
-def _build_twig(branch, content):
-    if content.lstrip().rstrip():
-        twig = {"content": content}
-        return _build_twig_parameters(twig, branch)
-
-
-def _build_twigs(branch, content):
-    if not content:
-        return
-
-    lines = content.splitlines()
-
-    if len(lines) == 0:
-        return
-
-    first_line = lines[0]
-    parameters_first_line_m = parameters_meta_rx.match(first_line)
-
-    meta = {}
-    if parameters_first_line_m:
-        params_meta = parameters_first_line_m.groups(1)[0].split(",")
-        for p in params_meta:
-            parameter_meta_m = parameter_meta_rx.match(p)
-
-            if parameter_meta_m:
-                parameter_name = parameter_meta_m.group("name").lower()
-                p_type = parameter_meta_m.group("type")
-                if p_type:
-                    parameter_type = parameter_meta_m.group("type").lower()
-                else:
-                    parameter_type = None
-                meta[parameter_name] = {
-                    "name": parameter_name,
-                    "type": parameter_type
-                }
-        branch["parameters"] = meta
-
+def _build_twigs(branch, lines, bag):
     twigs = []
-    content = ""
+    content = []
 
     for idx, line in enumerate(lines):
-        if idx == 0 and parameters_first_line_m:
-            continue
-
         query_match = query_rx.match(line)
         if query_match:
-            twig = _build_twig(branch, content)
-            if twig:
+            content = "\n".join(content)
+            if content.lstrip().rstrip():
+                twig = {"content": content}
+                _build_twig_parameters(twig, branch)
                 twigs.append(twig)
 
-            content = ""
+            content = []
         else:
-            content = "\r\n".join([content, line])
+            content.append(line)
 
-    twig = _build_twig(branch, content)
-    if twig:
+    content = "\n".join(content)
+    if content.lstrip().rstrip():
+        twig = {"content": content}
+        _build_twig_parameters(twig, branch)
+        twigs.append(twig)
+
+    branch["twigs"] = twigs
+
+
+def _build_twigs(branch, lines, bag):
+    twigs = []
+    content = []
+    name = ""
+    if "connections" not in bag:
+        bag["connections"] = []
+    for idx, line in enumerate(lines):
+        query_match = query_name_rx.match(line)
+        if query_match:
+            content = "\n".join(content)
+            if content.lstrip().rstrip():
+                twig = {"content": content}
+                if name:
+                    twig["name"] = name
+                _build_twig_parameters(twig, branch)
+                twigs.append(twig)
+
+            content = []
+            name = query_match.group("name")
+            if name:
+                name = name.lower()
+                bag["connections"].append(name)
+        else:
+            content.append(line)
+
+    content = "\n".join(content)
+    if content.lstrip().rstrip():
+        twig = {"content": content}
+        if name:
+            twig["name"] = name
+        _build_twig_parameters(twig, branch)
         twigs.append(twig)
 
     branch["twigs"] = twigs
@@ -131,8 +131,6 @@ def _build_twig_parameters(twig, branch_descriptor):
 
     if len(params) != 0:
         twig["parameters"] = params
-
-    return twig
 
 
 def _order_list_by_dots(names):
@@ -180,7 +178,7 @@ def _build_trunk_map_by_files(name_list):
     return trunk_map
 
 
-def _build_branch(branch, map_by_files, content_reader, payload_model, output_model):
+def _build_branch(branch, map_by_files, content_reader, payload_model, output_model, bag):
     _properties_str, _type_str, _partition_by_str = "properties", "type", "partition_by"
     _output_type_str, _use_parent_rows_str = "output_type", "use_parent_rows"
     _parameters_str, _twig_str, _parent_rows_str = "parameters", "twig", "parent_rows"
@@ -222,7 +220,36 @@ def _build_branch(branch, map_by_files, content_reader, payload_model, output_mo
         branch[_output_type_str] = "array"
         branch[_use_parent_rows_str] = False
 
-    _build_twigs(branch, content)
+    if content:
+        lines = content.splitlines()
+
+        if len(lines) == 0:
+            return
+
+        first_line = lines[0]
+        parameters_first_line_m = parameters_meta_rx.match(first_line)
+
+        meta = {}
+        if parameters_first_line_m:
+            lines = lines[1:]
+            params_meta = parameters_first_line_m.groups(1)[0].split(",")
+            for p in params_meta:
+                parameter_meta_m = parameter_meta_rx.match(p)
+
+                if parameter_meta_m:
+                    parameter_name = parameter_meta_m.group("name").lower()
+                    p_type = parameter_meta_m.group("type")
+                    if p_type:
+                        parameter_type = parameter_meta_m.group("type").lower()
+                    else:
+                        parameter_type = None
+                    meta[parameter_name] = {
+                        "name": parameter_name,
+                        "type": parameter_type
+                    }
+            branch["parameters"] = meta
+
+        _build_twigs(branch, lines, bag)
 
     lower_branch_map = _to_lower_keys(branch_map)
     for k in map_by_files:
@@ -253,7 +280,7 @@ def _build_branch(branch, map_by_files, content_reader, payload_model, output_mo
         if output_properties and branch_name in output_properties:
             branch_output_model = output_properties[branch_name]
 
-        _build_branch(sub_branch, sub_branch_map, content_reader, branch_payload, branch_output_model)
+        _build_branch(sub_branch, sub_branch_map, content_reader, branch_payload, branch_output_model, bag)
 
         branches.append(sub_branch)
 
@@ -305,13 +332,11 @@ def create_trunk(path, content_reader):
             "type": "object",
             "properties": {}
         }
-
     if not payload_model:
         payload_model = {
             "type": "object",
             "properties": {}
         }
-
     if not output_model:
         output_model = {
             "type": "array",
@@ -357,7 +382,11 @@ def create_trunk(path, content_reader):
     else:
         parameter_cookie_validator = None
 
-    _build_branch(trunk, trunk_map["$"], content_reader, payload_model, output_model)
+    bag = {
+        "connections": ["db"]
+    }
+    _build_branch(trunk, trunk_map["$"], content_reader, payload_model, output_model, bag)
+    trunk["connections"] = list(set(bag["connections"]))
 
     validators = {
         "query": parameter_query_validator,
@@ -371,7 +400,7 @@ def create_trunk(path, content_reader):
     return trunk
 
 
-def _execute_twigs(branch, data_provider, context, data_provider_helper):
+def _execute_twigs(branch, data_providers, context, data_provider_helper):
     errors = []
 
     twigs = branch.get("twigs")
@@ -381,7 +410,11 @@ def _execute_twigs(branch, data_provider, context, data_provider_helper):
     rs = []
     if twigs:
         for twig in twigs:
-            output, output_last_inserted_id = data_provider.execute(twig, context, data_provider_helper)
+            if "name" in twig:
+                connection = twig["name"]
+            else:
+                connection = "db"
+            output, output_last_inserted_id = data_providers[connection].execute(twig, context, data_provider_helper)
             context.get_prop("$params").set_prop("$last_inserted_id", output_last_inserted_id)
 
             if len(output) >= 1:
@@ -425,27 +458,29 @@ def _execute_twigs(branch, data_provider, context, data_provider_helper):
     return rs, None
 
 
-def _execute_branch(branch, is_trunk, data_provider, context, parent_rows, parent_partition_by):
+def _execute_branch(branch, is_trunk, data_providers, context, parent_rows, parent_partition_by):
     input_type, output_partition_by = branch["input_type"], branch.get("partition_by")
     use_parent_rows = branch.get("use_parent_rows")
     output = []
     data_provider_helper = DataProviderHelper()
+    db_data_provider = data_providers["db"]
 
     try:
         if is_trunk:
-            data_provider.begin()
+            for name, data_provider in data_providers.items():
+                data_provider.begin()
 
         if input_type == "array":
             length = int(context.get_prop("$length"))
             for i in range(0, length):
                 item_ctx = context.get_prop("@" + str(i))
-                rs, errors = _execute_twigs(branch, data_provider, item_ctx, data_provider_helper)
+                rs, errors = _execute_twigs(branch, data_providers, item_ctx, data_provider_helper)
                 output.extend(rs)
                 if errors:
                     return None, errors
 
         elif input_type == "object":
-            output, errors = _execute_twigs(branch, data_provider, context, data_provider_helper)
+            output, errors = _execute_twigs(branch, data_providers, context, data_provider_helper)
             if errors:
                 return None, errors
 
@@ -463,7 +498,7 @@ def _execute_branch(branch, is_trunk, data_provider, context, parent_rows, paren
                 if context:
                     sub_node_shape = context.get_prop(branch_name.lower())
 
-                sub_node_output, errors = _execute_branch(branch_descriptor, False, data_provider, sub_node_shape,
+                sub_node_output, errors = _execute_branch(branch_descriptor, False, data_providers, sub_node_shape,
                                                           output,
                                                           output_partition_by)
                 if errors:
@@ -495,11 +530,25 @@ def _execute_branch(branch, is_trunk, data_provider, context, parent_rows, paren
             pass
 
         if is_trunk:
-            data_provider.end()
+            db_data_provider.end()
+            for name, data_provider in data_providers.items():
+                if name != "db":
+                    data_provider.end()
+
     except Exception as e:
         # logger.error(e)
         if is_trunk:
-            data_provider.error()
+            try:
+                db_data_provider.error()
+            except:
+                pass
+
+            for name, data_provider in data_providers.items():
+                if name != "db":
+                    try:
+                        data_provider.error()
+                    except:
+                        pass
         raise e
 
     return output, None
@@ -581,8 +630,11 @@ def get_result(descriptor, get_data_provider, ctx):
         ctx.set_prop(status_code_str, 400)
         return {"errors": errors}
 
-    data_provider = get_data_provider()
-    rs, errors = _execute_branch(descriptor, True, data_provider, ctx, [], None)
+    data_providers = {}
+    for con in descriptor["connections"]:
+        data_providers[con] = get_data_provider(con)
+
+    rs, errors = _execute_branch(descriptor, True, data_providers, ctx, [], None)
 
     if errors:
         status_code = ctx.get_prop(status_code_str)
@@ -1065,7 +1117,7 @@ class Yaal:
     def __init__(self, root_path, content_reader, debug):
         self._root_path = root_path
         self._descriptors = {}
-        self._data_provider = None
+        self._data_providers = {}
         self._debug = debug
 
         if not content_reader:
@@ -1075,16 +1127,16 @@ class Yaal:
 
         self._routes = _build_routes(self._content_reader.get_routes_config("routes"))
 
-    def setup_data_provider(self, database_uri):
+    def setup_data_provider(self, name, database_uri):
         provider_name, options = _parse_rfc1738_args(database_uri)
         if provider_name == "postgresql":
-            self._data_provider = PostgresContextManager(options)
+            self._data_providers[name] = PostgresContextManager(options)
         elif provider_name == "sqlite3":
-            self._data_provider = SQLiteContextManager(options)
+            self._data_providers[name] = SQLiteContextManager(options)
         return None
 
-    def get_data_provider(self):
-        return self._data_provider.get_context()
+    def get_data_provider(self, name):
+        return self._data_providers[name].get_context()
 
     def create_descriptor(self, path):
         return create_trunk(path, self._content_reader)
