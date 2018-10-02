@@ -1045,10 +1045,8 @@ class DataProviderHelper:
                         else:
                             if type(param_value) == Shape:
                                 param_value = json.dumps(param_value.get_data())
-                            elif not param_type:
-                                param_value = str(param_value)
                             else:
-                                param_value = get_value_converter(param_value)
+                                param_value = get_value_converter(param_type, param_value)
                     values.append(param_value)
                 except ValueError:
                     values.append(param_value)
