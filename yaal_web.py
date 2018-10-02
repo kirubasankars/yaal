@@ -5,7 +5,9 @@ from yaal_flask import create_yaal_context, create_flask_response
 
 path_join = os.path.join
 
-DATABASE_URL = "sqlite3:///"
+DATA_PROVIDERS= {
+    "db": "sqlite3:///"
+}
 YAAL_DEBUG = False
 CORS_ENABLED = False
 

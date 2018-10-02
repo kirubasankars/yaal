@@ -43,7 +43,7 @@ class TestGravity(unittest.TestCase):
 
     def test_simple_get_trunk_check(self):
         g = Yaal("", ContentReader(), True)
-        g.setup_data_provider("sqlite3:///")
+        g.setup_data_provider("db", "sqlite3:///")
         descriptor = g.create_descriptor("name/get")
 
         self.assertTrue(descriptor["name"] == "$")

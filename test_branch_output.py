@@ -65,7 +65,7 @@ class TestGravity(unittest.TestCase):
         }
 
         ctx = create_context(descriptor)
-        rs, errors = _execute_branch(descriptor, FakeDataProviderSimple(), ctx, [], None)
+        rs, errors = _execute_branch(descriptor, True, {"db": FakeDataProviderSimple()}, ctx, [], None)
 
         self.assertListEqual(rs, [])
         self.assertEqual(errors, None)
@@ -75,9 +75,6 @@ class TestGravity(unittest.TestCase):
             "name": "$",
             "method": "$",
             "path": "path",
-            "leafs": [
-
-            ],
             "input_type": "object",
             "output_type": "array",
             "_validators": None,
@@ -104,7 +101,7 @@ class TestGravity(unittest.TestCase):
                     "partition_by": None,
                     "use_parent_rows": None,
                     "branches": None,
-                    "leafs": [
+                    "twigs": [
                         {
                             "content": "select"
                         }
@@ -114,7 +111,7 @@ class TestGravity(unittest.TestCase):
         }
 
         ctx = create_context(descriptor, payload={"items": [{}]})
-        rs, errors = _execute_branch(descriptor, FakeDataProviderDeep(), ctx, [], None)
+        rs, errors = _execute_branch(descriptor, True, {"db": FakeDataProviderDeep()}, ctx, [], None)
 
         self.assertListEqual(rs, [{"items": [{'name': 'kiruba'}, {'name': 'sankar'}]}])
         self.assertEqual(errors, None)
@@ -124,7 +121,7 @@ class TestGravity(unittest.TestCase):
             "name": "$",
             "method": "$",
             "path": "path",
-            "leafs": [
+            "twigs": [
                 {
                     "content": "select"
                 }
@@ -150,7 +147,7 @@ class TestGravity(unittest.TestCase):
                     "name": "items",
                     "method": "$.items",
                     "input_type": "array",
-                    "leafs": [
+                    "twigs": [
                         {
                             "content": "select"
                         }
@@ -160,7 +157,7 @@ class TestGravity(unittest.TestCase):
         }
 
         ctx = create_context(descriptor, payload={"items": [{}, {}]})
-        rs, errors = _execute_branch(descriptor, FakeDataProviderDeep(), ctx, [], None)
+        rs, errors = _execute_branch(descriptor, True, {"db": FakeDataProviderDeep()}, ctx, [], None)
 
         self.assertListEqual(rs, [{'name': 'kiruba',
                                    'items': [{'name': 'kiruba'}, {'name': 'sankar'}, {'name': 'kiruba'},
@@ -174,7 +171,7 @@ class TestGravity(unittest.TestCase):
             "name": "$",
             "method": "$",
             "path": "path",
-            "leafs": [
+            "twigs": [
                 {
                     "content": "parent"
                 }
@@ -202,7 +199,7 @@ class TestGravity(unittest.TestCase):
                     "method": "$.items",
                     "input_type": "array",
                     "use_parent_rows": True,
-                    "leafs": [
+                    "twigs": [
                         {
                             "content": "select"
                         }
@@ -212,7 +209,7 @@ class TestGravity(unittest.TestCase):
         }
 
         ctx = create_context(descriptor, payload={"items": [{}, {}]})
-        rs, errors = _execute_branch(descriptor, FakeDataProviderParentRows(), ctx, [], None)
+        rs, errors = _execute_branch(descriptor, True, {"db": FakeDataProviderParentRows() }, ctx, [], None)
 
         self.assertListEqual(rs, [{'id': 1, 'name': 'kiruba', 'items': [{'id': 1, 'name': 'kiruba'}]},
                                   {'id': 2, 'name': 'sankar', 'items': [{'id': 2, 'name': 'sankar'}]}])

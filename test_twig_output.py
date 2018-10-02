@@ -51,7 +51,7 @@ class TestGravity(unittest.TestCase):
     def test_trunk_with_error(self):
         descriptor = {
             "path" : "user",
-            "leafs": [
+            "twigs": [
                 {
                     "content": "error"
                 }
@@ -63,7 +63,7 @@ class TestGravity(unittest.TestCase):
 
         ctx = create_context(descriptor)
 
-        rs, errors = _execute_twigs(descriptor, FakeDataProvider(), ctx, None)
+        rs, errors = _execute_twigs(descriptor, {"db": FakeDataProvider()}, ctx, None)
 
         self.assertListEqual(errors, [{"$type": "error", "message": "message1", '$http_status_code': 400},
                                       {"$type": "error", "message": "message2", '$http_status_code': 400}])
@@ -71,7 +71,7 @@ class TestGravity(unittest.TestCase):
 
     def test_trunk_with_cookie(self):
         descriptor = {
-            "leafs": [
+            "twigs": [
                 {
                     "content": "cookie"
                 }
@@ -84,7 +84,7 @@ class TestGravity(unittest.TestCase):
 
         ctx = create_context(descriptor)
 
-        _execute_twigs(descriptor, FakeDataProvider(), ctx, None)
+        _execute_twigs(descriptor, {"db":FakeDataProvider()}, ctx, None)
 
         self.assertDictEqual(ctx.get_prop("$response.$cookie").get_data(),
                              {'name1': {"$type": 'cookie', 'name': 'name1', 'value': 'value'},
@@ -92,7 +92,7 @@ class TestGravity(unittest.TestCase):
 
     def test_trunk_with_header(self):
         descriptor = {
-            "leafs": [
+            "twigs": [
                 {
                     "content": "header"
                 }
@@ -105,7 +105,7 @@ class TestGravity(unittest.TestCase):
 
         ctx = create_context(descriptor)
 
-        _execute_twigs(descriptor, FakeDataProvider(), ctx, None)
+        _execute_twigs(descriptor, {"db": FakeDataProvider()}, ctx, None)
 
         self.assertDictEqual(ctx.get_prop("$response.$header").get_data(),
                              {'name1': {"$type": 'header', 'name': 'name1', 'value': 'value'},
@@ -113,7 +113,7 @@ class TestGravity(unittest.TestCase):
 
     def test_trunk_with_params(self):
         descriptor = {
-            "leafs": [
+            "twigs": [
                 {
                     "content": "params"
                 }
@@ -126,7 +126,7 @@ class TestGravity(unittest.TestCase):
 
         ctx = create_context(descriptor)
 
-        _execute_twigs(descriptor, FakeDataProvider(), ctx, None)
+        _execute_twigs(descriptor, {"db": FakeDataProvider()}, ctx, None)
 
         d = ctx.get_prop("$params").get_data()
 
@@ -135,7 +135,7 @@ class TestGravity(unittest.TestCase):
 
     def test_trunk_with_break(self):
         descriptor = {
-            "leafs": [
+            "twigs": [
                 {
                     "content": "break",
                     "connection": "db"
@@ -148,17 +148,16 @@ class TestGravity(unittest.TestCase):
         }
 
         ctx = create_context(descriptor)
-        rs, errors = _execute_twigs(descriptor, FakeDataProvider(), ctx, None)
+        rs, errors = _execute_twigs(descriptor, {"db":FakeDataProvider()}, ctx, None)
 
         self.assertListEqual(rs, [{'a': '1', 'b': '2'}])
 
     def test_trunk_with_connection_missing(self):
-        return
         descriptor = {
-            "leafs": [
+            "twigs": [
                 {
                     "content": "break",
-                    "connection": "db1"
+                    "name": "db1"
                 }
             ],
             "input_type": "object",
@@ -169,7 +168,7 @@ class TestGravity(unittest.TestCase):
 
         ctx = create_context(descriptor)
 
-        with self.assertRaises(Exception): _execute_twigs(descriptor, FakeDataProvider(), ctx, None)
+        with self.assertRaises(Exception): _execute_twigs(descriptor, {"db":FakeDataProvider()}, ctx, None)
 
 
 if __name__ == "__main__":
