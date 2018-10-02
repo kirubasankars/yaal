@@ -1,5 +1,5 @@
 --(a)--
 
-select {{a}} as item_id, 1 as order_id
+select 1 as item_id, 1 as order_id
 union all
-select {{a}} as item_id, 1 as order_id
+select 2 as item_id, 1 as order_id
