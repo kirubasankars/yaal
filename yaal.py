@@ -269,7 +269,7 @@ def _build_branch(branch, map_by_files, content_reader, payload_model, output_mo
 
         branch_output_model = None
 
-        branch_name = branch_name.lower()
+        #branch_name = branch_name.lower()
         if branch_name not in input_properties:
             input_properties[branch_name] = {
                 "type": "object",
@@ -869,7 +869,7 @@ class Shape:
                     if type(v) == dict:
                         _type_value = v.get(_type_str)
                         if _type_value and _type_value == "array" or _type_value == "object":
-                            shapes[k] = Shape(v, self._data.get(k), readonly, self, extras, None)
+                            shapes[k.lower()] = Shape(v, self._data.get(k.lower()), readonly, self, extras, None)
 
         self._shapes = shapes
 
@@ -1075,9 +1075,6 @@ class FileContentReader:
 
         output_path = path_join(*[self._root_path, path, "$.output"])
         output_config = self._get_config(output_path)
-
-        if not (input_config and output_config):
-            return None
 
         return {"input.model": input_config, "output.model": output_config}
 
