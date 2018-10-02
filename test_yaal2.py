@@ -82,7 +82,7 @@ class TestGravity(unittest.TestCase):
         self.assertEqual(len(input_shape._shapes["items"]._shapes), 0)
 
     @staticmethod
-    def get_data_provider():
+    def get_data_provider(name):
         return FakeExecutionContext()
 
     def test_run(self):

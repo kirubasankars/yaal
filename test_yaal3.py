@@ -72,7 +72,7 @@ class TestGravity(unittest.TestCase):
         self.assertIn("id2", parameters)
         self.assertIs(type(parameters), dict)
 
-        leafs = descriptor["leafs"]
+        leafs = descriptor["twigs"]
         self.assertIs(type(leafs), list)
         self.assertEqual(1, len(leafs))
         leaf0 = leafs[0]
@@ -89,7 +89,7 @@ class TestGravity(unittest.TestCase):
         self.assertIn("id2", parameters)
         self.assertIs(type(parameters), dict)
 
-        leafs = descriptor["leafs"]
+        leafs = descriptor["twigs"]
         self.assertIs(type(leafs), list)
         self.assertEqual(2, len(leafs))
         leaf0 = leafs[0]
