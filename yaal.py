@@ -590,19 +590,25 @@ def _output_mapper(output_type, output_modal, branches, result):
         if output_properties:
             prop_count = 0
             for k, v in output_properties.items():
-                if type(v) == dict and (_type_str in v or _mapped_str in v):
-                    if _mapped_str in v:
-                        _mapped = v[_mapped_str]
-                        if _mapped in row:
-                            mapped_obj[k] = row[_mapped]
-                            prop_count = prop_count + 1
-                        else:
-                            raise Exception(_mapped + " _mapped column missing from row")
+
+                _mapped, _type = None, None
+
+                if type(v) == str:
+                    _mapped = v
+                if type(v) == dict:
+                    _mapped = v.get(_mapped_str)
+                    _type = v.get(_type_str)
+
+                if _mapped:
+                    if _mapped in row:
+                        mapped_obj[k] = row[_mapped]
+                        prop_count = prop_count + 1
                     else:
-                        if _type_str in v:
-                            _type = v[_type_str]
-                            if _type == "array" or _type == "object":
-                                mapped_obj[k] = mapped_tree[k]
+                        raise Exception(_mapped + " _mapped column missing from row")
+
+                if _type and (_type == "array" or _type == "object"):
+                    mapped_obj[k] = mapped_tree[k]
+
             if prop_count == 0:
                 mapped_obj = row
         else:

@@ -1,15 +1,11 @@
 {
   "type": "array",
   "properties": {
-    "OrderId": {
-      "mapped": "order_id"
-    },
+    "OrderId": "order_id",
     "Items": {
       "type": "array",
       "properties": {
-        "Id": {
-          "mapped": "item_id"
-        }
+        "Id": "item_id"
       }
     }
   }
