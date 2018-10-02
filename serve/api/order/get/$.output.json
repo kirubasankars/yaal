@@ -1,0 +1,16 @@
+{
+  "type": "array",
+  "properties": {
+    "OrderId": {
+      "mapped": "order_id"
+    },
+    "Items": {
+      "type": "array",
+      "properties": {
+        "Id": {
+          "mapped": "item_id"
+        }
+      }
+    }
+  }
+}
