@@ -178,7 +178,7 @@ def _build_trunk_map_by_files(name_list):
     return trunk_map
 
 
-def _build_branch(branch, map_by_files, content_reader, payload_model, output_model, bag):
+def _build_branch(branch, map_by_files, content_reader, payload_model, output_model, model, bag):
     _properties_str, _type_str, _partition_by_str = "properties", "type", "partition_by"
     _output_type_str, _use_parent_rows_str = "output_type", "use_parent_rows"
     _parameters_str, _twig_str, _parent_rows_str = "parameters", "twig", "parent_rows"
@@ -249,6 +249,12 @@ def _build_branch(branch, map_by_files, content_reader, payload_model, output_mo
                     }
             branch["parameters"] = meta
 
+            for k, v in meta.items():
+                if k[0] == "$" and k.find("$parent") == -1:
+                    set_model_def(model, k, v)
+                else:
+                    set_model_def(payload_model, k, v)
+
         _build_twigs(branch, lines, bag)
 
     lower_branch_map = _to_lower_keys(branch_map)
@@ -257,35 +263,71 @@ def _build_branch(branch, map_by_files, content_reader, payload_model, output_mo
             branch_map[k] = map_by_files[k]
 
     branches = []
-    for branch_name in branch_map:
-
-        sub_branch_map = branch_map[branch_name]
-        branch_method_name = ".".join([method, branch_name]).lower()
+    for sub_branch_name in branch_map:
+        sub_branch_map = branch_map[sub_branch_name]
+        sub_branch_method = ".".join([method, sub_branch_name]).lower()
         sub_branch = {
-            "name": branch_name,
-            "method": branch_method_name,
+            "name": sub_branch_name,
+            "method": sub_branch_method,
             "path": path
         }
 
-        branch_output_model = None
+        sub_branch_output_model = None
 
-        #branch_name = branch_name.lower()
-        if branch_name not in input_properties:
-            input_properties[branch_name] = {
+        if sub_branch_name not in input_properties:
+            input_properties[sub_branch_name] = {
                 "type": "object",
                 "properties": {}
             }
-        branch_payload = input_properties[branch_name]
+        sub_branch_payload_model = input_properties[sub_branch_name]
 
-        if output_properties and branch_name in output_properties:
-            branch_output_model = output_properties[branch_name]
+        if output_properties and sub_branch_name in output_properties:
+            sub_branch_output_model = output_properties[sub_branch_name]
 
-        _build_branch(sub_branch, sub_branch_map, content_reader, branch_payload, branch_output_model, bag)
+        sub_branch_payload_model["$parent"] = payload_model
+
+        _build_branch(sub_branch, sub_branch_map, content_reader, sub_branch_payload_model, sub_branch_output_model,
+                      model, bag)
+
+        del sub_branch_payload_model["$parent"]
 
         branches.append(sub_branch)
 
     if branches:
         branch["branches"] = branches
+
+
+def set_model_def(model, prop, value):
+    dot = prop.find(".")
+    if dot > -1:
+        path = prop[:dot]
+        if path == "$parent":
+            if "payload" in model:
+                model = model["payload"]["$parent"]
+            else:
+                if "$parent" in model:
+                    model = model["$parent"]
+                else:
+                    model = None
+        elif path == "$query":
+            model = model["query"]
+        elif path == "$cookie":
+            model = model["cookie"]
+        elif path == "$header":
+            model = model["header"]
+        elif path == "$path":
+            model = model["path"]
+        elif path == "$params":
+            return
+        else:
+            model = model["payload"]
+        set_model_def(model, prop[dot + 1:], value)
+    else:
+        if model and "properties" in model:
+            if model and prop not in model["properties"]:
+                model["properties"][prop] = {
+                    "type": value.get("type")
+                }
 
 
 def create_trunk(path, content_reader):
@@ -385,7 +427,7 @@ def create_trunk(path, content_reader):
     bag = {
         "connections": ["db"]
     }
-    _build_branch(trunk, trunk_map["$"], content_reader, payload_model, output_model, bag)
+    _build_branch(trunk, trunk_map["$"], content_reader, payload_model, output_model, trunk["model"], bag)
     trunk["connections"] = list(set(bag["connections"]))
 
     validators = {
@@ -722,18 +764,18 @@ def create_context(descriptor, payload=None, query=None, path_values=None, heade
         payload_schema = None
         payload_validator = None
 
-    query_shape = Shape(query_schema, None, True, None, None, query_validator)
+    query_shape = Shape(query_schema, None, None, None, query_validator)
     if query:
         for k, v in query.items():
             query_shape.set_prop(k.lower(), v)
 
-    path_shape = Shape(path_schema, None, True, None, None, path_validator)
+    path_shape = Shape(path_schema, None, None, None, path_validator)
     if path_values:
         for k, v in path_values.items():
             path_shape.set_prop(k.lower(), v)
 
-    header_shape = Shape(header_schema, header, True, None, None, header_validator)
-    cookie_shape = Shape(cookie_schema, cookie, True, None, None, cookie_validator)
+    header_shape = Shape(header_schema, header, None, None, header_validator)
+    cookie_shape = Shape(cookie_schema, cookie, None, None, cookie_validator)
 
     request_extras = {
         "$query": query_shape,
@@ -741,18 +783,18 @@ def create_context(descriptor, payload=None, query=None, path_values=None, heade
         "$header": header_shape,
         "$cookie": cookie_shape
     }
-    request_shape = Shape({}, None, True, None, request_extras, None)
+    request_shape = Shape({}, None, None, request_extras, None)
 
     response_extras = {
-        "$header": Shape(None, None, False, None, None, None),
-        "$cookie": Shape(None, None, False, None, None, None)
+        "$header": Shape(None, None, None, None, None),
+        "$cookie": Shape(None, None, None, None, None)
     }
-    response_shape = Shape({}, None, False, None, response_extras, None)
+    response_shape = Shape({}, None, None, response_extras, None)
 
     params = {
         "path": descriptor["path"]
     }
-    params_shape = Shape({}, params, False, None, None, None)
+    params_shape = Shape({}, params, None, None, None)
 
     extras = {
         "$params": params_shape,
@@ -764,7 +806,7 @@ def create_context(descriptor, payload=None, query=None, path_values=None, heade
         "$response": response_shape
     }
 
-    return Shape(payload_schema, payload, True, None, extras, payload_validator)
+    return Shape(payload_schema, payload, None, extras, payload_validator)
 
 
 def _build_routes(routes):
@@ -817,11 +859,10 @@ def _parse_rfc1738_args(name):
 
 class Shape:
 
-    def __init__(self, schema, data, readonly, parent_shape, extras, validator):
+    def __init__(self, schema, data, parent_shape, extras, validator):
         self._array = False
         self._object = False
 
-        self._readonly = readonly
         self._data = data or {}
         self._o_data = data or {}
         self._parent = parent_shape
@@ -863,7 +904,7 @@ class Shape:
             schema[_type_str] = "object"
             idx = 0
             for item in self._data:
-                s = Shape(schema, item, readonly, self, extras, None)
+                s = Shape(schema, item, self, extras, None)
                 s._index = idx
                 shapes.append(s)
                 idx = idx + 1
@@ -875,7 +916,7 @@ class Shape:
                     if type(v) == dict:
                         _type_value = v.get(_type_str)
                         if _type_value and _type_value == "array" or _type_value == "object":
-                            shapes[k.lower()] = Shape(v, self._data.get(k.lower()), readonly, self, extras, None)
+                            shapes[k.lower()] = Shape(v, self._data.get(k.lower()), self, extras, None)
 
         self._shapes = shapes
 
