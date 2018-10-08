@@ -1,7 +1,8 @@
 import os
 from flask import Flask, request, abort, send_from_directory
-from yaal import Yaal, get_descriptor_json
+from yaal import Yaal, get_descriptor_json, build_api_meta
 from yaal_flask import create_yaal_context, create_flask_response
+import json
 
 path_join = os.path.join
 
@@ -49,6 +50,13 @@ def namespace_serve_api(path):
     rs = y.get_result_json(descriptor, ctx)
 
     return create_flask_response(app, ctx, rs)
+
+
+@app.route("/openapi")
+def swagger_meta():
+    paths = build_api_meta(y)
+    res = {"openapi": "3.0.0", "paths": paths}
+    return app.response_class(json.dumps(res), content_type="application/json")
 
 
 if __name__ == "__main__":

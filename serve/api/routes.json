@@ -1,6 +1,6 @@
 [
     {
-      "route": "test/<id>",
-      "descriptor": "test"
+      "route": "vin/{a}",
+      "descriptor": "vin"
     }
 ]

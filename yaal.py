@@ -323,10 +323,13 @@ def set_model_def(model, prop, value):
             model = model["payload"]
         set_model_def(model, prop[dot + 1:], value)
     else:
+        _type = value.get("type")
+        if not _type:
+            _type = "string"
         if model and "properties" in model:
             if model and prop not in model["properties"]:
                 model["properties"][prop] = {
-                    "type": value.get("type")
+                    "type": _type
                 }
 
 
@@ -814,12 +817,12 @@ def _build_routes(routes):
     if routes:
         for r in routes:
             path = r["route"]
-            p = "^" + re.sub(r"<(.*?)>", r"(?P<\1>[^/]+)", path) + "/?$"
+            p = "^" + re.sub(r"{(.*?)}", r"(?P<\1>[^/]+)", path) + "/?$"
             _routes.append({"route": re.compile(p), "descriptor": r["descriptor"], "path": path})
         return _routes
 
 
-def _parse_rfc1738_args(name):
+def _parse_rfc1738_args(connection_url):
     pattern = re.compile(r'''
             (?P<name>[\w\+]+)://
             (?:
@@ -834,7 +837,7 @@ def _parse_rfc1738_args(name):
             '''
                          , re.X)
 
-    m = pattern.match(name)
+    m = pattern.match(connection_url)
     if m is not None:
         components = m.groupdict()
         if components['database'] is not None:
@@ -854,7 +857,98 @@ def _parse_rfc1738_args(name):
 
         return components.pop('name'), components
     else:
-        raise Exception("Could not parse rfc1738 URL from string '%s'" % name)
+        raise Exception("Could not parse rfc1738 URL from string '%s'" % connection_url)
+
+
+def build_api_meta(y):
+    root_path = y.get_root_path()
+    all_paths = sorted([x[0] for x in os.walk(root_path)])
+    paths = {}
+    method_rx = re.compile("/(?P<method>get|put|post|delete)$")
+
+    for p in all_paths:
+        m = method_rx.search(p)
+        if m:
+            mdict = m.groupdict()
+            p = p.replace(root_path + "/", "")
+            p = method_rx.sub("", p)
+            path = "/api/" + p
+
+            descriptor = y.get_descriptor(p + "/" + mdict["method"], p + "/" + mdict["method"])
+            if descriptor:
+
+                if path not in paths:
+                    paths[path] = {}
+
+                if len(descriptor["model"]["payload"]["properties"]) > 0:
+                    payload = descriptor["model"]["payload"]
+                else:
+                    payload =  None
+
+                paths[path][mdict["method"]] = {
+                    "parameters": [],
+                    "requestBody": {
+                        "content": {
+                            "application/json": payload
+                        }
+                    },
+                    "responses": {
+                        "200": {
+                            "content": {
+                                "application/json": descriptor["model"]["output"]
+                            }
+                        }
+                    }
+                }
+
+                parameters = paths[path][mdict["method"]]["parameters"]
+
+                for k, v in descriptor["model"]["query"]["properties"].items():
+                    parameters.append({
+                        "name": k,
+                        "in": "query",
+                        "schema": {
+                            "type": v["type"]
+                        }
+                    })
+
+                for k, v in descriptor["model"]["header"]["properties"].items():
+                    parameters.append({
+                        "name": k,
+                        "in": "header",
+                        "schema": {
+                            "type": v["type"]
+                        }
+                    })
+
+                for k, v in descriptor["model"]["cookie"]["properties"].items():
+                    parameters.append({
+                        "name": k,
+                        "in": "cookie",
+                        "schema": {
+                            "type": v["type"]
+                        }
+                    })
+
+                for k, v in descriptor["model"]["path"]["properties"].items():
+                    parameters.append({
+                        "name": k,
+                        "in": "path",
+                        "schema": {
+                            "type": v["type"]
+                        }
+                    })
+
+
+
+        for r in y.get_routes():
+            p = "/api/" + r["descriptor"]
+            path = "/api/" + r["path"]
+            if p in paths:
+                paths[path] = paths[p]
+                del paths[p]
+
+    return paths
 
 
 class Shape:
@@ -1169,6 +1263,9 @@ class Yaal:
 
         self._routes = _build_routes(self._content_reader.get_routes_config("routes"))
 
+    def get_routes(self):
+        return self._routes
+
     def setup_data_provider(self, name, database_uri):
         provider_name, options = _parse_rfc1738_args(database_uri)
         if provider_name == "postgresql":
@@ -1205,6 +1302,9 @@ class Yaal:
 
     def get_result_json(self, descriptor, context):
         return get_result_json(descriptor, self.get_data_provider, context)
+
+    def get_root_path(self):
+        return self._root_path
 
 
 class SQLiteContextManager:
