@@ -1,3 +1,3 @@
---($query.vin)--
+--($query.vin, $path.a string)--
 
-select * from customer where customer_id = {{$query.vin}}
+select {{$query.vin}} as vin, {{$path.a}} as headera 
