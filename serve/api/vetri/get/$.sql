@@ -1,1 +1,0 @@
-select 'vetri' as name;
