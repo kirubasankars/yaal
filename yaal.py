@@ -320,7 +320,10 @@ def set_model_def(model, prop, value):
         elif path == "$params":
             return
         else:
-            model = model["payload"]
+            if "payload" in model:
+                model = model["payload"]
+            else:
+                model = model["properties"][path]
         set_model_def(model, prop[dot + 1:], value)
     else:
         _type = value.get("type")
@@ -816,9 +819,9 @@ def _build_routes(routes):
     _routes = []
     if routes:
         for r in routes:
-            path = r["route"]
-            p = "^" + re.sub(r"{(.*?)}", r"(?P<\1>[^/]+)", path) + "/?$"
-            _routes.append({"route": re.compile(p), "descriptor": r["descriptor"], "path": path})
+            if "route" in r and "descriptor" in r:
+                p = "^" + re.sub(r"{(.*?)}", r"(?P<\1>[^/]+)", r["route"]) + "/?$"
+                _routes.append({"route": re.compile(p), "descriptor": r["descriptor"], "path": r["route"]})
         return _routes
 
 
@@ -940,13 +943,14 @@ def build_api_meta(y):
                     })
 
 
-
-        for r in y.get_routes():
-            p = "/api/" + r["descriptor"]
-            path = "/api/" + r["path"]
-            if p in paths:
-                paths[path] = paths[p]
-                del paths[p]
+        routes = y.get_routes()
+        if routes:
+            for r in routes:
+                p = "/api/" + r["descriptor"]
+                path = "/api/" + r["path"]
+                if p in paths:
+                    paths[path] = paths[p]
+                    del paths[p]
 
     return paths
 
