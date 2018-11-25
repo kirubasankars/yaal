@@ -11,6 +11,7 @@ from collections import defaultdict
 import yaml
 from jsonschema import FormatChecker, Draft4Validator
 
+from parser import parser, lexer
 from yaal_postgres import PostgresContextManager
 
 logger = logging.getLogger("yaal")
@@ -19,8 +20,8 @@ logger.setLevel(logging.INFO)
 parameters_meta_rx = re.compile(r"--\((.*)\)--")
 parameter_meta_rx = re.compile(r"\s*(?P<name>[A-Za-z0-9_.$-]+)(\s+(?P<type>\w+))?\s*")
 parameter_rx = re.compile(r"{{([A-Za-z0-9_.$-]*?)}}", re.MULTILINE)
-query_rx = re.compile(r"--query(\(.*\))?--")
-query_name_rx = re.compile(r"--query(\((?P<name>[a-zA-Z0-9.$_]*?)\))?--")
+query_rx = re.compile(r"--sql(\(.*\))?--")
+query_name_rx = re.compile(r"--sql(\((?P<name>[a-zA-Z0-9.$_]*?)\))?--")
 
 path_join = os.path.join
 
@@ -117,17 +118,16 @@ def _build_twig_parameters(twig, branch_descriptor):
     parameters = branch_descriptor.get("parameters")
 
     params = []
-    if parameters:
-        for p in parameter_names:
-            if p in parameters:
-                descriptor_parameter = parameters[p]
-                twig_parameter = {
-                    "name": p,
-                    "type": descriptor_parameter["type"]
-                }
-                params.append(twig_parameter)
-            else:
-                raise TypeError("type missing for {{" + p + "}} in the " + branch_descriptor["method"] + ".sql")
+    for p in parameter_names:
+        if parameters and p in parameters:
+            descriptor_parameter = parameters[p]
+            twig_parameter = {
+                "name": p,
+                "type": descriptor_parameter["type"]
+            }
+            params.append(twig_parameter)
+        else:
+            raise TypeError("type missing for {{" + p + "}} in the " + branch_descriptor["method"] + ".sql")
 
     if len(params) != 0:
         twig["parameters"] = params
@@ -186,7 +186,7 @@ def _build_branch(branch, map_by_files, content_reader, payload_model, output_mo
     path, method = branch["path"], branch["method"]
     content = content_reader.get_sql(method, path)
     branch_map = {}
-
+    
     if _properties_str not in payload_model:
         payload_model[_properties_str] = {}
 
@@ -225,7 +225,7 @@ def _build_branch(branch, map_by_files, content_reader, payload_model, output_mo
 
         if len(lines) == 0:
             return
-
+        print(parser(lexer(content)))
         first_line = lines[0]
         parameters_first_line_m = parameters_meta_rx.match(first_line)
 
@@ -452,7 +452,7 @@ def _execute_twigs(branch, data_providers, context, data_provider_helper):
     errors = []
 
     twigs = branch.get("twigs")
-    type_str = "$type"
+    action_str = "$action"
     params_str, header_str, cookie_str, error_str, break_str, json_str = "params", "header", "cookie", "error", "break", "json"
 
     rs = []
@@ -467,14 +467,14 @@ def _execute_twigs(branch, data_providers, context, data_provider_helper):
 
             if len(output) >= 1:
                 output0 = output[0]
-                if type_str in output0:
-                    type_value = output0[type_str]
-                    if type_value == error_str:
+                if action_str in output0:
+                    action_value = output0[action_str]
+                    if action_value == error_str:
                         if "$http_status_code" in output0:
                             context.set_prop("$response.status_code", output0["$http_status_code"])
                         errors.extend(output)
                         return None, errors
-                    elif type_value == json_str:
+                    elif action_value == json_str:
                         json_list = []
                         if type(output0[json_str]) == str:
                             for o in output:
@@ -483,20 +483,20 @@ def _execute_twigs(branch, data_providers, context, data_provider_helper):
                             json_list.extend([o[json_str] for o in output])
                         return json_list, None
 
-                    elif type_value == break_str:
+                    elif action_value == break_str:
                         for o in output:
-                            del o[type_str]
+                            del o[action_str]
                         return output, None
-                    elif type_value == params_str:
+                    elif action_value == params_str:
                         params = context.get_prop("$params")
                         for k, v in output0.items():
                             params.set_prop(k, v)
-                    elif type_value == cookie_str:
+                    elif action_value == cookie_str:
                         cookie = context.get_prop("$response.$cookie")
                         for c in output:
                             if "name" in c and "value" in c:
                                 cookie.set_prop(c["name"], c)
-                    elif type_value == header_str:
+                    elif action_value == header_str:
                         header = context.get_prop("$response.$header")
                         for h in output:
                             if "name" in h and "value" in h:
