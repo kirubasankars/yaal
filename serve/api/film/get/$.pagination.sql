@@ -3,7 +3,7 @@
 --sql--
 
 SELECT 
-    'params' as "$type",
+    'params' as "$action",
     (count(*) / 10::float) as total_pages
 FROM 
     film
@@ -11,7 +11,7 @@ FROM
 --sql(sqlite3)--
 
 SELECT 
-    'error' as "$type",
+    'error' as "$action",
     1 as code,
     ('page cant less then 1 or more then ' || {{$query.page}}) as message
 WHERE 

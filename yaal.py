@@ -17,11 +17,7 @@ from yaal_postgres import PostgresContextManager
 logger = logging.getLogger("yaal")
 logger.setLevel(logging.INFO)
 
-parameters_meta_rx = re.compile(r"--\((.*)\)--")
-parameter_meta_rx = re.compile(r"\s*(?P<name>[A-Za-z0-9_.$-]+)(\s+(?P<type>\w+))?\s*")
 parameter_rx = re.compile(r"{{([A-Za-z0-9_.$-]*?)}}", re.MULTILINE)
-query_rx = re.compile(r"--sql(\(.*\))?--")
-query_name_rx = re.compile(r"--sql(\((?P<name>[a-zA-Z0-9.$_]*?)\))?--")
 
 path_join = os.path.join
 
@@ -50,71 +46,23 @@ def _to_lower_keys_deep(obj):
     return obj
 
 
-def _build_twigs(branch, lines, bag):
+def _build_twigs(branch, sql_blocks, bag):
     twigs = []
-    content = []
 
-    for idx, line in enumerate(lines):
-        query_match = query_rx.match(line)
-        if query_match:
-            content = "\n".join(content)
-            if content.lstrip().rstrip():
-                twig = {"content": content}
-                _build_twig_parameters(twig, branch)
-                twigs.append(twig)
-
-            content = []
-        else:
-            content.append(line)
-
-    content = "\n".join(content)
-    if content.lstrip().rstrip():
-        twig = {"content": content}
-        _build_twig_parameters(twig, branch)
-        twigs.append(twig)
-
+    for sql_block in sql_blocks:
+        content = "".join([x["value"] for x in sql_block["stmt"]])
+        if content.lstrip().rstrip():
+            twig = {"content": content}
+            _build_twig_parameters(twig, branch, sql_block)
+            twigs.append(twig)
+            if "connection" in sql_block:
+                bag["connections"].append(sql_block["connection"])
+                twig["connection"] = sql_block["connection"]
     branch["twigs"] = twigs
 
 
-def _build_twigs(branch, lines, bag):
-    twigs = []
-    content = []
-    name = ""
-    if "connections" not in bag:
-        bag["connections"] = []
-    for idx, line in enumerate(lines):
-        query_match = query_name_rx.match(line)
-        if query_match:
-            content = "\n".join(content)
-            if content.lstrip().rstrip():
-                twig = {"content": content}
-                if name:
-                    twig["name"] = name
-                _build_twig_parameters(twig, branch)
-                twigs.append(twig)
-
-            content = []
-            name = query_match.group("name")
-            if name:
-                name = name.lower()
-                bag["connections"].append(name)
-        else:
-            content.append(line)
-
-    content = "\n".join(content)
-    if content.lstrip().rstrip():
-        twig = {"content": content}
-        if name:
-            twig["name"] = name
-        _build_twig_parameters(twig, branch)
-        twigs.append(twig)
-
-    branch["twigs"] = twigs
-
-
-def _build_twig_parameters(twig, branch_descriptor):
-    content = twig["content"]
-    parameter_names = [x.lower() for x in parameter_rx.findall(content)]
+def _build_twig_parameters(twig, branch_descriptor, sql_block):
+    parameter_names = sql_block["parameters"]
     parameters = branch_descriptor.get("parameters")
 
     params = []
@@ -150,7 +98,7 @@ def _order_list_by_dots(names):
                 ordered.append(names[idx].lower())
                 del names[idx]
                 del dots[idx]
-            except:
+            except Exception:
                 break
     return ordered
 
@@ -225,37 +173,23 @@ def _build_branch(branch, map_by_files, content_reader, payload_model, output_mo
 
         if len(lines) == 0:
             return
-        print(parser(lexer(content)))
-        first_line = lines[0]
-        parameters_first_line_m = parameters_meta_rx.match(first_line)
-
+        
+        ast = parser(lexer(content))
         meta = {}
-        if parameters_first_line_m:
-            lines = lines[1:]
-            params_meta = parameters_first_line_m.groups(1)[0].split(",")
-            for p in params_meta:
-                parameter_meta_m = parameter_meta_rx.match(p)
-
-                if parameter_meta_m:
-                    parameter_name = parameter_meta_m.group("name").lower()
-                    p_type = parameter_meta_m.group("type")
-                    if p_type:
-                        parameter_type = parameter_meta_m.group("type").lower()
-                    else:
-                        parameter_type = None
-                    meta[parameter_name] = {
-                        "name": parameter_name,
-                        "type": parameter_type
-                    }
+        if "declaration" in ast:
+            declaration = ast["declaration"]
+            if "parameters" in declaration:
+                for item in declaration["parameters"]:
+                    meta[item["name"]] = item
             branch["parameters"] = meta
-
+            
             for k, v in meta.items():
                 if k[0] == "$" and k.find("$parent") == -1:
                     set_model_def(model, k, v)
                 else:
                     set_model_def(payload_model, k, v)
 
-        _build_twigs(branch, lines, bag)
+        _build_twigs(branch, ast["sql_blocks"], bag)
 
     lower_branch_map = _to_lower_keys(branch_map)
     for k in map_by_files:
@@ -453,13 +387,14 @@ def _execute_twigs(branch, data_providers, context, data_provider_helper):
 
     twigs = branch.get("twigs")
     action_str = "$action"
-    params_str, header_str, cookie_str, error_str, break_str, json_str = "params", "header", "cookie", "error", "break", "json"
+    params_str, header_str, cookie_str, error_str, break_str = "params", "header", "cookie", "error", "break"
+    json_str = "json"
 
     rs = []
     if twigs:
         for twig in twigs:
-            if "name" in twig:
-                connection = twig["name"]
+            if "connection" in twig:
+                connection = twig["connection"]
             else:
                 connection = "db"
             output, output_last_inserted_id = data_providers[connection].execute(twig, context, data_provider_helper)
@@ -588,14 +523,14 @@ def _execute_branch(branch, is_trunk, data_providers, context, parent_rows, pare
         if is_trunk:
             try:
                 db_data_provider.error()
-            except:
+            except Exception:
                 pass
 
             for name, data_provider in data_providers.items():
                 if name != "db":
                     try:
                         data_provider.error()
-                    except:
+                    except Exception:
                         pass
         raise e
 
@@ -826,8 +761,7 @@ def _build_routes(routes):
 
 
 def _parse_rfc1738_args(connection_url):
-    pattern = re.compile(r'''
-            (?P<name>[\w\+]+)://
+    pattern = re.compile(r'''(?P<name>[\w\+]+)://
             (?:
                 (?P<username>[^:/]*)
                 (?::(?P<password>[^/]*))?
@@ -837,8 +771,7 @@ def _parse_rfc1738_args(connection_url):
                 (?::(?P<port>[^/]*))?
             )?
             (?:/(?P<database>.*))?
-            '''
-                         , re.X)
+            ''', re.X)
 
     m = pattern.match(connection_url)
     if m is not None:
@@ -886,7 +819,7 @@ def build_api_meta(y):
                 if len(descriptor["model"]["payload"]["properties"]) > 0:
                     payload = descriptor["model"]["payload"]
                 else:
-                    payload =  None
+                    payload = None
 
                 paths[path][mdict["method"]] = {
                     "parameters": [],
@@ -941,7 +874,6 @@ def build_api_meta(y):
                             "type": v["type"]
                         }
                     })
-
 
         routes = y.get_routes()
         if routes:
@@ -1247,7 +1179,7 @@ class FileContentReader:
             # print(file_path)
             with open(file_path, "r") as file:
                 content = file.read()
-        except:
+        except FileNotFoundError:
             content = None
         return content
 
@@ -1355,8 +1287,9 @@ class SQLiteDataProvider:
             self._con.close()
             self._con = None
 
-    def get_value(self, ptype, value):
-        if ptype == "blob":
+    @staticmethod
+    def get_value(parameter_type, value):
+        if parameter_type == "blob":
             return sqlite3.Binary(value)
         return value
 
