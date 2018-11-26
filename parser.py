@@ -4,7 +4,6 @@ import json
 
 def lex_dash(current, content):
     token = []
-    block = True
     token.extend(["-", "-"])
     current = current + 2
     content_length = len(content)
@@ -13,17 +12,15 @@ def lex_dash(current, content):
             break
 
         p = content[current]
-        if len(content) > current + 1:
+        if content_length > current + 1:
             p1 = content[current + 1]
 
         if p == "-" and p1 == "-":
-            block = None
             token.extend(["-", "-"])
             current = current + 2
             break
 
-        if block:
-            token.extend(content[current])
+        token.extend(content[current])
         current = current + 1
 
     return current, {"type": "dash", "value": "".join(token)}
@@ -31,26 +28,26 @@ def lex_dash(current, content):
 
 def lex_curly_braces(current, content):
     token = []
-    block = True
     token.extend(["{", "{"])
     current = current + 2
     content_length = len(content)
     while True:
         if content_length <= current:
             break
+
         p = content[current]
-        if len(content) > current + 1:
+
+        if content_length > current + 1:
             p1 = content[current + 1]
         else:
             p1 = ""
+
         if p == "}" and p1 == "}":
-            block = None
             token.extend(["}", "}"])
             current = current + 2
             break
 
-        if block:
-            token.extend(content[current])
+        token.extend(content[current])
         current = current + 1
 
     return current, {"type": "parameter", "value": "".join(token)}
@@ -58,26 +55,27 @@ def lex_curly_braces(current, content):
 
 def lex_string(current, content, quote):
     token = []
-    block = True
     token.extend([quote])
     current = current + 1
     content_length = len(content)
+
     while True:
         if content_length <= current:
             break
+
         p = content[current]
+
         if len(content) > current + 1:
             p1 = content[current + 1]
         else:
             p1 = ""
+
         if p == quote and p1 != quote:
-            block = None
             token.extend([quote])
             current = current + 1
             break
 
-        if block:
-            token.extend(content[current])
+        token.extend(content[current])
         current = current + 1
 
     return current, {"type": "string", "value": "".join(token)}
@@ -117,8 +115,8 @@ def lex_word(current, content):
     return current, {"type": "word", "value": "".join(token)}
 
 
-def lex_braket(current, content):
-    return current + 1, {"type": "braket", "value": content[current]}
+def lex_brace(current, content):
+    return current + 1, {"type": "brace", "value": content[current]}
 
 
 def lex_newline(current, content):
@@ -153,7 +151,7 @@ def lexer(content):
             current, t = lex_spaces(current, content)
             tokens.append(t)
         elif p == "(" or p == ")":
-            current, t = lex_braket(current, content)
+            current, t = lex_brace(current, content)
             tokens.append(t)
         elif p == "\n":
             current, t = lex_newline(current, content)
@@ -176,7 +174,7 @@ def parser(tokens):
         v = token["value"]
         t = token["type"]
         if t == "parameter":
-            parameter_name = v[2:len(v) - 2].lstrip().rstrip()
+            parameter_name = v[2:len(v) - 2].lstrip().rstrip().lower()
             sql_block["parameters"].append(parameter_name)
         if t == "dash":
             if v[:3] == "--(" and v[len(v) - 3:] == ")--" and tc == 0:
@@ -207,6 +205,9 @@ def parser(tokens):
         sql_blocks.append(sql_block)
     return ast
 
+
+def concat(sql_block):
+    return "".join([x["value"] for x in sql_block["stmt"]])
 
 #with open("./serve/api/film/get/$.data.sql", "r") as file:
 #    sqlx = file.read()

@@ -11,7 +11,7 @@ from collections import defaultdict
 import yaml
 from jsonschema import FormatChecker, Draft4Validator
 
-from parser import parser, lexer
+from parser import parser, lexer, concat
 from yaal_postgres import PostgresContextManager
 
 logger = logging.getLogger("yaal")
@@ -50,7 +50,7 @@ def _build_twigs(branch, sql_blocks, bag):
     twigs = []
 
     for sql_block in sql_blocks:
-        content = "".join([x["value"] for x in sql_block["stmt"]])
+        content = concat(sql_block)
         if content.lstrip().rstrip():
             twig = {"content": content}
             _build_twig_parameters(twig, branch, sql_block)
@@ -179,8 +179,7 @@ def _build_branch(branch, map_by_files, content_reader, payload_model, output_mo
         if "declaration" in ast:
             declaration = ast["declaration"]
             if "parameters" in declaration:
-                for item in declaration["parameters"]:
-                    meta[item["name"]] = item
+                meta = {x["name"]: x for x in declaration["parameters"]}
             branch["parameters"] = meta
             
             for k, v in meta.items():
