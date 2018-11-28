@@ -46,39 +46,17 @@ def _to_lower_keys_deep(obj):
     return obj
 
 
-def _build_twigs(branch, sql_blocks, bag):
-    twigs = []
+def _build_twigs(branch, sql_stmts, bag):
 
-    for sql_block in sql_blocks:
-        content = concat(sql_block)
-        if content.lstrip().rstrip():
-            twig = {"content": content}
-            _build_twig_parameters(twig, branch, sql_block)
-            twigs.append(twig)
-            if "connection" in sql_block:
-                bag["connections"].append(sql_block["connection"])
-                twig["connection"] = sql_block["connection"]
-    branch["twigs"] = twigs
+    for twig in sql_stmts:
+        for p in twig["parameters"]:
+            if "type" not in p:
+                raise TypeError("type missing for {{" + p + "}} in the " + branch["method"] + ".sql")
 
+        if "connection" in twig:
+            bag["connections"].append(twig["connection"])
 
-def _build_twig_parameters(twig, branch_descriptor, sql_block):
-    parameter_names = sql_block["parameters"]
-    parameters = branch_descriptor.get("parameters")
-
-    params = []
-    for p in parameter_names:
-        if parameters and p in parameters:
-            descriptor_parameter = parameters[p]
-            twig_parameter = {
-                "name": p,
-                "type": descriptor_parameter["type"]
-            }
-            params.append(twig_parameter)
-        else:
-            raise TypeError("type missing for {{" + p + "}} in the " + branch_descriptor["method"] + ".sql")
-
-    if len(params) != 0:
-        twig["parameters"] = params
+    branch["twigs"] = sql_stmts
 
 
 def _order_list_by_dots(names):
@@ -169,26 +147,20 @@ def _build_branch(branch, map_by_files, content_reader, payload_model, output_mo
         branch[_use_parent_rows_str] = False
 
     if content:
-        lines = content.splitlines()
 
-        if len(lines) == 0:
-            return
-        
         ast = parser(lexer(content))
-        meta = {}
-        if "declaration" in ast:
-            declaration = ast["declaration"]
-            if "parameters" in declaration:
-                meta = {x["name"]: x for x in declaration["parameters"]}
-            branch["parameters"] = meta
-            
-            for k, v in meta.items():
-                if k[0] == "$" and k.find("$parent") == -1:
-                    set_model_def(model, k, v)
-                else:
-                    set_model_def(payload_model, k, v)
+        if not ast["sql_stmts"]:
+            return
 
-        _build_twigs(branch, ast["sql_blocks"], bag)
+        branch["parameters"] = ast["declaration"]["parameters"]
+            
+        for k, v in branch["parameters"].items():
+            if k[0] == "$" and k.find("$parent") == -1:
+                set_model_def(model, k, v)
+            else:
+                set_model_def(payload_model, k, v)
+
+        _build_twigs(branch, ast["sql_stmts"], bag)
 
     lower_branch_map = _to_lower_keys(branch_map)
     for k in map_by_files:
@@ -1083,14 +1055,13 @@ class DataProviderHelper:
         self._cache = {}
 
     @staticmethod
-    def get_executable_content(char, twig):
-        executable_content_str = "executable_content"
-        if executable_content_str in twig:
-            return twig[executable_content_str]
-        else:
-            executable_content = parameter_rx.sub(char, twig["content"])
-            twig[executable_content_str] = executable_content
-            return executable_content
+    def get_executable_content(char, twig, input_shape):
+        nulls = []
+        if "nullable" in twig:
+            for n in twig["nullable"]:
+                if input_shape.get_prop(n) is None:
+                    nulls.append(n)
+        return concat(twig, nulls, char)
 
     def build_parameters(self, query, input_shape, get_value_converter):
         values = []
@@ -1292,13 +1263,14 @@ class SQLiteDataProvider:
             return sqlite3.Binary(value)
         return value
 
-    def execute(self, query, input_shape, helper):
+    def execute(self, twig, input_shape, helper):
         con = self._con
-        content = helper.get_executable_content("?", query)
+        sql = helper.get_executable_content("?", twig, input_shape)
         with con:
             cur = con.cursor()
-            args = helper.build_parameters(query, input_shape, self.get_value)
-            cur.execute(content, args)
+            args = helper.build_parameters(sql, input_shape, self.get_value)
+            print(sql["content"])
+            cur.execute(sql["content"], args)
             rows = cur.fetchall()
 
         return rows, cur.lastrowid

@@ -1,3 +1,3 @@
 --($query.id integer)--
 
-select * from customer order by customer_id
+select * from customer where customer_id = {{$query.id}} order by customer_id
