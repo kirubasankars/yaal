@@ -51,12 +51,13 @@ class PostgresDataProvider:
 
     def execute(self, query, input_shape, helper):
         con = self._conn
-        content = helper.get_executable_content("%s", query)
+        sql = helper.get_executable_content("%s", query, input_shape)
 
         with con:
             cur = con.cursor(cursor_factory=RealDictCursor)
-            args = helper.build_parameters(query, input_shape, self.get_value_converter)
-            cur.execute(content, args)
+            args = helper.build_parameters(sql, input_shape, self.get_value_converter)
+            print(sql["content"])
+            cur.execute(sql["content"], args)
             rows = cur.fetchall()
 
         return rows, cur.lastrowid

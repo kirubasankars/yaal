@@ -1,4 +1,4 @@
---($query.page integer)--
+--($query.page integer, $query.id integer)--
 
 SELECT 
     * 
@@ -8,4 +8,6 @@ LEFT JOIN
     film_actor fa ON fa.film_id = f.film_id
 LEFT JOIN 
     actor a ON fa.actor_id = a.actor_id
+WHERE
+    ({{$query.id}} is null or fa.film_id = {{$query.id}})
 order by f.film_id
