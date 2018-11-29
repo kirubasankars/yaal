@@ -13,6 +13,7 @@ from jsonschema import FormatChecker, Draft4Validator
 
 from parser import parser, lexer, concat
 from yaal_postgres import PostgresContextManager
+from yaal_mysql import MySQLContextManager
 
 logger = logging.getLogger("yaal")
 logger.setLevel(logging.INFO)
@@ -1176,6 +1177,8 @@ class Yaal:
         provider_name, options = _parse_rfc1738_args(database_uri)
         if provider_name == "postgresql":
             self._data_providers[name] = PostgresContextManager(options)
+        if provider_name == "mysql":
+            self._data_providers[name] = MySQLContextManager(options)
         elif provider_name == "sqlite3":
             self._data_providers[name] = SQLiteContextManager(options)
         return None
