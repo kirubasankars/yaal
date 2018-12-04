@@ -1,4 +1,0 @@
-type: array
-properties:
-  FirstName:
-    mapped: first_name

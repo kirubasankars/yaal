@@ -49,9 +49,9 @@ class PostgresDataProvider:
             return pg.Binary(value)
         return value
 
-    def execute(self, query, input_shape, helper):
+    def execute(self, twig, input_shape, helper):
         con = self._conn
-        sql = helper.get_executable_content("%s", query, input_shape)
+        sql = helper.get_executable_content("%s", twig, input_shape)
 
         with con:
             cur = con.cursor(cursor_factory=RealDictCursor)

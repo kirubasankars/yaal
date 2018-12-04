@@ -1,3 +1,3 @@
---($query.id integer)--
+--($query)--
 
-select * from customer where ({{$query.id}} is null or customer_id = {{$query.id}})
+select {{$query}} as id

@@ -9,5 +9,5 @@ LEFT JOIN
 LEFT JOIN 
     actor a ON fa.actor_id = a.actor_id
 WHERE
-    ({{$query.id}} is null or fa.film_id = {{$query.id}})
+    ({{$query.id}} is null or fa.film_id = {{$query.id}}) and (1=1)
 order by f.film_id

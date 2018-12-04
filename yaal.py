@@ -11,14 +11,12 @@ from collections import defaultdict
 import yaml
 from jsonschema import FormatChecker, Draft4Validator
 
-from parser import parser, lexer, concat
+from parser import parser, lexer, compile_sql
 from yaal_postgres import PostgresContextManager
 from yaal_mysql import MySQLContextManager
 
 logger = logging.getLogger("yaal")
 logger.setLevel(logging.INFO)
-
-parameter_rx = re.compile(r"{{([A-Za-z0-9_.$-]*?)}}", re.MULTILINE)
 
 path_join = os.path.join
 
@@ -150,7 +148,7 @@ def _build_branch(branch, map_by_files, content_reader, payload_model, output_mo
     if content:
 
         ast = parser(lexer(content))
-        if not ast["sql_stmts"]:
+        if "sql_stmts" not in ast:
             return
 
         branch["parameters"] = ast["declaration"]["parameters"]
@@ -1062,7 +1060,7 @@ class DataProviderHelper:
             for n in twig["nullable"]:
                 if input_shape.get_prop(n) is None:
                     nulls.append(n)
-        return concat(twig, nulls, char)
+        return compile_sql(twig, nulls, char)
 
     def build_parameters(self, query, input_shape, get_value_converter):
         values = []
