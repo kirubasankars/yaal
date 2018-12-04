@@ -291,36 +291,46 @@ def parser(tokens):
         if not sql_stmt["nullable"]:
             del sql_stmt["nullable"]
 
+    if not ast["sql_stmts"]:
+        del ast["sql_stmts"]
+
     return ast
 
 
-def concat(sql_stmt, nulls, char):
+def compile_sql(sql_stmt, nulls, char):
     if "parameters" in sql_stmt:
         parameters_meta = {x["name"]: x for x in sql_stmt["parameters"]}
     else:
         parameters_meta = None
 
     stmt = sql_stmt["content"]
-    ignore = False
     tokens = []
     parameters = []
+    group = None
     for token in stmt:
-        if token["type"] == "brace" and "nullable_parameter" in token:
-            for p in nulls:
-                if p == token["nullable_parameter"]:
-                    tokens.append("1 = 1")
-                    ignore = True
-        if ignore:
-            continue
-        else:
-            if token["type"] == "parameter":
-                if "nullable" in token:
-                    tokens.append("1 = 2")
-                else:
-                    tokens.append(char)
-                    parameters.append(parameters_meta[token["name"]])
+        if token["type"] == "brace":
+            if not group and "nullable_parameter" in token:
+                for p in nulls:
+                    if p == token["nullable_parameter"]:
+                        tokens.append("1 = 1")
+                        group = token["group"]
+                        continue
             else:
-                tokens.append(token["value"])
+                if group == token["group"]:
+                    group = None
+                    continue
+
+        if group:
+            continue
+
+        if token["type"] == "parameter":
+            if "nullable" in token:
+                tokens.append("1 = 2")
+            else:
+                tokens.append(char)
+                parameters.append(parameters_meta[token["name"]])
+        else:
+            tokens.append(token["value"])
 
     return {"content": "".join(tokens), "parameters": parameters}
 
