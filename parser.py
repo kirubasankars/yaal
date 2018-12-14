@@ -124,6 +124,8 @@ def lex_newline(current, content):
 
 
 def lexer(content):
+    if not content:
+        return None
     tokens = []
     current = 0
     content_length = len(content)
@@ -171,6 +173,8 @@ def lexer(content):
 
 
 def parser(tokens):
+    if not tokens:
+    	return None
     ast = {}
     ast["sql_stmts"] = sql_stmts = []
     brace_groups = []
@@ -264,16 +268,17 @@ def parser(tokens):
     else:
         ast["declaration"] = {"parameters":{}}
 
-    for sql_stmt in sql_stmts:
-        parameters = []
-        if "parameters" in sql_stmt:
-            for p in sql_stmt["parameters"]:
-                if p in declaration_parameters:
-                    parameters.append(declaration_parameters[p])
-                else:
-                    parameters.append({"name": p})
+    if declaration_parameters:
+        for sql_stmt in sql_stmts:
+            parameters = []
+            if "parameters" in sql_stmt:
+                for p in sql_stmt["parameters"]:
+                    if p in declaration_parameters:
+                        parameters.append(declaration_parameters[p])
+                    else:
+                        parameters.append({"name": p})
 
-        sql_stmt["parameters"] = parameters
+            sql_stmt["parameters"] = parameters
 
     possible_null_parameter_rx = re.compile("^\(\s*{{(?P<name>[A-Za-z0-9_.$-]*?)}}\s+is\s+null\s+or", re.IGNORECASE)
     for sql_stmt in sql_stmts:

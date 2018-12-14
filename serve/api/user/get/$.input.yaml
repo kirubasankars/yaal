@@ -1,7 +1,0 @@
-query:
-  properties:
-    id:
-      type: integer
-
-    id1:
-      type: string

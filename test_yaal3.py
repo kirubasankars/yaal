@@ -1,6 +1,7 @@
 import unittest
 
 from yaal import Yaal, create_context
+from parser import compile_sql
 
 
 class FakeExecutionContext:
@@ -78,7 +79,8 @@ class TestGravity(unittest.TestCase):
         leaf0 = leafs[0]
         leaf0_parameters = leaf0["parameters"]
         self.assertEqual(1, len(leaf0_parameters))
-        self.assertEqual("select {{id1}}", leaf0["content"].lstrip().rstrip())
+        sql = compile_sql(leaf0, [], '?')
+        self.assertEqual("\nselect ?\n", sql["content"])
 
     def test_trunk_with_parameters_queries_check(self):
         gravity = Yaal("/path", FakeContentReader1(), True)

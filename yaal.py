@@ -619,7 +619,7 @@ def get_result_json(descriptor, get_data_providers, context):
 def get_descriptor_json(descriptor):
     d = copy.deepcopy(descriptor)
     del d["_validators"]
-    return json.dumps(d)
+    return json.dumps(d, indent=4)
 
 
 def create_context(descriptor, payload=None, query=None, path_values=None, header=None, cookie=None):
@@ -849,7 +849,7 @@ def build_api_meta(y):
         if routes:
             for r in routes:
                 p = "/api/" + r["descriptor"]
-                path = "/api/" + r["path"]
+                path = "/api" + r["path"]
                 if p in paths:
                     paths[path] = paths[p]
                     del paths[p]
