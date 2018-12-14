@@ -3,6 +3,7 @@ from flask import Flask, request, abort, send_from_directory
 from yaal import Yaal, get_descriptor_json, build_api_meta
 from yaal_flask import create_yaal_context, create_flask_response
 import json
+import re
 
 path_join = os.path.join
 
@@ -20,6 +21,22 @@ app.config.from_pyfile(path_join(*[root_path, "config.cfg"]))
 y = Yaal(path_join(*[root_path, "api"]), None, app.config["YAAL_DEBUG"])
 for name, db_url in app.config["DATA_PROVIDERS"].items():
     y.setup_data_provider(name, db_url)
+
+
+@app.route("/api/debug", methods=["GET"])
+def debug_api():
+    if "route" in request.args and "method" in request.args:
+        r = re.sub("^/api/", "", request.args["route"])
+        m = request.args["method"]
+
+        descriptor_path, route_path, path_values = y.get_descriptor_path_by_route(r)
+        descriptor = y.get_descriptor(path_join(*[route_path, m]), path_join(*[descriptor_path, m]))
+        if descriptor:
+            return app.response_class(get_descriptor_json(descriptor), content_type="application/json")
+        else:
+            return abort(404)
+    else:
+        return abort(404)
 
 
 @app.route("/", methods=["GET"], defaults={"path": ""})
@@ -43,9 +60,6 @@ def namespace_serve_api(path):
     if not descriptor:
         return abort(404)
 
-    if "debug" in request.args and app.config["YAAL_DEBUG"]:
-        return app.response_class(get_descriptor_json(descriptor), content_type="application/json")
-
     ctx = create_yaal_context(request, path_values, descriptor)
     rs = y.get_result_json(descriptor, ctx)
 
@@ -56,7 +70,7 @@ def namespace_serve_api(path):
 def swagger_meta():
     paths = build_api_meta(y)
     res = {"openapi": "3.0.0", "paths": paths}
-    return app.response_class(json.dumps(res), content_type="application/json")
+    return app.response_class(json.dumps(res, indent=4), content_type="application/json")
 
 
 if __name__ == "__main__":

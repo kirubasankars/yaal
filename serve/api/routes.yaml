@@ -1,0 +1,3 @@
+-
+  descriptor: user
+  route: /user/{id}/test

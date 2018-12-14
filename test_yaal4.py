@@ -1,7 +1,7 @@
 import unittest
 
 from parser import parser, lexer
-from yaal import _to_lower_keys, _to_lower_keys_deep, _build_twigs, _build_twig_parameters
+from yaal import _to_lower_keys, _to_lower_keys_deep, _build_twigs
 from yaal import _order_list_by_dots, _build_trunk_map_by_files, _build_branch
 
 
@@ -108,13 +108,6 @@ class TestGravity(unittest.TestCase):
         _build_twigs(branch, ast["sql_blocks"], {})
         expected = {"twigs": []}
         self.assertDictEqual(branch, expected)
-
-    def test_build_twig_parameters_param_missing(self):
-        twig = {
-            "content": "select {{b}}"
-        }
-        branch = {"parameters": {"a": {"name": "a", "type": "integer"}}}
-        with self.assertRaises(Exception): _build_twig_parameters(twig, branch)
 
     def test_order_list_by_dots(self):
         i = ["order.items.product", "order", "order.items"]
