@@ -1,5 +1,5 @@
 import unittest
-from parser import lexer
+from yaal_parser import lexer
 
 
 class TestLexer(unittest.TestCase):

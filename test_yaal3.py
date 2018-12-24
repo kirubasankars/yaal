@@ -1,7 +1,7 @@
 import unittest
 
 from yaal import Yaal, create_context
-from parser import compile_sql
+from yaal_parser import compile_sql
 
 
 class FakeExecutionContext:

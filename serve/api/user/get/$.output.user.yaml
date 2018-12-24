@@ -1,0 +1,20 @@
+type: object
+partition_by: user_id
+cache: true
+
+properties:
+  id:
+    mapped: user_id
+  name:
+    mapped: user_name
+
+  roles:
+    type: array
+    partition_by: role_id
+    parent_rows: true
+
+    properties:
+      id:
+        mapped: role_id
+      name:
+        mapped: role_name
