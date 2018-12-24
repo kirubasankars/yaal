@@ -1,5 +1,4 @@
 import re
-import json
 
 
 def lex_dash(current, content):
@@ -174,12 +173,13 @@ def lexer(content):
 
 def parser(tokens):
     if not tokens:
-    	return None
+        return None
+
     ast = {}
     ast["sql_stmts"] = sql_stmts = []
     brace_groups = []
 
-    parameter_rx = re.compile(r"\s*(?P<name>[\$\_\.A-Za-z0-9]+)(\s+(?P<type>\w+))?\s*")
+    parameter_rx = re.compile(r"\s*(?P<name>[\$\_\.A-Za-z0-9\[\]]+)(\s+(?P<type>\w+))?\s*")
     sql_rx = re.compile(r"--sql\(\s*(?P<name>\w+)?\s*\)--")
 
     sql_stmt = {"content": [], "parameters": []}
@@ -196,7 +196,7 @@ def parser(tokens):
         if t == "parameter":
             parameter_name = v[2:len(v) - 2].lstrip().rstrip().lower()
             token["name"] = parameter_name
-            sql_stmt["parameters"].append(parameter_name)
+            sql_stmt["parameters"].append({"name": parameter_name})
 
             if len(tokens) > (tc + 4):
                 token2 = tokens[tc + 1]
@@ -205,7 +205,7 @@ def parser(tokens):
                 token5 = tokens[tc + 4]
 
                 if token2["type"] == "space" and token3["value"] == "is" and token4["type"] == "space" and token5["value"] == "null":
-                    token = {"type": "parameter", "name": parameter_name, "value": "{{" + parameter_name + "}} is null","nullable": True}
+                    token = {"type": "parameter", "name": parameter_name, "value": "{{" + parameter_name + "}} is null", "nullable": True}
                     tc += 4
 
         if t == "dash":
@@ -217,9 +217,13 @@ def parser(tokens):
                     m = parameter_rx.search(p)
                     if m:
                         d = m.groupdict()
-                        token["parameters"].append({"name": d["name"], "type": d["type"]})
-                        d = None
-                ast["declaration"] = token
+                        param_name = d["name"]
+                        if d["type"]:
+                            param_type = d["type"]
+                        else:
+                            param_type = ""
+                        token["parameters"].append({"name": param_name.lstrip().rstrip().lower(), "type": param_type})
+                ast["parameters"] = {x["name"]: x for x in token["parameters"]}
                 tc += 1
                 continue
             else:
@@ -257,26 +261,19 @@ def parser(tokens):
     if len([x for x in sql_stmt["content"] if x["type"] == "word"]):
         sql_stmts.append(sql_stmt)
 
-    declaration_parameters = None
-    if "declaration" in ast:
-        declaration = ast["declaration"]
-        if "parameters" in declaration:
-            declaration["parameters"] = {x["name"]: x for x in declaration["parameters"]}
-        else:
-            declaration["parameters"] = {}
-        declaration_parameters = declaration["parameters"]
-    else:
-        ast["declaration"] = {"parameters":{}}
+    ast_parameters = None
+    if "parameters" in ast:
+        ast_parameters = ast["parameters"]
 
-    if declaration_parameters:
+    if ast_parameters:
         for sql_stmt in sql_stmts:
             parameters = []
             if "parameters" in sql_stmt:
                 for p in sql_stmt["parameters"]:
-                    if p in declaration_parameters:
-                        parameters.append(declaration_parameters[p])
+                    if p["name"] in ast_parameters:
+                        parameters.append(ast_parameters[p["name"]])
                     else:
-                        parameters.append({"name": p})
+                        parameters.append(p)
 
             sql_stmt["parameters"] = parameters
 
@@ -338,12 +335,3 @@ def compile_sql(sql_stmt, nulls, char):
             tokens.append(token["value"])
 
     return {"content": "".join(tokens), "parameters": parameters}
-
-
-#with open("./serve/api/film/get/$.data.sql", "r") as file:
-#    sqlx = file.read()
-
-
-#output = parser(lexer(sqlx))
-#print(json.dumps(output, indent=3))
-#print(concat(output["sql_stmts"][0], [""], "?")["content"])

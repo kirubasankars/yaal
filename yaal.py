@@ -1,22 +1,25 @@
 import copy
 import datetime
 import json
-import logging
 import os
 import re
-import sqlite3
 import urllib
+import uuid
 from collections import defaultdict
 
 import yaml
 from jsonschema import FormatChecker, Draft4Validator
 
-from parser import parser, lexer, compile_sql
+from yaal_shape import Shape
+from yaal_parser import parser, lexer, compile_sql
+from yaal_sqlite import SQLiteContextManager
 from yaal_postgres import PostgresContextManager
 from yaal_mysql import MySQLContextManager
 
-logger = logging.getLogger("yaal")
-logger.setLevel(logging.INFO)
+import logging
+
+logging.basicConfig(level=logging.DEBUG, format='%(name)s - %(levelname)s - %(message)s')
+logger = logging
 
 path_join = os.path.join
 
@@ -47,10 +50,11 @@ def _to_lower_keys_deep(obj):
 
 def _build_twigs(branch, sql_stmts, bag):
 
+    # TODO : should be moved to parser
     for twig in sql_stmts:
         for p in twig["parameters"]:
             if "type" not in p:
-                raise TypeError("type missing for {{" + p + "}} in the " + branch["method"] + ".sql")
+                raise TypeError("type missing for {{" + p["name"] + "}} in the " + branch["method"] + ".sql")
 
         if "connection" in twig:
             bag["connections"].append(twig["connection"])
@@ -107,6 +111,7 @@ def _build_branch(branch, map_by_files, content_reader, payload_model, output_mo
     _properties_str, _type_str, _partition_by_str = "properties", "type", "partition_by"
     _output_type_str, _use_parent_rows_str = "output_type", "use_parent_rows"
     _parameters_str, _twig_str, _parent_rows_str = "parameters", "twig", "parent_rows"
+    _cache_str = "cache"
 
     path, method = branch["path"], branch["method"]
     content = content_reader.get_sql(method, path)
@@ -131,6 +136,12 @@ def _build_branch(branch, map_by_files, content_reader, payload_model, output_mo
         if _parent_rows_str in output_model:
             branch[_use_parent_rows_str] = output_model[_parent_rows_str]
 
+        if _cache_str in output_model:
+            if _use_parent_rows_str in branch and branch[_use_parent_rows_str]:
+                raise Exception("cache and use_parent_rows can't be true at a same time")
+
+            branch[_cache_str] = output_model[_cache_str]
+
         if _partition_by_str in output_model:
             branch[_partition_by_str] = output_model[_partition_by_str]
 
@@ -151,7 +162,8 @@ def _build_branch(branch, map_by_files, content_reader, payload_model, output_mo
         if "sql_stmts" not in ast:
             return
 
-        branch["parameters"] = ast["declaration"]["parameters"]
+        if "parameters" in ast:
+            branch["parameters"] = ast["parameters"]
             
         for k, v in branch["parameters"].items():
             if k[0] == "$" and k.find("$parent") == -1:
@@ -201,18 +213,18 @@ def _build_branch(branch, map_by_files, content_reader, payload_model, output_mo
         branch["branches"] = branches
 
 
+array_rx = re.compile(r"^(?P<path>\w+)\[\d+\]$")
+
+
 def set_model_def(model, prop, value):
     dot = prop.find(".")
     if dot > -1:
         path = prop[:dot]
         if path == "$parent":
-            if "payload" in model:
-                model = model["payload"]["$parent"]
+            if "$parent" in model:
+                model = model["$parent"]
             else:
-                if "$parent" in model:
-                    model = model["$parent"]
-                else:
-                    model = None
+                model = None
         elif path == "$query":
             model = model["query"]
         elif path == "$cookie":
@@ -223,30 +235,43 @@ def set_model_def(model, prop, value):
             model = model["path"]
         elif path == "$params":
             return
+        elif path == "$request":
+            return
         else:
-            if "payload" in model:
-                model = model["payload"]
+            if "properties" not in model:
+                model["properties"] = {}
+
+            m = array_rx.search(path)
+            if m:
+                path = m.groupdict()["path"]
+                if path not in model["properties"]:
+                    model["properties"][path] = {
+                        "type": "array",
+                        "properties": {}
+                    }
             else:
-                model = model["properties"][path]
+                if path not in model["properties"]:
+                    model["properties"][path] = {
+                        "type": "object",
+                        "properties": {}
+                    }
+            model = model["properties"][path]
         set_model_def(model, prop[dot + 1:], value)
     else:
-        _type = value.get("type")
-        if not _type:
-            _type = "string"
         if model and "properties" in model:
             if model and prop not in model["properties"]:
                 model["properties"][prop] = {
-                    "type": _type
+                    "type": value.get("type")
                 }
 
 
-def create_trunk(path, content_reader):
+def create_trunk(path, output_mapper, content_reader):
     ordered_files = _order_list_by_dots(content_reader.list_sql(path))
     if len(ordered_files) == 0:
         return None
 
     trunk_map = _build_trunk_map_by_files(ordered_files)
-    config = content_reader.get_config(path)
+    config = content_reader.get_config(path, output_mapper)
 
     input_model_str, output_model_str = "input.model", "output.model"
     query_str, path_str, header_str, cookie_str, payload_str = "query", "path", "header", "cookie", "payload"
@@ -363,11 +388,14 @@ def _execute_twigs(branch, data_providers, context, data_provider_helper):
     rs = []
     if twigs:
         for twig in twigs:
+            # TODO : assign default to DB, if can be removed
             if "connection" in twig:
                 connection = twig["connection"]
             else:
                 connection = "db"
+
             output, output_last_inserted_id = data_providers[connection].execute(twig, context, data_provider_helper)
+
             context.get_prop("$params").set_prop("$last_inserted_id", output_last_inserted_id)
 
             if len(output) >= 1:
@@ -411,37 +439,44 @@ def _execute_twigs(branch, data_providers, context, data_provider_helper):
     return rs, None
 
 
-def _execute_branch(branch, is_trunk, data_providers, context, parent_rows, parent_partition_by):
-    input_type, output_partition_by = branch["input_type"], branch.get("partition_by")
-    use_parent_rows = branch.get("use_parent_rows")
+def _execute_branch(branch, is_trunk, data_providers, context, parent_rows, parent_partition_by, cache_provider):
+    input_type, output_partition_by, cache = branch["input_type"], branch.get("partition_by"), branch.get("cache")
+    use_parent_rows, method = branch.get("use_parent_rows"), branch.get("method")
     output = []
     data_provider_helper = DataProviderHelper()
     db_data_provider = data_providers["db"]
 
     try:
-        if is_trunk:
-            for name, data_provider in data_providers.items():
-                data_provider.begin()
+        if cache and method in cache_provider:
+            output = cache_provider[method]
+        else:
+            if is_trunk:
+                for name, data_provider in data_providers.items():
+                    data_provider.begin()
 
-        if input_type == "array":
-            length = int(context.get_prop("$length"))
-            for i in range(0, length):
-                item_ctx = context.get_prop("@" + str(i))
-                rs, errors = _execute_twigs(branch, data_providers, item_ctx, data_provider_helper)
-                output.extend(rs)
+            if input_type == "array":
+                length = int(context.get_prop("$length"))
+                for i in range(0, length):
+                    item_ctx = context.get_prop("@" + str(i))
+                    rs, errors = _execute_twigs(branch, data_providers, item_ctx, data_provider_helper)
+                    output.extend(rs)
+                    if errors:
+                        return None, errors
+
+            elif input_type == "object":
+                output, errors = _execute_twigs(branch, data_providers, context, data_provider_helper)
                 if errors:
                     return None, errors
 
-        elif input_type == "object":
-            output, errors = _execute_twigs(branch, data_providers, context, data_provider_helper)
-            if errors:
-                return None, errors
+            if cache:
+                cache_provider[method] = output
 
-        if use_parent_rows and not parent_partition_by:
-            raise Exception("parent _partition_by is can't be empty when child wanted to use parent rows")
+            # TODO : move parent's _partition_by validation to compile time
+            if use_parent_rows and not parent_partition_by:
+                raise Exception("parent's _partition_by is can't be empty when child wanted to use parent rows")
 
-        if use_parent_rows:
-            output = copy.deepcopy(parent_rows)
+            if use_parent_rows:
+                output = copy.deepcopy(parent_rows)
 
         branches = branch.get("branches")
         if branches:
@@ -452,8 +487,7 @@ def _execute_branch(branch, is_trunk, data_providers, context, parent_rows, pare
                     sub_node_shape = context.get_prop(branch_name.lower())
 
                 sub_node_output, errors = _execute_branch(branch_descriptor, False, data_providers, sub_node_shape,
-                                                          output,
-                                                          output_partition_by)
+                                                          output, output_partition_by, cache_provider)
                 if errors:
                     return None, errors
 
@@ -580,7 +614,7 @@ def _output_mapper(output_type, output_modal, branches, result):
     return mapped_result
 
 
-def get_result(descriptor, get_data_provider, ctx):
+def get_result(descriptor, get_data_provider, ctx, cache_provider):
     errors = ctx.get_prop("$request").validate(True)
     errors.extend(ctx.validate(False))
 
@@ -593,7 +627,7 @@ def get_result(descriptor, get_data_provider, ctx):
     for con in descriptor["connections"]:
         data_providers[con] = get_data_provider(con)
 
-    rs, errors = _execute_branch(descriptor, True, data_providers, ctx, [], None)
+    rs, errors = _execute_branch(descriptor, True, data_providers, ctx, [], None, cache_provider)
 
     if errors:
         status_code = ctx.get_prop(status_code_str)
@@ -612,14 +646,54 @@ def _default_date_time_converter(o):
         return o.__str__()
 
 
-def get_result_json(descriptor, get_data_providers, context):
-    return json.dumps(get_result(descriptor, get_data_providers, context), default=_default_date_time_converter)
+def get_result_json(descriptor, get_data_providers, context, cache_provider):
+    return json.dumps(get_result(descriptor, get_data_providers, context, cache_provider), default=_default_date_time_converter)
 
 
-def get_descriptor_json(descriptor):
+def debug_descriptor(descriptor, pretty):
+    if "_validators" in descriptor:
+        del descriptor["_validators"]
+    if "branches" in descriptor:
+        for branch in descriptor["branches"]:
+            debug_descriptor(branch, pretty)
+    if "twigs" in descriptor:
+        for twig in descriptor["twigs"]:
+            content = twig["content"]
+
+            if pretty:
+                content_length = len(content)
+                i = 0
+
+                while True:
+                    if i >= content_length:
+                        break
+
+                    item = content[i]
+
+                    if i + 1 < content_length:
+                        item1 = content[i + 1]
+                    if item["type"] == "newline":
+                        item["value"] = " "
+                    if item["type"] == "space":
+                        item["value"] = " "
+
+                    if (item["type"] == "newline" or item["type"] == "space") \
+                            and (item1["type"] == "space" or item1["type"] == "newline"):
+
+                        item["value"] = ""
+
+                    i = i + 1
+
+            twig["content"] = "".join([x["value"] for x in twig["content"]]).lstrip().rstrip()
+
+
+def get_descriptor_json(descriptor, pretty):
     d = copy.deepcopy(descriptor)
-    del d["_validators"]
-    return json.dumps(d, indent=4)
+    debug_descriptor(d, pretty)
+    if pretty:
+        return json.dumps(d, indent=4)
+    else:
+        return json.dumps(d)
 
 
 def create_context(descriptor, payload=None, query=None, path_values=None, header=None, cookie=None):
@@ -694,7 +768,7 @@ def create_context(descriptor, payload=None, query=None, path_values=None, heade
         "$header": header_shape,
         "$cookie": cookie_shape
     }
-    request_shape = Shape({}, None, None, request_extras, None)
+    request_shape = Shape({}, {"id": str(uuid.uuid4())}, None, request_extras, None)
 
     response_extras = {
         "$header": Shape(None, None, None, None, None),
@@ -726,7 +800,12 @@ def _build_routes(routes):
         for r in routes:
             if "route" in r and "descriptor" in r:
                 p = "^" + re.sub(r"{(.*?)}", r"(?P<\1>[^/]+)", r["route"]) + "/?$"
-                _routes.append({"route": re.compile(p), "descriptor": r["descriptor"], "path": r["route"]})
+                _routes.append({
+                    "route": re.compile(p),
+                    "descriptor": r["descriptor"],
+                    "path": r["route"],
+                    "output_mapper": r["mapper"] if "mapper" in r else None
+                })
         return _routes
 
 
@@ -766,288 +845,6 @@ def _parse_rfc1738_args(connection_url):
         raise Exception("Could not parse rfc1738 URL from string '%s'" % connection_url)
 
 
-def build_api_meta(y):
-    root_path = y.get_root_path()
-    all_paths = sorted([x[0] for x in os.walk(root_path)])
-    paths = {}
-    method_rx = re.compile("/(?P<method>get|put|post|delete)$")
-
-    for p in all_paths:
-        m = method_rx.search(p)
-        if m:
-            mdict = m.groupdict()
-            p = p.replace(root_path + "/", "")
-            p = method_rx.sub("", p)
-            path = "/api/" + p
-
-            descriptor = y.get_descriptor(p + "/" + mdict["method"], p + "/" + mdict["method"])
-            if descriptor:
-
-                if path not in paths:
-                    paths[path] = {}
-
-                if len(descriptor["model"]["payload"]["properties"]) > 0:
-                    payload = descriptor["model"]["payload"]
-                else:
-                    payload = None
-
-                paths[path][mdict["method"]] = {
-                    "parameters": [],
-                    "requestBody": {
-                        "content": {
-                            "application/json": payload
-                        }
-                    },
-                    "responses": {
-                        "200": {
-                            "content": {
-                                "application/json": descriptor["model"]["output"]
-                            }
-                        }
-                    }
-                }
-
-                parameters = paths[path][mdict["method"]]["parameters"]
-
-                for k, v in descriptor["model"]["query"]["properties"].items():
-                    parameters.append({
-                        "name": k,
-                        "in": "query",
-                        "schema": {
-                            "type": v["type"]
-                        }
-                    })
-
-                for k, v in descriptor["model"]["header"]["properties"].items():
-                    parameters.append({
-                        "name": k,
-                        "in": "header",
-                        "schema": {
-                            "type": v["type"]
-                        }
-                    })
-
-                for k, v in descriptor["model"]["cookie"]["properties"].items():
-                    parameters.append({
-                        "name": k,
-                        "in": "cookie",
-                        "schema": {
-                            "type": v["type"]
-                        }
-                    })
-
-                for k, v in descriptor["model"]["path"]["properties"].items():
-                    parameters.append({
-                        "name": k,
-                        "in": "path",
-                        "schema": {
-                            "type": v["type"]
-                        }
-                    })
-
-        routes = y.get_routes()
-        if routes:
-            for r in routes:
-                p = "/api/" + r["descriptor"]
-                path = "/api" + r["path"]
-                if p in paths:
-                    paths[path] = paths[p]
-                    del paths[p]
-
-    return paths
-
-
-class Shape:
-
-    def __init__(self, schema, data, parent_shape, extras, validator):
-        self._array = False
-        self._object = False
-
-        self._data = data or {}
-        self._o_data = data or {}
-        self._parent = parent_shape
-        self._schema = schema
-        self._input_properties = None
-        input_properties = None
-        self._index = 0
-        self._validator = validator
-
-        self._extras = extras
-
-        if data is not None and ("$parent" in data or "$length" in data):
-            raise Exception("$parent or $length is reversed keywords. You can't use them.")
-
-        schema = schema or {}
-
-        _properties_str = "properties"
-        if _properties_str in schema:
-            input_properties = schema[_properties_str]
-            self._input_properties = input_properties
-
-        _type_str = "type"
-        if _type_str in schema:
-            _type = schema[_type_str]
-            if _type == "array":
-                self._array = True
-                if data and type(data) != list:
-                    raise TypeError("input expected as array. object is given.")
-            else:
-                self._object = True
-                if data:
-                    if type(data) != dict:
-                        raise TypeError("input expected as object. array is given.")
-                    else:
-                        self._data = _to_lower_keys(data)
-
-        if self._array:
-            shapes = []
-            schema[_type_str] = "object"
-            idx = 0
-            for item in self._data:
-                s = Shape(schema, item, self, extras, None)
-                s._index = idx
-                shapes.append(s)
-                idx = idx + 1
-            schema[_type_str] = "array"
-        else:
-            shapes = {}
-            if input_properties:
-                for k, v in input_properties.items():
-                    if type(v) == dict:
-                        _type_value = v.get(_type_str)
-                        if _type_value and _type_value == "array" or _type_value == "object":
-                            shapes[k.lower()] = Shape(v, self._data.get(k.lower()), self, extras, None)
-
-        self._shapes = shapes
-
-    def get_prop(self, prop):
-        extras = self._extras
-        shapes = self._shapes
-        data = self._data
-        parent = self._parent
-
-        dot = prop.find(".")
-        if dot > -1:
-            path = prop[:dot]
-            remaining_path = prop[dot + 1:]
-
-            if path[0] == "$":
-                if path == "$parent":
-                    return parent.get_prop(remaining_path)
-
-                if extras:
-                    if path in extras:
-                        return extras[path].get_prop(remaining_path)
-
-            if self._array:
-                idx = int(path[1:])
-                return shapes[idx].get_prop(remaining_path)
-
-            return shapes[path].get_prop(remaining_path)
-        else:
-
-            if prop[0] == "$":
-
-                if prop == "$json" or prop == "$parent" or prop == "$length" or prop == "$index":
-                    if prop == "$json":
-                        return json.dumps(self.get_data())
-                    if prop == "$parent":
-                        return parent
-                    if prop == "$length":
-                        return len(data)
-                    if prop == "$index":
-                        return self._index
-
-                if extras:
-                    if prop in extras:
-                        return extras[prop]
-
-            if self._array:
-                idx = int(prop[1:])
-                return shapes[idx]
-
-            if prop in shapes:
-                return shapes[prop]
-
-            if prop in data:
-                return data[prop]
-
-            if self._input_properties is not None and prop in self._input_properties:
-                default_str = "default"
-                input_type = self._input_properties[prop]
-                if default_str in input_type:
-                    return input_type[default_str]
-
-            return None
-
-    def set_prop(self, prop, value):
-        shapes = self._shapes
-
-        dot = prop.find(".")
-        if dot > -1:
-            path = prop[:dot]
-            remaining_path = prop[dot + 1:]
-
-            if path in shapes:
-                if self._array:
-                    idx = int(path[1:])
-                    return shapes[idx].set_prop(remaining_path, value)
-                else:
-                    return shapes[path].set_prop(remaining_path, value)
-            else:
-                if path in self._extras:
-                    self._extras[path].set_prop(remaining_path, value)
-        else:
-            v = self.check_and_cast(prop, value)
-            self._data[prop.lower()] = v
-            self._o_data[prop] = v
-
-    def validate(self, include_extras):
-        errors = []
-
-        extras = self._extras
-        if extras and include_extras:
-            for name, extra in extras.items():
-                for x in extra.validate(include_extras):
-                    errors.append(x)
-
-        if self._validator:
-            error_list = list(self._validator.iter_errors(self._data))
-            if error_list:
-                for x in error_list:
-                    p = None
-                    if len(x.path) > 0:
-                        p = x.path[0]
-
-                    m = {
-                        "path": p,
-                        "message": x.message
-                    }
-                    errors.append(m)
-
-        return errors
-
-    def get_data(self):
-        return self._o_data
-
-    def check_and_cast(self, prop, value):
-        if self._input_properties is not None and prop in self._input_properties:
-            prop_schema = self._input_properties[prop]
-            _type_str = "type"
-            if _type_str in prop_schema:
-                parameter_type = prop_schema[_type_str]
-                try:
-                    if parameter_type == "integer" and not isinstance(value, int):
-                        return int(value)
-                    if parameter_type == "string" and not isinstance(value, str):
-                        return str(value)
-                    if parameter_type == "number" and not isinstance(value, float):
-                        return float(value)
-                except ValueError:
-                    pass
-        return value
-
-
 class DataProviderHelper:
 
     def __init__(self):
@@ -1065,7 +862,7 @@ class DataProviderHelper:
     def build_parameters(self, query, input_shape, get_value_converter):
         values = []
         _cache = self._cache
-
+        # TODO : implement string replacement for parameters with {{#name}}
         if "parameters" in query:
             parameters = query["parameters"]
             for p in parameters:
@@ -1086,13 +883,8 @@ class DataProviderHelper:
                             param_value = int(param_value)
                         elif param_type == "string":
                             param_value = str(param_value)
-                        elif param_type == "json":
-                            param_value = json.dumps(param_value.get_data())
                         else:
-                            if type(param_value) == Shape:
-                                param_value = json.dumps(param_value.get_data())
-                            else:
-                                param_value = get_value_converter(param_type, param_value)
+                            param_value = get_value_converter(param_type, param_value)
                     values.append(param_value)
                 except ValueError:
                     values.append(param_value)
@@ -1113,11 +905,11 @@ class FileContentReader:
         routes_path = path_join(*[self._root_path, path])
         return self._get_config(routes_path)
 
-    def get_config(self, path):
+    def get_config(self, path, output_mapper):
         input_path = path_join(*[self._root_path, path, "$.input"])
         input_config = self._get_config(input_path)
 
-        output_path = path_join(*[self._root_path, path, "$.output"])
+        output_path = path_join(*[self._root_path, path, "$.output" + ("." + output_mapper if output_mapper else "")])
         output_config = self._get_config(output_path)
 
         return {"input.model": input_config, "output.model": output_config}
@@ -1159,6 +951,7 @@ class Yaal:
         self._root_path = root_path
         self._descriptors = {}
         self._data_providers = {}
+        self._cache = {}
         self._debug = debug
 
         if not content_reader:
@@ -1184,94 +977,60 @@ class Yaal:
     def get_data_provider(self, name):
         return self._data_providers[name].get_context()
 
-    def create_descriptor(self, path):
-        return create_trunk(path, self._content_reader)
+    def create_descriptor(self, path, output_mapper):
+        return create_trunk(path, output_mapper, self._content_reader)
 
-    def get_descriptor(self, route, path):
-        k = path_join(*[route])
-        if not self._debug and k in self._descriptors:
-            return self._descriptors[k]
+    def clear_cache(self):
+        self._descriptors = {}
+        self._cache = {}
 
-        descriptor = self.create_descriptor(path)
-        self._descriptors[k] = descriptor
+    def get_descriptor(self, descriptor_ctx):
+        descriptor_path, route_path = descriptor_ctx["descriptor_path"], descriptor_ctx["route_path"]
+        output_mapper = descriptor_ctx["output_mapper"]
+        path = descriptor_ctx["path"]
+
+        if not self._debug and path in self._descriptors:
+            return self._descriptors[path]
+
+        descriptor = self.create_descriptor(descriptor_path, output_mapper)
+        self._descriptors[path] = descriptor
         return descriptor
 
-    def get_descriptor_path_by_route(self, path):
-        path_values = {}
+    def get_descriptor_path_by_route(self, path, method):
+        path_values, descriptor_path, route_path, output_mapper = None, None, None, None
+
         if self._routes:
+
             for r in self._routes:
                 m = r["route"].match(path)
                 if m:
+                    path_values = {}
                     for k, v in m.groupdict().items():
                         path_values[k] = v
-                    return r["descriptor"], r["path"], path_values
-        return path, path, None
+                    descriptor_path = path_join(*[r["descriptor"], method])
+                    route_path = r["path"]
+                    output_mapper = r["output_mapper"]
+                    break
 
-    def get_result_json(self, descriptor, context):
-        return get_result_json(descriptor, self.get_data_provider, context)
+            if not descriptor_path:
+                descriptor_path = path_join(*[path, method])
+                path_values = None
+
+        return {
+            "descriptor_path": descriptor_path,
+            "route_path": route_path,
+            "path_values": path_values,
+            "output_mapper": output_mapper,
+            "path": route_path if route_path else descriptor_path
+        }
+
+    def get_result_json(self, descriptor, descriptor_ctx, context):
+        path = descriptor_ctx["path"]
+        if path not in self._cache:
+            self._cache[path] = {}
+        cache_provider = self._cache[path]
+
+        return get_result_json(descriptor, self.get_data_provider, context, cache_provider)
 
     def get_root_path(self):
         return self._root_path
-
-
-class SQLiteContextManager:
-
-    def __init__(self, options):
-        self._options = options
-
-    def get_context(self):
-        return SQLiteDataProvider(self._options)
-
-
-class SQLiteDataProvider:
-
-    def __init__(self, options):
-        self._database = options["database"]
-        if self._database == "":
-            self._database = ":memory:"
-        self._con = None
-
-    @staticmethod
-    def _sqlite_dict_factory(cursor, row):
-        d = {}
-        for idx, col in enumerate(cursor.description):
-            d[col[0]] = row[idx]
-        return d
-
-    def begin(self):
-        self._con = sqlite3.connect(self._database)
-        self._con.row_factory = self._sqlite_dict_factory
-
-    def end(self):
-        try:
-            if self._con:
-                self._con.commit()
-                self._con.close()
-        except Exception as e:
-            raise e
-        finally:
-            self._con = None
-
-    def error(self):
-        if self._con:
-            self._con.rollback()
-            self._con.close()
-            self._con = None
-
-    @staticmethod
-    def get_value(parameter_type, value):
-        if parameter_type == "blob":
-            return sqlite3.Binary(value)
-        return value
-
-    def execute(self, twig, input_shape, helper):
-        con = self._con
-        sql = helper.get_executable_content("?", twig, input_shape)
-        with con:
-            cur = con.cursor()
-            args = helper.build_parameters(sql, input_shape, self.get_value)
-            print(sql["content"])
-            cur.execute(sql["content"], args)
-            rows = cur.fetchall()
-
-        return rows, cur.lastrowid

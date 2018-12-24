@@ -1,6 +1,6 @@
 import unittest
 
-from parser import parser, lexer
+from yaal_parser import parser, lexer
 from yaal import _to_lower_keys, _to_lower_keys_deep, _build_twigs
 from yaal import _order_list_by_dots, _build_trunk_map_by_files, _build_branch
 
@@ -46,8 +46,8 @@ class TestGravity(unittest.TestCase):
         content = "--(a integer)--" \
                   "select {{A}}, {{A}}"
         ast = parser(lexer(content))
-        branch_descriptor = {"method": "", "parameters": {x["name"]: x for x in ast["declaration"]["parameters"]}}
-        _build_twigs(branch_descriptor, ast["sql_blocks"], {})
+        branch_descriptor = {"method": "", "parameters": ast["parameters"]}
+        _build_twigs(branch_descriptor, ast["sql_stmts"], {})
         expected = {"method": "", "parameters": {"a": {"name": "a", "type": "integer"}},
                     "twigs": [{"content": "select {{A}}, {{A}}",
                                "parameters": [{"name": "a",
@@ -62,8 +62,8 @@ class TestGravity(unittest.TestCase):
                   "--sql--" \
                   "select {{a}}"
         ast = parser(lexer(content))
-        branch_descriptor = {"method": "", "parameters": {x["name"]: x for x in ast["declaration"]["parameters"]}}
-        _build_twigs(branch_descriptor, ast["sql_blocks"], {})
+        branch_descriptor = {"method": "", "parameters": ast["parameters"]}
+        _build_twigs(branch_descriptor, ast["sql_stmts"], {})
         expected = {"method": "", "parameters": {"a": {"name": "a", "type": "integer"}},
                     "twigs": [{"content": "select {{A}}, {{A}}",
                                "parameters": [{"name": "a",
@@ -79,8 +79,8 @@ class TestGravity(unittest.TestCase):
         content = "--(a integer)--" \
                   "select {{A}}, {{A}}"
         ast = parser(lexer(content))
-        branch_descriptor = {"method": "", "parameters": {x["name"]: x for x in ast["declaration"]["parameters"]}}
-        _build_twigs(branch_descriptor, ast["sql_blocks"], {})
+        branch_descriptor = {"method": "", "parameters": ast["parameters"]}
+        _build_twigs(branch_descriptor, ast["sql_stmts"], {})
         expected = {"method": "", "parameters": {"a": {"name": "a", "type": "integer"}}, "twigs": [{"content": "select {{A}}, {{A}}",
                                                                                       "parameters": [{"name": "a",
                                                                                                       "type": "integer"},
@@ -92,8 +92,8 @@ class TestGravity(unittest.TestCase):
         content = "--(a integer)--" \
                   "select {{A}}, {{A}}"
         ast = parser(lexer(content))
-        branch_descriptor = {"method": "", "parameters": {x["name"]: x for x in ast["declaration"]["parameters"]}}
-        _build_twigs(branch_descriptor, ast["sql_blocks"], {})
+        branch_descriptor = {"method": "", "parameters": ast["parameters"]}
+        _build_twigs(branch_descriptor, ast["sql_stmts"], {})
         expected = {"method": "","parameters": {"a": {"name": "a", "type": "integer"}}, "twigs": [{"content": "select {{A}}, {{A}}",
                                                                                       "parameters": [{"name": "a",
                                                                                                       "type": "integer"},
@@ -105,7 +105,7 @@ class TestGravity(unittest.TestCase):
         content = "--sql--"
         ast = parser(lexer(content))
         branch = {}
-        _build_twigs(branch, ast["sql_blocks"], {})
+        _build_twigs(branch, ast["sql_stmts"], {})
         expected = {"twigs": []}
         self.assertDictEqual(branch, expected)
 

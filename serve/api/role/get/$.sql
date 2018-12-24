@@ -5,6 +5,6 @@ select
 from
     role
 where
-    ({{$path.id}} is null or role.role_id = {{$path.id}})
+    ( {{$path.id}} is null or role.role_id = {{$path.id}})
 order by
     role_id
