@@ -1,5 +1,7 @@
 --($path.id integer)--
 
+--sql--
+
 select
     *
 from

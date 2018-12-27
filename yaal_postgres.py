@@ -1,6 +1,6 @@
 import psycopg2 as pg
-from psycopg2.extras import RealDictCursor
 from psycopg2 import pool
+from psycopg2.extras import RealDictCursor
 
 
 class PostgresContextManager:

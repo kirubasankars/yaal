@@ -1,7 +1,7 @@
 import unittest
 
 from yaal_parser import parser, lexer
-from yaal import _to_lower_keys, _to_lower_keys_deep, _build_twigs
+from yaal import _to_lower_keys, _to_lower_keys_deep
 from yaal import _order_list_by_dots, _build_trunk_map_by_files, _build_branch
 
 
@@ -41,73 +41,6 @@ class TestGravity(unittest.TestCase):
         obj = {"A": "a", "B": "B", "C": {"D": "d", "A": "a"}, "array": [{"F": "f", "G": "g"}]}
         self.assertDictEqual(_to_lower_keys_deep(obj),
                              {"a": "a", "b": "B", "c": {"d": "d", "a": "a"}, "array": [{"f": "f", "g": "g"}]})
-
-    def test_build_twigs_with_params(self):
-        content = "--(a integer)--" \
-                  "select {{A}}, {{A}}"
-        ast = parser(lexer(content))
-        branch_descriptor = {"method": "", "parameters": ast["parameters"]}
-        _build_twigs(branch_descriptor, ast["sql_stmts"], {})
-        expected = {"method": "", "parameters": {"a": {"name": "a", "type": "integer"}},
-                    "twigs": [{"content": "select {{A}}, {{A}}",
-                               "parameters": [{"name": "a",
-                                               "type": "integer"},
-                                              {"name": "a",
-                                               "type": "integer"}]}]}
-        self.assertDictEqual(branch_descriptor, expected)
-
-    def test_build_twigs_double_query(self):
-        content = "--(a integer)--" \
-                  "select {{A}}, {{A}}" \
-                  "--sql--" \
-                  "select {{a}}"
-        ast = parser(lexer(content))
-        branch_descriptor = {"method": "", "parameters": ast["parameters"]}
-        _build_twigs(branch_descriptor, ast["sql_stmts"], {})
-        expected = {"method": "", "parameters": {"a": {"name": "a", "type": "integer"}},
-                    "twigs": [{"content": "select {{A}}, {{A}}",
-                               "parameters": [{"name": "a",
-                                               "type": "integer"},
-                                              {"name": "a",
-                                               "type": "integer"}]},
-                              {"content": "select {{a}}",
-                               "parameters": [{"name": "a",
-                                               "type": "integer"}]}]}
-        self.assertDictEqual(branch_descriptor, expected)
-
-    def test_build_twigs_empty_query(self):
-        content = "--(a integer)--" \
-                  "select {{A}}, {{A}}"
-        ast = parser(lexer(content))
-        branch_descriptor = {"method": "", "parameters": ast["parameters"]}
-        _build_twigs(branch_descriptor, ast["sql_stmts"], {})
-        expected = {"method": "", "parameters": {"a": {"name": "a", "type": "integer"}}, "twigs": [{"content": "select {{A}}, {{A}}",
-                                                                                      "parameters": [{"name": "a",
-                                                                                                      "type": "integer"},
-                                                                                                     {"name": "a",
-                                                                                                      "type": "integer"}]}]}
-        self.assertDictEqual(branch_descriptor, expected)
-
-    def test_build_twigs_start_with_query(self):
-        content = "--(a integer)--" \
-                  "select {{A}}, {{A}}"
-        ast = parser(lexer(content))
-        branch_descriptor = {"method": "", "parameters": ast["parameters"]}
-        _build_twigs(branch_descriptor, ast["sql_stmts"], {})
-        expected = {"method": "","parameters": {"a": {"name": "a", "type": "integer"}}, "twigs": [{"content": "select {{A}}, {{A}}",
-                                                                                      "parameters": [{"name": "a",
-                                                                                                      "type": "integer"},
-                                                                                                     {"name": "a",
-                                                                                                      "type": "integer"}]}]}
-        self.assertDictEqual(branch_descriptor, expected)
-
-    def test_build_twigs4(self):
-        content = "--sql--"
-        ast = parser(lexer(content))
-        branch = {}
-        _build_twigs(branch, ast["sql_stmts"], {})
-        expected = {"twigs": []}
-        self.assertDictEqual(branch, expected)
 
     def test_order_list_by_dots(self):
         i = ["order.items.product", "order", "order.items"]

@@ -1,3 +1,3 @@
---($query.point.x integer, $query.point.y integer)--
+--($query.x.id integer)--
 
-select {{$query.point.x}} as x, {{$query.point.y}} as y
+select {{$query.x.id}} as id

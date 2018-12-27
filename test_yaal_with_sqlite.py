@@ -1,6 +1,6 @@
 import unittest
-
-from yaal import Yaal, create_context, get_result
+import json
+from yaal import Yaal, create_context
 
 
 class ContentReader:
@@ -11,12 +11,12 @@ class ContentReader:
     def get_sql(self, method, path):
         if path == "name/get":
             if method == "$":
-                return "--(name)--\n" \
-                       "SELECT {{name}} as name"
+                return "--(name string)--\n" \
+                       "SELECT {{name}} || ' Last' as name"
 
         return None
 
-    def get_config(self, path):
+    def get_config(self, path, mapper):
         return {
             "input.model": {
                 "payload": {
@@ -41,20 +41,22 @@ class ContentReader:
 
 class TestGravity(unittest.TestCase):
 
-    def test_simple_get_trunk_check(self):
-        g = Yaal("", ContentReader(), True)
-        g.setup_data_provider("db", "sqlite3:///")
-        descriptor = g.create_descriptor("name/get")
+    def setUp(self):
+        self._g = Yaal("", ContentReader(), True)
+        self._g.setup_data_provider("db", "sqlite3:///")
 
+    def tearDown(self):
+        pass
+
+    def test_simple_get_trunk_check(self):
+        g = self._g
+
+        descriptor = g.create_descriptor("name/get", None)
         self.assertTrue(descriptor["name"] == "$")
         self.assertTrue(descriptor["method"] == "$")
 
-        ctx = create_context(descriptor, payload={"Name": "Kiruba"})
+        descriptor_ctx = g.get_descriptor_path_by_route("name", "get")
+        ctx = create_context(descriptor, payload={"Name": "First"})
+        r = g.get_result_json(descriptor, descriptor_ctx, ctx)
 
-        r = get_result(descriptor, g.get_data_provider, ctx)
-
-        self.assertListEqual([{"name": "Kiruba"}], r)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        self.assertListEqual([{"name": "First Last"}], json.loads(r))
