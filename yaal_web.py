@@ -1,10 +1,12 @@
-import os
-from flask import Flask, request, abort, send_from_directory
-from yaal import Yaal, get_descriptor_json
-from yaal_openapi import build_api_meta
-from yaal_flask import create_yaal_context, create_flask_response
 import json
+import os
 import re
+
+from flask import Flask, request, abort, send_from_directory
+
+from yaal import Yaal, get_descriptor_json
+from yaal_flask import create_yaal_context, create_flask_response
+from yaal_openapi import build_api_meta
 
 path_join = os.path.join
 

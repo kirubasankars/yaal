@@ -35,7 +35,7 @@ class MySQLDataProvider:
             else:
                 pass
         except Exception as e:
-            #self._conn.close()
+            # self._conn.close()
             raise e
 
     def error(self):

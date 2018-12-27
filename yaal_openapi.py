@@ -1,33 +1,39 @@
-import re
+import copy
 import os
+import re
 
 
 def build_api_meta(y):
     root_path = y.get_root_path()
-    all_paths = sorted([x[0] for x in os.walk(root_path)])
+    available_paths = sorted([x[0] for x in os.walk(root_path)])
     paths = {}
     method_rx = re.compile("/(?P<method>get|put|post|delete|head|options)$")
 
-    for p in all_paths:
-        ma = method_rx.search(p)
-        if ma:
-            d = ma.groupdict()
-            p = p.replace(root_path + "/", "")
-            p = method_rx.sub("", p)
-            path = "/api/" + p
+    routes = y.get_routes()
+    routes_dict = {"/api/" + r["descriptor"]: r for r in routes}
 
-            descriptor = y.create_descriptor(p + "/" + d["method"])
+    for p in available_paths:
+        required_path_values = False
+        method_match = method_rx.search(p)
+
+        if method_match:
+            method_match_dict = method_match.groupdict()
+            part = p.replace(root_path + "/", "")
+            part = method_rx.sub("", part)
+            uri = "/api/" + part
+            method = method_match_dict["method"]
+            descriptor = y.create_descriptor(part + "/" + method, None)
             if descriptor:
 
-                if path not in paths:
-                    paths[path] = {}
+                if uri not in paths:
+                    paths[uri] = {}
 
                 if len(descriptor["model"]["payload"]["properties"]) > 0:
                     payload = descriptor["model"]["payload"]
                 else:
                     payload = None
 
-                paths[path][d["method"]] = {
+                paths[uri][method] = {
                     "parameters": [],
                     "requestBody": {
                         "content": {
@@ -43,9 +49,12 @@ def build_api_meta(y):
                     }
                 }
 
-                parameters = paths[path][d["method"]]["parameters"]
+                parameters = paths[uri][method]["parameters"]
 
                 for k, v in descriptor["model"]["query"]["properties"].items():
+                    if "name" in v:
+                        del v["name"]
+
                     parameters.append({
                         "name": k,
                         "in": "query",
@@ -55,6 +64,8 @@ def build_api_meta(y):
                     })
 
                 for k, v in descriptor["model"]["header"]["properties"].items():
+                    if "name" in v:
+                        del v["name"]
                     parameters.append({
                         "name": k,
                         "in": "header",
@@ -64,6 +75,8 @@ def build_api_meta(y):
                     })
 
                 for k, v in descriptor["model"]["cookie"]["properties"].items():
+                    if "name" in v:
+                        del v["name"]
                     parameters.append({
                         "name": k,
                         "in": "cookie",
@@ -73,6 +86,12 @@ def build_api_meta(y):
                     })
 
                 for k, v in descriptor["model"]["path"]["properties"].items():
+                    if "name" in v:
+                        del v["name"]
+
+                    if "required" in v:
+                        required_path_values = True
+
                     parameters.append({
                         "name": k,
                         "in": "path",
@@ -81,12 +100,20 @@ def build_api_meta(y):
                         }
                     })
 
-        routes = y.get_routes()
-        if routes:
-            for r in routes:
-                p = "/api/" + r["descriptor"]
-                path = "/api/" + r["path"]
-                if p in paths:
-                    paths[path] = paths[p]
+
+            if uri in routes_dict:
+                route = routes_dict[uri]
+                route_path = "/api/" + route["path"]
+
+                if route_path not in paths:
+                    paths[route_path] = {}
+
+                if required_path_values:
+                    if method not in paths[route_path]:
+                        paths[route_path][method] = copy.deepcopy(paths[uri][method])
+                        del paths[uri][method]
+                # else:
+                #    if method not in paths[route_path]:
+                #        paths[route_path][method] = copy.deepcopy(paths[uri][method])
 
     return paths

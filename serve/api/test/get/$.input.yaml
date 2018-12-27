@@ -1,0 +1,12 @@
+query:
+  properties:
+    x:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: integer
+      required:
+        - "id"
+        - "name"

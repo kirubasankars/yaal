@@ -58,7 +58,6 @@ class SQLiteDataProvider:
             cur = con.cursor()
             args = helper.build_parameters(sql, input_shape, self.get_value)
             cur.execute(sql["content"], args)
-            print(sql["content"])
             rows = cur.fetchall()
 
         return rows, cur.lastrowid

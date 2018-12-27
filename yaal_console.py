@@ -1,4 +1,4 @@
-from yaal import Yaal, create_context, get_result_json
+from yaal import Yaal, create_context
 
 YAAL_DEBUG = False
 
@@ -26,4 +26,4 @@ if __name__ == '__main__':
         exit()
 
     context = create_context(descriptor, path_values=descriptor_ctx["path_values"])
-    print(y.get_result_json(descriptor, context))
+    print(y.get_result_json(descriptor, descriptor_ctx, context))

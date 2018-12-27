@@ -171,7 +171,7 @@ def lexer(content):
     return tokens
 
 
-def parser(tokens):
+def parser(tokens, method):
     if not tokens:
         return None
 
@@ -204,8 +204,10 @@ def parser(tokens):
                 token4 = tokens[tc + 3]
                 token5 = tokens[tc + 4]
 
-                if token2["type"] == "space" and token3["value"] == "is" and token4["type"] == "space" and token5["value"] == "null":
-                    token = {"type": "parameter", "name": parameter_name, "value": "{{" + parameter_name + "}} is null", "nullable": True}
+                if token2["type"] == "space" and token3["value"] == "is" and token4["type"] == "space" and token5[
+                    "value"] == "null":
+                    token = {"type": "parameter", "name": parameter_name, "value": "{{" + parameter_name + "}} is null",
+                             "nullable": True}
                     tc += 4
 
         if t == "dash":
@@ -265,20 +267,22 @@ def parser(tokens):
     if "parameters" in ast:
         ast_parameters = ast["parameters"]
 
-    if ast_parameters:
-        for sql_stmt in sql_stmts:
-            parameters = []
-            if "parameters" in sql_stmt:
-                for p in sql_stmt["parameters"]:
-                    if p["name"] in ast_parameters:
-                        parameters.append(ast_parameters[p["name"]])
-                    else:
-                        parameters.append(p)
+    for sql_stmt in sql_stmts:
 
-            sql_stmt["parameters"] = parameters
+        parameters = []
+        if "parameters" in sql_stmt:
+            for p in sql_stmt["parameters"]:
+                if ast_parameters and p["name"] in ast_parameters:
+                    parameters.append(ast_parameters[p["name"]])
+                else:
+                    raise TypeError("type missing for {{" + p["name"] + "}} in the " + method + ".sql")
+
+        sql_stmt["parameters"] = parameters
 
     possible_null_parameter_rx = re.compile("^\(\s*{{(?P<name>[A-Za-z0-9_.$-]*?)}}\s+is\s+null\s+or", re.IGNORECASE)
+
     for sql_stmt in sql_stmts:
+
         sql_stmt["nullable"] = []
         for token in sql_stmt["content"]:
             if token["type"] == "brace" and "content" in token:

@@ -3,8 +3,8 @@ path:
   properties:
     id:
       type: string
-      minLength: 1
-      maxLength: 55
+      minLength: 3
+      maxLength: 36
       required: true
   required:
     - "id"
