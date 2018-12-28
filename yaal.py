@@ -67,10 +67,9 @@ def get_descriptor_json(descriptor, pretty=False):
 
 
 def create_context(descriptor, payload=None, query=None, path_values=None, header=None, cookie=None):
-    model_str = "model"
     query_str, path_str, header_str, cookie_str, payload_str = "query", "path", "header", "cookie", "payload"
 
-    model = descriptor.get(model_str)
+    model = descriptor.get("model")
     validators = descriptor.get("_validators")
     if model and validators:
         if query_str in model:
@@ -122,12 +121,12 @@ def create_context(descriptor, payload=None, query=None, path_values=None, heade
     query_shape = Shape(schema=query_schema, validator=query_validator)
     if query:
         for k, v in query.items():
-            query_shape.set_prop(k.lower(), v)
+            query_shape.set_prop(k, v)
 
     path_shape = Shape(schema=path_schema, validator=path_validator)
     if path_values:
         for k, v in path_values.items():
-            path_shape.set_prop(k.lower(), v)
+            path_shape.set_prop(k, v)
 
     header_shape = Shape(schema=header_schema, validator=header_validator, data=header)
     cookie_shape = Shape(schema=cookie_schema, validator=cookie_validator, data=cookie)
@@ -138,7 +137,8 @@ def create_context(descriptor, payload=None, query=None, path_values=None, heade
         "$header": header_shape,
         "$cookie": cookie_shape
     }
-    request_data = {"id": str(uuid.uuid4())}
+
+    request_data = {"id": str(uuid.uuid4()) }
     request_shape = Shape(data=request_data, extras=request_extras)
 
     response_extras = {
@@ -147,13 +147,13 @@ def create_context(descriptor, payload=None, query=None, path_values=None, heade
     }
     response_shape = Shape(extras=response_extras)
 
-    params = {
+    vars = {
         "path": descriptor["path"]
     }
-    params_shape = Shape(data=params)
+    vars_shape = Shape(data=vars)
 
     extras = {
-        "$params": params_shape,
+        "$params": vars_shape,
         "$query": query_shape,
         "$path": path_shape,
         "$header": header_shape,

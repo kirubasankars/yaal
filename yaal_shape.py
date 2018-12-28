@@ -56,26 +56,25 @@ class Shape:
         if parent_shape is not None and type(parent_shape) != Shape:
             raise TypeError("$parent should be type shape.")
 
-        schema = schema or {}
+        schema = schema or {"type":"object"}
 
         if yaal_const.PROPERTIES in schema:
             self._input_properties = schema[yaal_const.PROPERTIES]
         self._input_properties = self._input_properties or {}
 
-        if yaal_const.TYPE in schema:
-            _type = schema[yaal_const.TYPE]
-            if _type == yaal_const.ARRAY:
-                self._array = True
-                if data:
-                    if type(data) != list:
-                        raise TypeError("input expected as array. object is given.")
-            else:
-                self._object = True
-                if data:
-                    if type(data) == dict:
-                        self._data = _to_lower_keys(data)
-                    else:
-                        raise TypeError("input expected as object. " + str(type(data)) + " is given.")
+        _type = schema[yaal_const.TYPE]
+        if _type == yaal_const.ARRAY:
+            self._array = True
+            if data:
+                if type(data) != list:
+                    raise TypeError("input expected as array. object is given.")
+        else:
+            self._object = True
+            if data:
+                if type(data) == dict:
+                    self._data = _to_lower_keys(data)
+                else:
+                    raise TypeError("input expected as object. " + str(type(data)) + " is given.")
 
         if self._array:
             shapes = []
@@ -236,6 +235,12 @@ class Shape:
             except ValueError:
                 raise ValueError("value expected as " + parameter_type + ", given " + str(type(value)))
         return value
+
+    def get_schema(self):
+        return self._schema
+
+    def get_validator(self):
+        return self._validator
 
     def __str__(self):
         return json.dumps(self.get_data())
