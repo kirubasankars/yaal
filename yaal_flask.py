@@ -43,7 +43,7 @@ def create_yaal_context(req, path_values, descriptor):
 
     query = {}
     for k, v in req.args.items():
-        query[k] = v
+        query[k.lower()] = v
 
     headers = {}
     for k, v in req.headers.items():

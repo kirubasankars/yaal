@@ -62,6 +62,9 @@ class TestShape(unittest.TestCase):
         with self.assertRaises(KeyError): self.assertDictEqual(1, s1.get_prop("list.0"))
         with self.assertRaises(KeyError): self.assertDictEqual(1, s1.get_prop("list.0.number"))
 
+        s1 = Shape(data=data)
+        self.assertEqual(1, s1.get_prop("number"))
+
     def test_shape_array_functions(self):
         schema = {
             "type": "object",
