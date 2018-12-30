@@ -284,6 +284,7 @@ class TestShape(unittest.TestCase):
         with self.assertRaises(ValueError): s1.set_prop("list.$0.number", "a")
 
         with self.assertRaises(IndexError): s1.set_prop("list.$1.number", "1")
+        #self.assertEqual(1, s1.get_prop("list.$1.number"))
 
         s1.set_prop("list.$0.Number", 2)
         self.assertEqual(2, s1.get_prop("list.$0.number"))

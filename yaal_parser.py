@@ -182,7 +182,10 @@ def parser(tokens, method):
     parameter_rx = re.compile(r"\s*(?P<name>[\$\_\.A-Za-z0-9\[\]]+)(\s+(?P<type>\w+))?\s*")
     sql_rx = re.compile(r"--sql\(\s*(?P<name>\w+)?\s*\)--")
 
-    sql_stmt = {"content": [], "parameters": []}
+    sql_stmt = {
+        "content": [],
+        "parameters": []
+    }
 
     tc = 0
     while True:
@@ -190,11 +193,11 @@ def parser(tokens, method):
             break
 
         token = tokens[tc]
-        v = token["value"]
-        t = token["type"]
+        token_value = token["value"]
+        token_type = token["type"]
 
-        if t == "parameter":
-            parameter_name = v[2:len(v) - 2].lstrip().rstrip().lower()
+        if token_type == "parameter":
+            parameter_name = token_value[2:len(token_value) - 2].lstrip().rstrip().lower()
             token["name"] = parameter_name
             sql_stmt["parameters"].append({"name": parameter_name})
 
@@ -204,16 +207,22 @@ def parser(tokens, method):
                 token4 = tokens[tc + 3]
                 token5 = tokens[tc + 4]
 
-                if token2["type"] == "space" and token3["value"] == "is" and token4["type"] == "space" and token5[
-                    "value"] == "null":
-                    token = {"type": "parameter", "name": parameter_name, "value": "{{" + parameter_name + "}} is null",
-                             "nullable": True}
+                if token2["type"] == "space" and \
+                        token3["value"] == "is" and \
+                        token4["type"] == "space" and \
+                        token5["value"] == "null":
+                    token = {
+                        "type": "parameter",
+                        "name": parameter_name,
+                        "value": "{{" + parameter_name + "}} is null",
+                        "nullable": True
+                    }
                     tc += 4
 
-        if t == "dash":
-            if v[:3] == "--(" and v[len(v) - 3:] == ")--" and tc == 0:
-                v = v[3:len(v) - 3]
-                params = v.split(",")
+        if token_type == "dash":
+            if token_value[:3] == "--(" and token_value[len(token_value) - 3:] == ")--" and tc == 0:
+                token_value = token_value[3:len(token_value) - 3]
+                params = token_value.split(",")
                 token["parameters"] = []
                 for p in params:
                     m = parameter_rx.search(p)
@@ -224,7 +233,10 @@ def parser(tokens, method):
                             param_type = d["type"]
                         else:
                             param_type = ""
-                        token["parameters"].append({"name": param_name.lstrip().rstrip().lower(), "type": param_type})
+                        token["parameters"].append({
+                            "name": param_name.lstrip().rstrip().lower(),
+                            "type": param_type
+                        })
                 ast["parameters"] = {x["name"]: x for x in token["parameters"]}
                 tc += 1
                 continue
@@ -233,15 +245,19 @@ def parser(tokens, method):
                 if len(sql_stmt):
                     if len([x for x in sql_stmt["content"] if x["type"] == "word"]):
                         sql_stmts.append(sql_stmt)
-                    sql_stmt = {"content": [], "parameters": []}
-                    m = sql_rx.search(v)
+                    # New SQL statement
+                    sql_stmt = {
+                        "content": [],
+                        "parameters": []
+                    }
+                    m = sql_rx.search(token_value)
                     if m:
                         d = m.groupdict()
                         sql_stmt["connection"] = d["name"]
                 tc += 1
                 continue
 
-        if t == "brace":
+        if token_type == "brace":
             exists = [x for x in brace_groups if x["group"] == token["group"]]
             if not exists:
                 brace_groups.append(token)

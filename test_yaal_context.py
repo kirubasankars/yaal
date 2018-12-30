@@ -1,6 +1,7 @@
 import unittest
 
 import yaal
+import yaal_flask
 from yaal_shape import Shape
 
 
@@ -75,6 +76,8 @@ class TestYaalContext(unittest.TestCase):
         self.assertEqual(Shape, type(context.get_prop("$response")))
         self.assertEqual(Shape, type(context.get_prop("$params")))
 
+
+
     def test_create_context_with_validator(self):
         model = {}
         validator = {}
@@ -106,3 +109,14 @@ class TestYaalContext(unittest.TestCase):
 
         self.assertEqual(model, context.get_prop("$header").get_schema())
         self.assertEqual(validator, context.get_prop("$header").get_validator())
+
+    def test_expand(self):
+        metal = yaal_flask.KeyExpander()
+
+        data = {
+            "a.b.number" : 2
+        }
+
+        for path in data:
+            metal.set_prop(path, data[path])
+        print(metal.get_data())

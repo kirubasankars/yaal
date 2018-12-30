@@ -89,7 +89,7 @@ def namespace_serve_api(path):
 
     rs = y.get_result_json(descriptor, descriptor_ctx, ctx)
 
-    return create_flask_response(app, ctx, rs)
+    return create_flask_response(app, request, ctx, rs)
 
 
 if __name__ == "__main__":

@@ -83,8 +83,8 @@ class Shape:
             for item in self._data:
                 s = Shape(schema=schema, data=item, parent_shape=self, extras=extras)
                 s._index = idx
-                idx = idx + 1
                 shapes.append(s)
+                idx = idx + 1
             schema[yaal_const.TYPE] = yaal_const.ARRAY
         else:
             shapes = {}
@@ -177,6 +177,7 @@ class Shape:
                     idx = int(path[1:])
                 except:
                     raise KeyError("array path excepted as $index.")
+
                 return shapes[idx].set_prop(remaining_path, value)
 
             if path in shapes:
