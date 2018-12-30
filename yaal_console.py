@@ -9,6 +9,7 @@ DATA_PROVIDERS = {
 
 CORS_ENABLED = False
 
+
 if __name__ == '__main__':
     path = "user/1"
     method = "get"
