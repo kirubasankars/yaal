@@ -19,23 +19,21 @@ C# / .NET 8: add a project reference to [`csharp/src/Yaal/Yaal.csproj`](csharp/s
 
 ```bash
 make install
-make example                          # demo: user/get id=1
-make yaal ARGS='explain user/get --arg id=1'
+make example                          # examples/demo.py — all fixtures + explain
+make example-csharp                   # same tour in .NET (Docker SDK)
 make yaal ARGS='list'
-make yaal ARGS='query user/page --arg page=1 --arg page_size=10'
-make yaal ARGS='query user/create --payload "{\"id\":3,\"name\":\"newbie\"}"'
+make yaal ARGS='query user/get --arg id=1'
 
 # editable FS tree + persistent SQLite under experiment/
 make experiment-init
-make experiment                                 # query user/get against experiment/
-make experiment ARGS='explain user/get --arg id=1'
-# edit experiment/api/... then re-run
-make experiment-reset                           # reseed DB only
+make experiment
+make experiment ARGS='query user/page --arg page=1 --arg page_size=10'
+make experiment-reset                 # reseed DB only
 ```
 
-`make example` (and the CLI when `--db` is omitted) builds a temp SQLite DB from `docker/sqlite/schema.sql`, runs the fixture `user/get` with `args={"id": 1}`, and prints nested JSON.
+`make example` runs [`examples/demo.py`](examples/demo.py): temp SQLite from `docker/sqlite/schema.sql`, then get / cached / list / page / create plus `explain` elision. CLI commands with `--db` omitted also seed a temp SQLite DB.
 
-`make experiment` uses a local sandbox at `experiment/` (gitignored): a copy of `tests/fixtures/api` plus `yaal.db` seeded from `docker/sqlite/schema.sql`. Edit descriptors under `experiment/api/` and re-run; use `make experiment-reset` to reseed the DB without wiping API edits.
+`make experiment` uses a local sandbox at `experiment/` (gitignored): a copy of `tests/fixtures/api` plus `yaal.db`. Edit `experiment/api/` and re-run; `make experiment-reset` reseeds the DB without wiping API edits.
 
 ### CLI
 
@@ -68,23 +66,16 @@ for twig in y.explain_sql("user/get", args={"id": 1}):
     print(twig["sql"], twig["parameters"])
 ```
 
-## Example fixtures
+## Docs and examples
 
-Shared under [`tests/fixtures/api/`](tests/fixtures/api/) (users / roles schema):
-
-| Path | What it shows |
+| Resource | Purpose |
 |---|---|
-| `user/get` | Nested object + `parent_rows` roles |
-| `user/get` + `output_mapper="cached"` | Alternate `$.output.cached.yaml` with `cache: true` |
-| `user/list` | Root array + optional filter |
-| `user/page` | Multi-file branches (`$.paging.sql` + `$.data.sql`) + `$action=params` |
-| `user/create` | Multi-twig write (INSERT → INSERT → SELECT) |
-
-Docs:
-
-- **Examples** (every fixture end-to-end): [`docs/examples.md`](docs/examples.md)
-- **Descriptor reference**: [`docs/descriptors.md`](docs/descriptors.md)
-- Index: [`docs/README.md`](docs/README.md)
+| [`docs/examples.md`](docs/examples.md) | End-to-end walkthroughs (SQL, YAML, sample JSON, CLI/Python/C#) |
+| [`docs/descriptors.md`](docs/descriptors.md) | Trunk/branch/twig reference, shaping, `$action`, errors |
+| [`docs/README.md`](docs/README.md) | Docs index |
+| [`examples/demo.py`](examples/demo.py) | Runnable Python tour (`make example`) |
+| [`csharp/examples/Yaal.Example`](csharp/examples/Yaal.Example/) | Runnable .NET tour (`make example-csharp`) |
+| [`tests/fixtures/api/`](tests/fixtures/api/) | Shared descriptors: get, list, page, create |
 
 ## Make targets
 
@@ -94,7 +85,8 @@ Docs:
 | `make test` | Unit tests |
 | `make test-integration` | Start Docker Postgres/MySQL/ClickHouse and run integration tests |
 | `make test-all` | Unit + integration |
-| `make example` | Demo via `yaal query user/get --arg id=1` |
+| `make example` | Run `examples/demo.py` (all fixture ops + explain) |
+| `make example-csharp` | Same tour in .NET SDK container |
 | `make yaal ARGS='...'` | Pass-through to CLI (`query` / `explain` / `list`) |
 | `make experiment` | FS+SQLite sandbox under `experiment/` (init if needed) |
 | `make experiment-init` / `experiment-reset` / `experiment-clean` | Create, reseed DB, or remove sandbox |

@@ -1,7 +1,5 @@
-type: object
-properties:
-  args:
-    type: object
-    properties:
-      active:
-        type: integer
+args:
+  type: object
+  properties:
+    active:
+      type: integer

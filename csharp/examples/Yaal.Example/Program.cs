@@ -22,18 +22,39 @@ try
 
     var opts = new JsonSerializerOptions { WriteIndented = true };
 
-    Console.WriteLine("-- user/get --");
-    Console.WriteLine(JsonSerializer.Serialize(y.Query("user/get", args: new { id = 1 }), opts));
+    void Print(string title, object? value)
+    {
+        Console.WriteLine($"-- {title} --");
+        Console.WriteLine(JsonSerializer.Serialize(value, opts));
+        Console.WriteLine();
+    }
 
-    Console.WriteLine("\n-- user/page --");
-    Console.WriteLine(JsonSerializer.Serialize(
-        y.Query("user/page", args: new { page = 1, page_size = 10 }), opts));
+    Print("user/get id=1", y.Query("user/get", args: new { id = 1 }));
+    Print(
+        "user/get id=1 output_mapper=cached",
+        y.Query("user/get", args: new { id = 1 }, outputMapper: "cached"));
+    Print("user/list active=1", y.Query("user/list", args: new { active = 1 }));
+    Print(
+        "user/page page=1 page_size=1",
+        y.Query("user/page", args: new { page = 1, page_size = 1 }));
+    Print(
+        "user/create payload id=3 name=newbie",
+        y.Query("user/create", payload: new { id = 3, name = "newbie" }));
 
-    Console.WriteLine("\n-- explain_sql user/get (args.id present) --");
-    foreach (var twig in y.ExplainSql("user/get", args: new { id = 1 }))
+    Console.WriteLine("-- explain user/list (active omitted) --");
+    foreach (var twig in y.ExplainSql("user/list"))
     {
         Console.WriteLine(twig["sql"]!.ToString()!.Trim());
         Console.WriteLine("binds: " + JsonSerializer.Serialize(twig["parameters"]));
+        Console.WriteLine();
+    }
+
+    Console.WriteLine("-- explain user/list active=1 --");
+    foreach (var twig in y.ExplainSql("user/list", args: new { active = 1 }))
+    {
+        Console.WriteLine(twig["sql"]!.ToString()!.Trim());
+        Console.WriteLine("binds: " + JsonSerializer.Serialize(twig["parameters"]));
+        Console.WriteLine();
     }
 }
 finally

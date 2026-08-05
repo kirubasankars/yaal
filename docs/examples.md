@@ -1,27 +1,28 @@
-# Yaal examples
+# Examples
 
-All examples use the shared fixtures under [`tests/fixtures/api/`](../tests/fixtures/api/) and the users/roles seed in [`docker/sqlite/schema.sql`](../docker/sqlite/schema.sql).
+Every example below lives under [`tests/fixtures/api/`](../tests/fixtures/api/). Seed data: two users (`admin`, `guest`), two roles, join table — see [`docker/sqlite/schema.sql`](../docker/sqlite/schema.sql).
 
 ```bash
-make install
+make example              # full tour (Python)
+make example-csharp       # full tour (.NET)
 make yaal ARGS='list'
-# user/create
-# user/get
-# user/list
-# user/page
 ```
-
-Zero-config CLI runs seed a temp SQLite DB automatically when `--db` is omitted.
 
 ---
 
-## 1. Nested get — `user/get`
+## Nested get — `user/get`
 
-Join fan-out collapsed into a user object with a `roles` array via `parent_rows`.
+Join rows become one user object with a nested `roles` array.
 
-### Files
+### Descriptor
 
-[`tests/fixtures/api/user/get/`](../tests/fixtures/api/user/get/)
+```text
+user/get/
+  $.sql
+  $.input.yaml
+  $.output.yaml
+  $.output.cached.yaml    # used when output_mapper="cached"
+```
 
 **`$.sql`**
 
@@ -73,28 +74,22 @@ properties:
         mapped: role_name
 ```
 
-### Run
+### Commands
 
 ```bash
 yaal query user/get --arg id=1
 yaal explain user/get --arg id=1
-# omit id → optional(...) clause removed; binds []
-yaal explain user/get
+yaal explain user/get          # optional(...) removed; binds []
 ```
 
 ```python
-from yaal import Yaal
-
-y = Yaal("tests/fixtures/api", debug=True)
-y.setup_data_provider("db", "sqlite3:////tmp/app.db")
-
 y.query("user/get", args={"id": 1})
+y.query("user/get", args={"id": 1}, output_mapper="cached")
 ```
 
 ```csharp
-var y = new Yaal.Yaal("tests/fixtures/api", debug: true);
-y.SetupDataProvider("db", "sqlite3:////tmp/app.db");
-var result = y.Query("user/get", args: new { id = 1 });
+y.Query("user/get", args: new { id = 1 });
+y.Query("user/get", args: new { id = 1 }, outputMapper: "cached");
 ```
 
 ### Sample JSON
@@ -110,24 +105,22 @@ var result = y.Query("user/get", args: new { id = 1 });
 }
 ```
 
-Flat SQL rows → nested JSON:
+How shaping works on the flat result set:
 
 | user_id | user_name | role_id | role_name |
 |---:|---|---:|---|
 | 1 | admin | 1 | Administrator |
 | 1 | admin | 2 | User |
 
-`partition_by: user_id` keeps one object; `roles` with `parent_rows: true` nests from those same rows.
+`partition_by: user_id` → one object. `roles` + `parent_rows: true` nests from those rows (no child SQL file).
 
 ---
 
-## 2. List with optional filter — `user/list`
+## Optional list — `user/list`
 
-Root `type: array`. Pass `active` to filter, or omit it.
+Root `type: array`. Omit `active` to return everyone; pass it to filter.
 
-### Files
-
-[`tests/fixtures/api/user/list/`](../tests/fixtures/api/user/list/)
+### Descriptor
 
 **`$.sql`**
 
@@ -158,18 +151,42 @@ properties:
     mapped: active
 ```
 
-### Run
+### Commands
 
 ```bash
 yaal query user/list
 yaal query user/list --arg active=1
-yaal explain user/list --arg active=1
 yaal explain user/list
+yaal explain user/list --arg active=1
 ```
 
-```python
-y.query("user/list")
-y.query("user/list", args={"active": 1})
+### Explain (elision)
+
+**active omitted**
+
+```sql
+select
+    u.user_id,
+    u.user_name,
+    u.active
+from users u
+where 1 = 1
+order by u.user_id
+-- binds: []
+```
+
+**active=1**
+
+```sql
+select
+    u.user_id,
+    u.user_name,
+    u.active
+from users u
+where 1 = 1
+  and (u.active = ?)
+order by u.user_id
+-- binds: [1]
 ```
 
 ### Sample JSON (`active=1`)
@@ -183,9 +200,9 @@ y.query("user/list", args={"active": 1})
 
 ---
 
-## 3. Paginated nest — `user/page`
+## Paginated nest — `user/page`
 
-Multi-file branches: paging metadata + a page of users with roles. No trunk `$.sql`.
+No trunk `$.sql`. Two branch files become `paging` and `data` on the result object.
 
 ### Layout
 
@@ -197,7 +214,7 @@ user/page/
   $.output.yaml
 ```
 
-**`$.paging.sql`** — stash `total_count` on `$params`, then return paging fields:
+**`$.paging.sql`** — `$action=params` stores `total_count`, then returns paging fields:
 
 ```sql
 --($args.page integer, $args.page_size integer, $params.total_count integer)--
@@ -216,7 +233,7 @@ SELECT
     {{$params.total_count}} AS total_count
 ```
 
-**`$.data.sql`** — page **users** in a subquery, then join roles (so `LIMIT` does not truncate role rows):
+**`$.data.sql`** — page **users** in a subquery, then join roles (so `LIMIT` does not cut role rows):
 
 ```sql
 --($args.page integer, $args.page_size integer)--
@@ -238,7 +255,7 @@ INNER JOIN roles r ON r.role_id = ur.role_id
 ORDER BY u.user_id, r.role_id
 ```
 
-**`$.output.yaml`** (branch names match file suffixes):
+**`$.output.yaml`**
 
 ```yaml
 type: object
@@ -271,7 +288,7 @@ properties:
             mapped: role_name
 ```
 
-### Run
+### Commands
 
 ```bash
 yaal query user/page --arg page=1 --arg page_size=10
@@ -280,11 +297,11 @@ yaal query user/page --arg page=2 --arg page_size=10
 ```
 
 ```python
-y.query("user/page", args={"page": 1, "page_size": 10})
+y.query("user/page", args={"page": 1, "page_size": 1})
 ```
 
 ```csharp
-y.Query("user/page", args: new { page = 1, page_size = 10 });
+y.Query("user/page", args: new { page = 1, page_size = 1 });
 ```
 
 ### Sample JSON (`page=1`, `page_size=1`)
@@ -311,15 +328,13 @@ y.Query("user/page", args: new { page = 1, page_size = 10 });
 
 ---
 
-## 4. Multi-twig write — `user/create`
+## Multi-twig write — `user/create`
 
-One SQL file, three twigs: insert user → assign default role → select shaped result.
+One file, three twigs: insert user → assign role → select shaped result. Uses **payload** (not args).
 
-### Files
+### Descriptor
 
-[`tests/fixtures/api/user/create/`](../tests/fixtures/api/user/create/)
-
-**`$.input.yaml`** (payload, not args):
+**`$.input.yaml`**
 
 ```yaml
 payload:
@@ -361,7 +376,7 @@ ORDER BY r.role_id
 
 Output shape matches `user/get` (object + nested roles).
 
-### Run
+### Commands
 
 ```bash
 yaal query user/create --payload '{"id":3,"name":"newbie"}'
@@ -369,7 +384,6 @@ yaal query user/create --payload '{"id":3,"name":"newbie"}'
 
 ```python
 y.query("user/create", payload={"id": 3, "name": "newbie"})
-# then:
 y.query("user/get", args={"id": 3})
 ```
 
@@ -389,98 +403,46 @@ y.Query("user/create", payload: new { id = 3, name = "newbie" });
 }
 ```
 
-Missing required fields return soft errors (not raised):
+Invalid payload returns soft errors (not raised):
 
 ```bash
 yaal query user/create --payload '{"name":"x"}'
-# {"errors": [{"message": "..."}]}
+# {"errors":[...]}
 ```
 
 ---
 
-## 5. Alternate output mapper — `user/get` + `cached`
+## Alternate output — `output_mapper`
 
-Same SQL as `user/get`, different output file: `$.output.cached.yaml` sets `cache: true`.
+Same SQL as `user/get`; different YAML:
 
-```bash
-# default mapper → $.output.yaml
-yaal query user/get --arg id=1
+```text
+user/get/$.output.cached.yaml   # cache: true
 ```
 
 ```python
 y.query("user/get", args={"id": 1}, output_mapper="cached")
-# loads $.output.cached.yaml
 ```
 
-```csharp
-y.Query("user/get", args: new { id = 1 }, outputMapper: "cached");
-```
-
-JSON shape matches the default get; the mapper mainly demonstrates alternate outputs and request-scoped row caching.
+JSON shape matches the default get.
 
 ---
 
-## 6. Experiment sandbox
+## Experiment sandbox
 
-Edit descriptors against a persistent local DB:
+Persistent local copy of the fixtures for editing:
 
 ```bash
 make experiment-init
 make experiment ARGS='query user/page --arg page=1 --arg page_size=10'
 # edit experiment/api/... then re-run
-make experiment-reset    # reseed DB only
+make experiment-reset
 make experiment-clean
 ```
 
 ---
 
-## 7. Programmatic patterns
-
-### Python
-
-```python
-from yaal import Yaal
-
-y = Yaal("tests/fixtures/api", debug=True)
-y.setup_data_provider("db", "sqlite3:////tmp/app.db")
-
-# nested get
-user = y.query("user/get", args={"id": 1})
-
-# optional filter list
-active_users = y.query("user/list", args={"active": 1})
-
-# branches
-page = y.query("user/page", args={"page": 1, "page_size": 10})
-
-# write
-created = y.query("user/create", payload={"id": 3, "name": "newbie"})
-
-# inspect compiled SQL + binds
-for twig in y.explain_sql("user/list", args={"active": None}):
-    print(twig["sql"])
-    print(twig["parameters"])
-
-# JSON string
-print(y.query_json("user/get", args={"id": 2}))
-```
-
-### C#
-
-```csharp
-var y = new Yaal.Yaal("tests/fixtures/api", debug: true);
-y.SetupDataProvider("db", "sqlite3:////tmp/app.db");
-
-var user = y.Query("user/get", args: new { id = 1 });
-var page = y.Query("user/page", args: new { page = 1, page_size = 10 });
-var created = y.Query("user/create", payload: new { id = 3, name = "newbie" });
-string json = y.QueryJson("user/list", args: new { active = 1 });
-
-foreach (var twig in y.ExplainSql("user/get", args: new { id = 1 }))
-    Console.WriteLine(twig["sql"]);
-```
-
-### Your own API tree
+## Your own API tree
 
 ```text
 my-api/
@@ -492,19 +454,35 @@ my-api/
 ```
 
 ```bash
-yaal query orders/list --api ./my-api --db 'sqlite3:////tmp/app.db' --args '{"status":"open"}'
+yaal query orders/list \
+  --api ./my-api \
+  --db 'sqlite3:////tmp/app.db' \
+  --args '{"status":"open"}'
 ```
 
 ```python
-y = Yaal("./my-api")
+from yaal import Yaal
+
+y = Yaal("./my-api", debug=True)
 y.setup_data_provider("db", "postgresql://user:pass@127.0.0.1:5432/app")
 y.query("orders/list", args={"status": "open"})
 ```
 
+```csharp
+var y = new Yaal.Yaal("./my-api", debug: true);
+y.SetupDataProvider("db", "postgresql://user:pass@127.0.0.1:5432/app");
+y.Query("orders/list", args: new { status = "open" });
+```
+
 ---
 
-## See also
+## Full demo scripts
 
-- Descriptor reference: [descriptors.md](descriptors.md)
-- Root quick start: [../README.md](../README.md)
-- C# port: [../csharp/README.md](../csharp/README.md)
+| Runtime | Entry |
+|---|---|
+| Python | [`examples/demo.py`](../examples/demo.py) · `make example` |
+| C# | [`csharp/examples/Yaal.Example`](../csharp/examples/Yaal.Example/) · `make example-csharp` |
+
+Both print get / cached / list / page / create and show `explain` elision for `user/list`.
+
+See also: [descriptors.md](descriptors.md) · [README.md](README.md)

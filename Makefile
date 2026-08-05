@@ -21,7 +21,8 @@ help:
 	@echo "  make test               Run unit tests"
 	@echo "  make test-integration   Start Docker DBs (Postgres/MySQL/ClickHouse) and run integration tests"
 	@echo "  make test-all           Unit + integration tests"
-	@echo "  make example            Demo: yaal query user/get --arg id=1"
+	@echo "  make example            Run examples/demo.py (all fixture ops + explain)"
+	@echo "  make example-csharp     Run csharp example (same ops in sdk container)"
 	@echo "  make yaal ARGS='...'    Run yaal CLI (query / explain / list)"
 	@echo "  make experiment         FS+SQLite sandbox (init if needed); ARGS defaults to query user/get"
 	@echo "  make experiment-init    Create $(EXP_DIR)/api + seed $(EXP_DB)"
@@ -29,7 +30,6 @@ help:
 	@echo "  make experiment-clean   Remove $(EXP_DIR)/"
 	@echo "  make test-csharp        Run .NET tests in sdk container (SQLite / unit)"
 	@echo "  make test-csharp-integration  Compose DBs + .NET tests in sdk container"
-	@echo "  make example-csharp     Run csharp example in sdk container"
 	@echo "  make integration-up     Start Postgres/MySQL/ClickHouse (docker compose)"
 	@echo "  make integration-down   Stop and remove compose containers/volumes"
 	@echo "  make clean              Remove venv, caches, and experiment sandbox"
@@ -61,7 +61,7 @@ test-integration: integration-up
 test-all: test-unit test-integration
 
 example:
-	$(PY) -m yaal_cli query user/get --arg id=1
+	$(PY) examples/demo.py
 
 yaal:
 	$(PY) -m yaal_cli $(ARGS)

@@ -1,14 +1,33 @@
-# Yaal docs
+# Yaal documentation
 
-| Doc | Contents |
+Yaal turns SQL + YAML descriptors into nested JSON. These docs use the shared fixtures under [`tests/fixtures/api/`](../tests/fixtures/api/) and the seed schema in [`docker/sqlite/schema.sql`](../docker/sqlite/schema.sql).
+
+| Doc | Purpose |
 |---|---|
-| [examples.md](examples.md) | End-to-end walkthroughs of every fixture (SQL, YAML, JSON, CLI, Python, C#) |
-| [descriptors.md](descriptors.md) | Trunk / branch / twig reference, shaping, `$action`, errors, dual-port schema subset |
+| [examples.md](examples.md) | End-to-end examples: files, commands, sample JSON |
+| [descriptors.md](descriptors.md) | Reference: trunk/branch/twig, shaping, `$action`, errors |
 
-Seed schema used by the fixtures: [`docker/sqlite/schema.sql`](../docker/sqlite/schema.sql) (`users`, `roles`, `user_roles`).
+## Try it
 
 ```bash
 make install
+make example                 # Python: all fixtures + explain
+make example-csharp          # same tour in .NET (Docker SDK)
 make yaal ARGS='list'
-make example
+make yaal ARGS='query user/get --arg id=1'
 ```
+
+Runnable demos:
+
+- Python: [`examples/demo.py`](../examples/demo.py)
+- C#: [`csharp/examples/Yaal.Example/`](../csharp/examples/Yaal.Example/)
+
+Fixture operations:
+
+| Path | Shows |
+|---|---|
+| `user/get` | Nested object + `parent_rows` |
+| `user/get` + `output_mapper=cached` | Alternate `$.output.cached.yaml` |
+| `user/list` | Root array + `optional()` filter |
+| `user/page` | Multi-file branches + `$action=params` |
+| `user/create` | Multi-twig INSERT → SELECT |

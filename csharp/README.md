@@ -6,6 +6,8 @@ Package metadata: `Yaal` `0.1.0` (MIT). Add a project reference to [`src/Yaal/Ya
 
 Docs: [examples](../docs/examples.md) · [descriptors](../docs/descriptors.md) · [index](../docs/README.md).
 
+Runnable tour (get / list / page / create + explain): `make example-csharp`.
+
 ## Requirements
 
 - Docker (tests run in `mcr.microsoft.com/dotnet/sdk:8.0` — no local SDK required)
@@ -15,9 +17,9 @@ Docs: [examples](../docs/examples.md) · [descriptors](../docs/descriptors.md) �
 From the repo root:
 
 ```bash
+make example-csharp              # full fixture tour
 make test-csharp                 # unit + SQLite e2e in container
 make test-csharp-integration     # also Postgres/MySQL/ClickHouse
-make example-csharp
 ```
 
 With a local .NET 8 SDK you can still run directly:
