@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# Copyright 2018 Kiruba Sankar Swaminathan. All rights reserved.
+# Use of this source code is governed by a MIT style
+# license that can be found in the LICENSE file.
+
 """Run the shared fixture API against a temp SQLite DB and print each example."""
 
 from __future__ import annotations

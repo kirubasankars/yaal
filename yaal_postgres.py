@@ -1,3 +1,7 @@
+# Copyright 2018 Kiruba Sankar Swaminathan. All rights reserved.
+# Use of this source code is governed by a MIT style
+# license that can be found in the LICENSE file.
+
 import psycopg2 as pg
 from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
