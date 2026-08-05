@@ -55,3 +55,36 @@ services:
       interval: 2s
       timeout: 5s
       retries: 30
+
+  # .NET 8 SDK runner for csharp/ tests (no local SDK required).
+  # Unit:        docker compose run --rm --no-deps dotnet-test
+  # Integration: docker compose run --rm -e YAAL_INTEGRATION=1 dotnet-test
+  dotnet-test:
+    image: mcr.microsoft.com/dotnet/sdk:8.0
+    working_dir: /src
+    volumes:
+      - .:/src
+      - yaal-nuget:/root/.nuget/packages
+    environment:
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      YAAL_INTEGRATION: "0"
+      YAAL_PG_URL: postgresql://yaal:yaal@postgres:5432/yaal
+      YAAL_MYSQL_URL: mysql://yaal:yaal@mysql:3306/yaal
+      YAAL_CH_URL: clickhouse://yaal:yaal@clickhouse:8123/yaal
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    profiles: ["csharp"]
+    command:
+      - dotnet
+      - test
+      - csharp/tests/Yaal.Tests/Yaal.Tests.csproj
+      - --verbosity
+      - minimal
+
+volumes:
+  yaal-nuget:

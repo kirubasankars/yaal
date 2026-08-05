@@ -5,3 +5,8 @@ venv
 .DS_Store
 __pycache__/
 *.py[cod]
+csharp/**/bin/
+csharp/**/obj/
+*.user
+*.suo
+.vs/

@@ -135,3 +135,13 @@ YAAL_INTEGRATION=1 make test-integration
 ```
 
 Integration fixtures live under [`tests/fixtures/api/`](tests/fixtures/api/).
+
+## C# (.NET 8)
+
+A full-parity .NET port lives under [`csharp/`](csharp/). See [`csharp/README.md`](csharp/README.md). Tests run in a .NET SDK container (no local `dotnet` required):
+
+```bash
+make test-csharp
+make test-csharp-integration
+make example-csharp
+```

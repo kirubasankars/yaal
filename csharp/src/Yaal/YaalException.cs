@@ -1,0 +1,17 @@
+namespace Yaal;
+
+public class YaalException : Exception
+{
+    public YaalException(string message) : base(message) { }
+    public YaalException(string message, Exception inner) : base(message, inner) { }
+}
+
+public class DescriptorNotFoundException : YaalException
+{
+    public DescriptorNotFoundException(string message) : base(message) { }
+}
+
+public class UnsupportedDatabaseUrlException : YaalException
+{
+    public UnsupportedDatabaseUrlException(string message) : base(message) { }
+}
