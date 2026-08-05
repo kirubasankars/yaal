@@ -109,8 +109,7 @@ def _build_branch(branch, map_by_files, content_reader, payload_model, output_mo
         if "sql_stmts" not in ast:
             return
 
-        if "parameters" in ast:
-            branch["parameters"] = ast["parameters"]
+        branch["parameters"] = ast.get("parameters") or {}
 
         for k, v in branch["parameters"].items():
             if k[0] == "$" and k.find("$parent") == -1:
@@ -120,11 +119,12 @@ def _build_branch(branch, map_by_files, content_reader, payload_model, output_mo
 
         branch["twigs"] = ast["sql_stmts"]
 
-        bag["connections"] = ["db"]
+        connections = bag.setdefault("connections", ["db"])
         for twig in branch["twigs"]:
-            if "connection" not in twig:
+            if not twig.get("connection"):
                 twig["connection"] = "db"
-            bag["connections"].append(twig["connection"])
+            if twig["connection"] not in connections:
+                connections.append(twig["connection"])
 
     lower_branch_map = _to_lower_keys(branch_map)
     for k in map_by_files:
@@ -321,7 +321,7 @@ def create_trunk(path, output_mapper, content_reader):
     else:
         parameter_cookie_validator = None
 
-    bag = {}
+    bag = {"connections": ["db"]}
     _build_branch(trunk, trunk_map["$"], content_reader, payload_schema, output_schema, trunk["model"], bag)
     trunk["connections"] = bag["connections"]
 

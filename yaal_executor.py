@@ -13,6 +13,9 @@ class DataProviderHelper:
     def __init__(self):
         self._cache = {}
 
+    def clear_cache(self):
+        self._cache = {}
+
     @staticmethod
     def get_executable_content(char, twig, input_shape):
         nulls = []
@@ -25,7 +28,6 @@ class DataProviderHelper:
     def build_parameters(self, query, input_shape, get_value_converter):
         values = []
         _cache = self._cache
-        # TODO : implement string replacement for parameters with {{#name}}
         if "parameters" in query:
             parameters = query["parameters"]
             for p in parameters:
@@ -36,12 +38,12 @@ class DataProviderHelper:
                     param_value = _cache[param_name]
                 else:
                     param_value = input_shape.get_prop(param_name)
-
-                    if not ("$params" in param_name or "$parent" in param_name):
+                    # Cache only request-scoped $-params, never payload fields or $parent paths.
+                    if param_name.startswith("$") and "$parent" not in param_name:
                         _cache[param_name] = param_value
 
                 try:
-                    if param_value:
+                    if param_value is not None:
                         if param_type == "integer":
                             param_value = int(param_value)
                         elif param_type == "string":
@@ -114,100 +116,122 @@ def _execute_twigs(branch, data_providers, context, data_provider_helper):
     return rs, None
 
 
+def _trunk_cleanup(data_providers, db_data_provider, failed):
+    if failed:
+        try:
+            db_data_provider.error()
+        except Exception:
+            pass
+        for name, data_provider in data_providers.items():
+            if name != "db":
+                try:
+                    data_provider.error()
+                except Exception:
+                    pass
+        return
+
+    db_data_provider.end()
+    for name, data_provider in data_providers.items():
+        if name != "db":
+            data_provider.end()
+
+
 def _execute_branch(branch, is_trunk, data_providers, context, parent_rows, cache_provider):
     input_type, output_partition_by, cache = branch["input_type"], branch.get("partition_by"), branch.get("cache")
     use_parent_rows, method = branch.get("use_parent_rows"), branch.get("method")
     output = []
     data_provider_helper = DataProviderHelper()
     db_data_provider = data_providers["db"]
+    began = False
+    failed = False
 
     try:
         if cache and method in cache_provider:
-            output = cache_provider[method]
+            output = copy.deepcopy(cache_provider[method])
+        elif use_parent_rows:
+            output = copy.deepcopy(parent_rows)
         else:
             if is_trunk:
                 for name, data_provider in data_providers.items():
                     data_provider.begin()
+                began = True
 
             if input_type == "array":
                 length = int(context.get_prop("$length"))
                 for i in range(0, length):
+                    data_provider_helper.clear_cache()
                     item_ctx = context.get_prop("@" + str(i))
                     rs, errors = _execute_twigs(branch, data_providers, item_ctx, data_provider_helper)
-                    output.extend(rs)
                     if errors:
+                        failed = True
                         return None, errors
+                    output.extend(rs)
 
             elif input_type == "object":
                 output, errors = _execute_twigs(branch, data_providers, context, data_provider_helper)
                 if errors:
+                    failed = True
                     return None, errors
 
             if cache:
-                cache_provider[method] = output
-
-            if use_parent_rows:
-                output = copy.deepcopy(parent_rows)
+                cache_provider[method] = copy.deepcopy(output)
 
         branches = branch.get("branches")
         if branches:
             for branch_descriptor in branches:
                 branch_name = branch_descriptor["name"]
-                sub_node_shape = None
+                sub_node_shape = context
                 if context:
-                    sub_node_shape = context.get_prop(branch_name.lower())
+                    nested = context.get_prop(branch_name.lower())
+                    if nested is not None:
+                        sub_node_shape = nested
 
-                sub_node_output, errors = _execute_branch(branch_descriptor, False, data_providers, sub_node_shape,
-                                                          output, cache_provider)
+                sub_node_output, errors = _execute_branch(
+                    branch_descriptor, False, data_providers, sub_node_shape, output, cache_provider
+                )
                 if errors:
+                    failed = True
                     return None, errors
 
-                if not branch.get("twigs") and not output:
+                if not branch.get("twigs") and not use_parent_rows and not output:
                     output.append({})
 
                 if not output_partition_by:
                     for row in output:
-                        row[branch_name] = sub_node_output
+                        row[branch_name] = copy.deepcopy(sub_node_output)
                 else:
                     sub_node_groups = defaultdict(list)
                     for row in sub_node_output:
+                        if output_partition_by not in row:
+                            raise KeyError(
+                                "partition_by column '%s' missing from child row" % output_partition_by
+                            )
                         sub_node_groups[row[output_partition_by]].append(row)
 
                     groups = defaultdict(list)
                     for row in output:
+                        if output_partition_by not in row:
+                            raise KeyError(
+                                "partition_by column '%s' missing from parent row" % output_partition_by
+                            )
                         groups[row[output_partition_by]].append(row)
 
                     _output = []
                     for idx, rows in groups.items():
                         row = rows[0]
-                        partition_by = row[output_partition_by]
-                        row[branch_name] = sub_node_groups[partition_by]
+                        partition_key = row[output_partition_by]
+                        row[branch_name] = copy.deepcopy(sub_node_groups.get(partition_key, []))
                         _output.append(row)
                     output = _output
 
-        if is_trunk:
-            db_data_provider.end()
-            for name, data_provider in data_providers.items():
-                if name != "db":
-                    data_provider.end()
+        return output, None
 
-    except Exception as e:
-        # logger.error(e)
-        if is_trunk:
-            try:
-                db_data_provider.error()
-            except Exception:
-                pass
-
-            for name, data_provider in data_providers.items():
-                if name != "db":
-                    try:
-                        data_provider.error()
-                    except Exception:
-                        pass
-        raise e
-
-    return output, None
+    except Exception:
+        failed = True
+        raise
+    finally:
+        if is_trunk and began:
+            _trunk_cleanup(data_providers, db_data_provider, failed)
 
 
 def _output_mapper(output_type, output_modal, branches, result):
@@ -240,8 +264,12 @@ def _output_mapper(output_type, output_modal, branches, result):
                 branch_descriptor_branches = branch_descriptor.get("branches")
 
                 if branch_name in row:
-                    mapped_tree[branch_name] = _output_mapper(branch_output_type, branch_output_model,
-                                                              branch_descriptor_branches, row[branch_name])
+                    mapped_tree[branch_name] = _output_mapper(
+                        branch_output_type,
+                        branch_output_model,
+                        branch_descriptor_branches,
+                        row[branch_name],
+                    )
 
         if output_properties:
             prop_count = 0
@@ -315,6 +343,10 @@ def _default_date_time_converter(o):
         return o.__str__()
 
 
-def get_result_json(descriptor, get_data_providers, context, cache_provider):
-    return json.dumps(_get_result(descriptor, get_data_providers, context, cache_provider),
+def get_result(descriptor, get_data_provider, context, cache_provider=None):
+    return _get_result(descriptor, get_data_provider, context, cache_provider or {})
+
+
+def get_result_json(descriptor, get_data_providers, context, cache_provider=None):
+    return json.dumps(get_result(descriptor, get_data_providers, context, cache_provider),
                       default=_default_date_time_converter)

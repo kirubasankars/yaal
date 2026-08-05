@@ -1,32 +1,27 @@
 import copy
 import json
-import logging
 import os
 import re
-import urllib
 import uuid
+from urllib.parse import parse_qsl, unquote_plus
 
 import yaml
 
 from yaal_builder import create_trunk
-from yaal_executor import get_result_json
-from yaal_mysql import MySQLContextManager
-from yaal_postgres import PostgresContextManager
+from yaal_errors import DescriptorNotFoundError, UnsupportedDatabaseUrlError, YaalError
+from yaal_executor import DataProviderHelper, get_result, get_result_json
 from yaal_shape import Shape
 from yaal_sqlite import SQLiteContextManager
-
-logging.basicConfig(level=logging.DEBUG, format='%(name)s - %(levelname)s - %(message)s')
-logger = logging
 
 path_join = os.path.join
 
 
-def debug_descriptor(descriptor, pretty=False):
+def _strip_descriptor_for_json(descriptor, pretty=False):
     if "_validators" in descriptor:
         del descriptor["_validators"]
     if "branches" in descriptor:
         for branch in descriptor["branches"]:
-            debug_descriptor(branch, pretty)
+            _strip_descriptor_for_json(branch, pretty)
     if "twigs" in descriptor:
         for twig in descriptor["twigs"]:
             content = twig["content"]
@@ -41,25 +36,29 @@ def debug_descriptor(descriptor, pretty=False):
 
                     item = content[i]
 
-                    if i + 1 < content_length:
-                        item1 = content[i + 1]
                     if item["type"] == "newline":
                         item["value"] = " "
                     if item["type"] == "space":
                         item["value"] = " "
 
-                    if (item["type"] == "newline" or item["type"] == "space") \
-                            and (item1["type"] == "space" or item1["type"] == "newline"):
-                        item["value"] = ""
+                    if i + 1 < content_length:
+                        item1 = content[i + 1]
+                        if (item["type"] == "newline" or item["type"] == "space") \
+                                and (item1["type"] == "space" or item1["type"] == "newline"):
+                            item["value"] = ""
 
                     i = i + 1
 
             twig["content"] = "".join([x["value"] for x in twig["content"]]).lstrip().rstrip()
 
 
+# Back-compat alias
+debug_descriptor = _strip_descriptor_for_json
+
+
 def get_descriptor_json(descriptor, pretty=False):
     d = copy.deepcopy(descriptor)
-    debug_descriptor(d, pretty)
+    _strip_descriptor_for_json(d, pretty)
     if pretty:
         return json.dumps(d, indent=4)
     else:
@@ -180,6 +179,24 @@ def _build_routes(routes):
     return _routes
 
 
+def _normalize_sqlite_options(options):
+    """Repair common sqlite3:// URL shapes into a usable filesystem path."""
+    options = dict(options)
+    database = options.get("database")
+    host = options.get("host")
+    if database is None:
+        database = ""
+
+    if host == ".":
+        database = "./" + database if database else "."
+    elif host:
+        database = host + ("/" + database if database else "")
+
+    options["database"] = database
+    options["host"] = None
+    return options
+
+
 def _parse_rfc1738_args(connection_url):
     pattern = re.compile(r'''(?P<name>[\w\+]+)://
             (?:
@@ -199,21 +216,27 @@ def _parse_rfc1738_args(connection_url):
         if components['database'] is not None:
             tokens = components['database'].split('?', 2)
             components['database'] = tokens[0]
-            query = (len(tokens) > 1 and dict(urllib.parse_qsl(tokens[1]))) or None
-            # Py2K
-            if query is not None:
-                query = dict((k.encode('ascii'), query[k]) for k in query)
-            # end Py2K
+            query = (len(tokens) > 1 and dict(parse_qsl(tokens[1]))) or None
         else:
             query = None
         components['query'] = query
 
+        if components['username'] is not None:
+            components['username'] = unquote_plus(components['username'])
         if components['password'] is not None:
-            components['password'] = urllib.parse.unquote_plus(components['password'])
+            components['password'] = unquote_plus(components['password'])
 
-        return components.pop('name'), components
+        provider_name = components.pop('name')
+        if provider_name == "sqlite3":
+            components = _normalize_sqlite_options(components)
+        return provider_name, components
     else:
-        raise Exception("Could not parse rfc1738 URL from string '%s'" % connection_url)
+        raise ValueError(
+            "Could not parse database URL %r. Expected forms like "
+            "sqlite3:////abs/path.db, sqlite3://./rel/path.db, "
+            "postgresql://user:pass@host:5432/db, mysql://user:pass@host:3306/db"
+            % connection_url
+        )
 
 
 class FileContentReader:
@@ -250,7 +273,7 @@ class FileContentReader:
         if os.path.exists(yaml_path):
             config_str = self._get(yaml_path)
             if config_str is not None and config_str != '':
-                return yaml.load(config_str)
+                return yaml.safe_load(config_str)
 
         json_path = file_path + ".json"
         if os.path.exists(json_path):
@@ -261,7 +284,6 @@ class FileContentReader:
     @staticmethod
     def _get(file_path):
         try:
-            # print(file_path)
             with open(file_path, "r") as file:
                 content = file.read()
         except FileNotFoundError:
@@ -271,10 +293,11 @@ class FileContentReader:
 
 class Yaal:
 
-    def __init__(self, root_path, content_reader, debug):
+    def __init__(self, root_path, content_reader=None, *, debug=False):
         self._root_path = root_path
         self._descriptors = {}
         self._data_providers = {}
+        self._data_provider_schemes = {}
         self._cache = {}
         self._debug = debug
 
@@ -291,18 +314,39 @@ class Yaal:
     def setup_data_provider(self, name, database_uri):
         provider_name, options = _parse_rfc1738_args(database_uri)
         if provider_name == "postgresql":
+            from yaal_postgres import PostgresContextManager
             self._data_providers[name] = PostgresContextManager(options)
-        if provider_name == "mysql":
+        elif provider_name == "mysql":
+            from yaal_mysql import MySQLContextManager
             self._data_providers[name] = MySQLContextManager(options)
         elif provider_name == "sqlite3":
             self._data_providers[name] = SQLiteContextManager(options)
+        else:
+            raise UnsupportedDatabaseUrlError(
+                "Unsupported database URL scheme %r for provider %r. "
+                "Supported schemes: sqlite3, postgresql, mysql"
+                % (provider_name, name)
+            )
+        self._data_provider_schemes[name] = provider_name
         return None
 
     def get_data_provider(self, name):
+        if name not in self._data_providers:
+            raise YaalError(
+                "Data provider %r is not configured. Call setup_data_provider(%r, url) first."
+                % (name, name)
+            )
         return self._data_providers[name].get_context()
 
-    def create_descriptor(self, path, output_mapper):
-        return create_trunk(path, output_mapper, self._content_reader)
+    def create_descriptor(self, path, output_mapper=None):
+        descriptor = create_trunk(path, output_mapper, self._content_reader)
+        if descriptor is None:
+            root = getattr(self._content_reader, "_root_path", self._root_path)
+            raise DescriptorNotFoundError(
+                "No SQL descriptor files (*.sql) found at %s"
+                % path_join(root, path)
+            )
+        return descriptor
 
     def clear_cache(self):
         self._descriptors = {}
@@ -314,7 +358,7 @@ class Yaal:
         if not self._debug and path in self._descriptors:
             return self._descriptors[path]
 
-        descriptor_path, route_path = descriptor_ctx["descriptor_path"], descriptor_ctx["route_path"]
+        descriptor_path = descriptor_ctx["descriptor_path"]
         output_mapper = descriptor_ctx["output_mapper"]
         descriptor = self.create_descriptor(descriptor_path, output_mapper)
         self._descriptors[path] = descriptor
@@ -346,16 +390,125 @@ class Yaal:
             "path": route_path if route_path else descriptor_path
         }
 
+    def _cache_for(self, path):
+        if path not in self._cache:
+            self._cache[path] = {}
+        return self._cache[path]
+
+    def _resolve_context(self, path, method, *, payload=None, query=None,
+                         path_values=None, header=None, cookie=None):
+        descriptor_ctx = self.get_descriptor_path_by_route(path, method)
+        if path_values is None:
+            path_values = descriptor_ctx.get("path_values")
+        descriptor = self.get_descriptor(descriptor_ctx)
+        context = create_context(
+            descriptor,
+            payload=payload,
+            query=query,
+            path_values=path_values,
+            header=header,
+            cookie=cookie,
+        )
+        return descriptor, descriptor_ctx, context
+
+    def _default_placeholder(self):
+        for scheme in self._data_provider_schemes.values():
+            if scheme in ("postgresql", "mysql"):
+                return "%s"
+            if scheme == "sqlite3":
+                return "?"
+        return "?"
+
+    def query(self, path, method="get", *, payload=None, query=None, path_values=None,
+              header=None, cookie=None):
+        """Resolve a route, build context, and return the SQL→JSON result."""
+        descriptor, descriptor_ctx, context = self._resolve_context(
+            path,
+            method,
+            payload=payload,
+            query=query,
+            path_values=path_values,
+            header=header,
+            cookie=cookie,
+        )
+        return self.get_result(descriptor, descriptor_ctx, context)
+
+    def query_json(self, path, method="get", *, payload=None, query=None, path_values=None,
+                   header=None, cookie=None):
+        """Same as query, but return a JSON string."""
+        descriptor, descriptor_ctx, context = self._resolve_context(
+            path,
+            method,
+            payload=payload,
+            query=query,
+            path_values=path_values,
+            header=header,
+            cookie=cookie,
+        )
+        return self.get_result_json(descriptor, descriptor_ctx, context)
+
+    # Back-compat alias
+    execute = query
+
+    def explain_sql(self, path, method="get", *, payload=None, query=None, path_values=None,
+                    header=None, cookie=None, placeholder=None):
+        """Return compiled SQL twigs after null-filter elision (for authoring/debug)."""
+        descriptor, _, context = self._resolve_context(
+            path,
+            method,
+            payload=payload,
+            query=query,
+            path_values=path_values,
+            header=header,
+            cookie=cookie,
+        )
+        if placeholder is None:
+            placeholder = self._default_placeholder()
+
+        helper = DataProviderHelper()
+        explained = []
+
+        def _identity_converter(_param_type, param_value):
+            return param_value
+
+        def walk(branch, shape):
+            for twig in branch.get("twigs") or []:
+                compiled = helper.get_executable_content(placeholder, twig, shape)
+                explained.append({
+                    "method": branch.get("method"),
+                    "connection": twig.get("connection", "db"),
+                    "sql": compiled["content"],
+                    "parameters": helper.build_parameters(
+                        compiled, shape, _identity_converter
+                    ),
+                })
+            for child in branch.get("branches") or []:
+                child_shape = shape
+                child_name = (child.get("name") or "").lower()
+                if child_name:
+                    nested = shape.get_prop(child_name)
+                    if nested is not None:
+                        child_shape = nested
+                walk(child, child_shape)
+
+        walk(descriptor, context)
+        return explained
+
+    def get_result(self, descriptor, descriptor_ctx, context):
+        return get_result(
+            descriptor,
+            self.get_data_provider,
+            context,
+            self._cache_for(descriptor_ctx["path"]),
+        )
+
     def get_result_json(self, descriptor, descriptor_ctx, context):
-
-        path = descriptor_ctx["path"]
-        if path in self._cache:
-            cache_provider = self._cache[path]
-        else:
-            cache_provider = {}
-            self._cache[path] = cache_provider
-
-        return get_result_json(descriptor, self.get_data_provider, context, cache_provider)
+        return get_result_json(
+            descriptor,
+            self.get_data_provider,
+            context,
+            self._cache_for(descriptor_ctx["path"]),
+        )
 
     def get_root_path(self):
         return self._root_path

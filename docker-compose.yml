@@ -1,0 +1,35 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: yaal
+      POSTGRES_PASSWORD: yaal
+      POSTGRES_DB: yaal
+    ports:
+      - "54329:5432"
+    volumes:
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U yaal -d yaal"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: yaal
+      MYSQL_USER: yaal
+      MYSQL_PASSWORD: yaal
+    ports:
+      - "33069:3306"
+    volumes:
+      - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    command:
+      - --sql-mode=ANSI_QUOTES,PIPES_AS_CONCAT,STRICT_TRANS_TABLES
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uyaal", "-pyaal"]
+      interval: 2s
+      timeout: 5s
+      retries: 30

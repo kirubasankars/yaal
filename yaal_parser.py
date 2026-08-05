@@ -171,9 +171,79 @@ def lexer(content):
     return tokens
 
 
+def _parameter_name_from_token(token):
+    return token["value"][2:-2].lstrip().rstrip().lower()
+
+
+def _desugar_optional_tokens(tokens):
+    """Expand optional(expr) into ({{param}} is null or expr) for existing nullable elision."""
+    if not tokens:
+        return tokens
+
+    result = []
+    i = 0
+    n = len(tokens)
+    while i < n:
+        tok = tokens[i]
+        if tok["type"] == "word" and tok["value"].lower() == "optional":
+            j = i + 1
+            while j < n and tokens[j]["type"] == "space":
+                j += 1
+            if j < n and tokens[j]["type"] == "brace" and tokens[j]["value"] == "(":
+                open_tok = tokens[j]
+                group = open_tok["group"]
+                k = j + 1
+                while k < n:
+                    t = tokens[k]
+                    if t["type"] == "brace" and t["value"] == ")" and t.get("group") == group:
+                        break
+                    k += 1
+                else:
+                    raise TypeError("unclosed optional(...)")
+
+                body = _desugar_optional_tokens(tokens[j + 1:k])
+                param_names = []
+                seen = set()
+                for t in body:
+                    if t["type"] == "parameter":
+                        name = _parameter_name_from_token(t)
+                        if name not in seen:
+                            seen.add(name)
+                            param_names.append(name)
+
+                if len(param_names) == 0:
+                    raise TypeError("optional(...) requires exactly one {{param}} in its body")
+                if len(param_names) > 1:
+                    raise TypeError(
+                        "optional(...) requires exactly one {{param}} in its body, found: "
+                        + ", ".join(param_names)
+                    )
+
+                p = param_names[0]
+                result.append(open_tok)
+                result.append({"type": "parameter", "value": "{{" + p + "}}"})
+                result.append({"type": "space", "value": " "})
+                result.append({"type": "word", "value": "is"})
+                result.append({"type": "space", "value": " "})
+                result.append({"type": "word", "value": "null"})
+                result.append({"type": "space", "value": " "})
+                result.append({"type": "word", "value": "or"})
+                result.append({"type": "space", "value": " "})
+                result.extend(body)
+                result.append(tokens[k])
+                i = k + 1
+                continue
+
+        result.append(tok)
+        i += 1
+    return result
+
+
 def parser(tokens, method):
     if not tokens:
         return None
+
+    tokens = _desugar_optional_tokens(tokens)
 
     ast = {}
     ast["sql_stmts"] = sql_stmts = []
@@ -253,7 +323,7 @@ def parser(tokens, method):
                     m = sql_rx.search(token_value)
                     if m:
                         d = m.groupdict()
-                        sql_stmt["connection"] = d["name"]
+                        sql_stmt["connection"] = d["name"] or "db"
                 tc += 1
                 continue
 
@@ -304,9 +374,9 @@ def parser(tokens, method):
             if token["type"] == "brace" and "content" in token:
                 m = possible_null_parameter_rx.search(token["content"])
                 if m:
-                    d = m.groupdict()
-                    sql_stmt["nullable"].append(d["name"])
-                    token["nullable_parameter"] = d["name"]
+                    name = m.groupdict()["name"].lower()
+                    sql_stmt["nullable"].append(name)
+                    token["nullable_parameter"] = name
 
                 del token["content"]
 
@@ -319,30 +389,50 @@ def parser(tokens, method):
     return ast
 
 
+def _is_whitespace_sql_fragment(value):
+    return value == "" or (isinstance(value, str) and value.isspace())
+
+
+def _strip_preceding_connector(tokens):
+    """Drop a preceding AND/OR and adjacent whitespace. Returns True if a connector was removed."""
+    i = len(tokens) - 1
+    while i >= 0 and _is_whitespace_sql_fragment(tokens[i]):
+        i -= 1
+    if i < 0 or tokens[i].strip().lower() not in ("and", "or"):
+        return False
+    del tokens[i:]
+    while tokens and _is_whitespace_sql_fragment(tokens[-1]):
+        tokens.pop()
+    return True
+
+
 def compile_sql(sql_stmt, nulls, char):
     if "parameters" in sql_stmt:
         parameters_meta = {x["name"]: x for x in sql_stmt["parameters"]}
     else:
         parameters_meta = None
 
+    nulls_set = {n.lower() for n in nulls}
     stmt = sql_stmt["content"]
     tokens = []
     parameters = []
     group = None
     for token in stmt:
         if token["type"] == "brace":
-            if not group and "nullable_parameter" in token:
-                for p in nulls:
-                    if p == token["nullable_parameter"]:
-                        tokens.append("1 = 1")
-                        group = token["group"]
-                        continue
-            else:
+            if group is not None:
                 if group == token["group"]:
                     group = None
-                    continue
+                continue
 
-        if group:
+            if "nullable_parameter" in token and token["nullable_parameter"] in nulls_set:
+                # Elide optional ({{param}} is null or ...) and a preceding AND/OR.
+                # If this is the sole predicate, keep SQL valid with 1 = 1.
+                if not _strip_preceding_connector(tokens):
+                    tokens.append("1 = 1")
+                group = token["group"]
+                continue
+
+        if group is not None:
             continue
 
         if token["type"] == "parameter":
