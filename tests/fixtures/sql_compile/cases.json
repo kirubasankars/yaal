@@ -260,5 +260,113 @@
     ],
     "expect_sql": "select * from a prewhere a = 1",
     "expect_param_names": []
+  },
+  {
+    "name": "is_null_uppercase_non_null_strips_prefix",
+    "sql": "--(a integer)--\nselect * from t where ({{a}} IS NULL or col = {{a}})\n",
+    "nulls": [],
+    "expect_sql": "select * from t where (col = ?)",
+    "expect_param_names": [
+      "a"
+    ]
+  },
+  {
+    "name": "is_null_uppercase_null_elides",
+    "sql": "--(a integer)--\nselect * from t where ({{a}} IS NULL or col = {{a}})\n",
+    "nulls": [
+      "a"
+    ],
+    "expect_sql": "select * from t",
+    "expect_param_names": []
+  },
+  {
+    "name": "is_null_newline_between_param_and_is",
+    "sql": "--(a integer)--\nselect * from t where ({{a}}\nis null or col = {{a}})\n",
+    "nulls": [],
+    "expect_sql": "select * from t where (col = ?)",
+    "expect_param_names": [
+      "a"
+    ]
+  },
+  {
+    "name": "optional_newline_before_paren",
+    "sql": "--(p integer)--\nselect * from a where a = 1 and optional\n(col = {{p}})\n",
+    "nulls": [
+      "p"
+    ],
+    "expect_sql": "select * from a where a = 1",
+    "expect_param_names": []
+  },
+  {
+    "name": "optional_tab_before_paren",
+    "sql": "--(p integer)--\nselect * from a where optional\t(col = {{p}})\n",
+    "nulls": [],
+    "expect_sql": "select * from a where (col = ?)",
+    "expect_param_names": [
+      "p"
+    ]
+  },
+  {
+    "name": "leading_whitespace_before_param_header",
+    "sql": "\n  --(p integer)--\nselect * from a where optional(col = {{p}})\n",
+    "nulls": [
+      "p"
+    ],
+    "expect_sql": "select * from a",
+    "expect_param_names": []
+  },
+  {
+    "name": "sql_line_comment_mid_query",
+    "sql": "--(a integer)--\nselect 1 -- ignore me\n, {{a}} as x\n",
+    "nulls": [],
+    "expect_sql": "select 1 , ? as x",
+    "expect_param_names": [
+      "a"
+    ]
+  },
+  {
+    "name": "paren_less_is_null_or_errors",
+    "sql": "--(a integer)--\nselect * from t where {{a}} is null or a = 1\n",
+    "expect_error_contains": "wrapped in parentheses"
+  },
+  {
+    "name": "header_unknown_type_errors",
+    "sql": "--(a foobar)--\nselect {{a}}\n",
+    "expect_error_contains": "unknown parameter type"
+  },
+  {
+    "name": "header_duplicate_param_errors",
+    "sql": "--(a integer, a string)--\nselect {{a}}\n",
+    "expect_error_contains": "duplicate parameter"
+  },
+  {
+    "name": "header_missing_type_errors",
+    "sql": "--(a)--\nselect {{a}}\n",
+    "expect_error_contains": "invalid parameter declaration"
+  },
+  {
+    "name": "header_junk_errors",
+    "sql": "--(a integer junk)--\nselect {{a}}\n",
+    "expect_error_contains": "invalid parameter declaration"
+  },
+  {
+    "name": "header_space_after_dashes_errors",
+    "sql": "-- (a integer)--\nselect {{a}}\n",
+    "expect_error_contains": "without space after --"
+  },
+  {
+    "name": "empty_header_errors",
+    "sql": "--()--\nselect 1\n",
+    "expect_error_contains": "empty parameter header"
+  },
+  {
+    "name": "unclosed_parameter_errors",
+    "sql": "--(a integer)--\nselect {{a\n",
+    "expect_error_contains": "unclosed {{"
+  },
+  {
+    "name": "unclosed_header_errors",
+    "sql": "--(a integer\nselect 1\n",
+    "expect_error_contains": "unclosed parameter header"
   }
 ]

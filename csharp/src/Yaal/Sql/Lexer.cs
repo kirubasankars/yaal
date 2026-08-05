@@ -31,7 +31,8 @@ public static class Lexer
             {
                 var (next, t) = LexDash(current, content);
                 current = next;
-                tokens.Add(t);
+                if (t != null)
+                    tokens.Add(t);
             }
             else if (p == '{' && p1 == '{')
             {
@@ -39,7 +40,7 @@ public static class Lexer
                 current = next;
                 tokens.Add(t);
             }
-            else if (p == ' ')
+            else if (p is ' ' or '\t' or '\r')
             {
                 var (next, t) = LexSpaces(current, content);
                 current = next;
@@ -78,26 +79,71 @@ public static class Lexer
         return tokens;
     }
 
-    private static (int, SqlToken) LexDash(int current, string content)
+    private static (int, SqlToken?) LexDash(int current, string content)
     {
-        var token = new List<char> { '-', '-' };
-        current += 2;
         var contentLength = content.Length;
-        while (current < contentLength)
+        current += 2; // skip --
+
+        if (current >= contentLength)
+            return (current, null);
+
+        // Malformed header: space(s) between -- and (
+        var j = current;
+        while (j < contentLength && content[j] is ' ' or '\t' or '\r')
+            j += 1;
+        if (j > current && j < contentLength && content[j] == '(')
         {
-            var p = content[current];
-            var p1 = current + 1 < contentLength ? content[current + 1] : '\0';
-            if (p == '-' && p1 == '-')
-            {
-                token.Add('-');
-                token.Add('-');
-                current += 2;
-                break;
-            }
-            token.Add(content[current]);
-            current += 1;
+            throw new InvalidOperationException(
+                "invalid parameter header: use --(name type)-- without space after --");
         }
-        return (current, new SqlToken { Type = "dash", Value = new string(token.ToArray()) });
+
+        if (content[current] == '(')
+        {
+            var token = new List<char> { '-', '-', '(' };
+            current += 1;
+            while (current < contentLength)
+            {
+                if (current + 2 < contentLength &&
+                    content[current] == ')' &&
+                    content[current + 1] == '-' &&
+                    content[current + 2] == '-')
+                {
+                    token.Add(')');
+                    token.Add('-');
+                    token.Add('-');
+                    current += 3;
+                    return (current, new SqlToken { Type = "dash", Value = new string(token.ToArray()) });
+                }
+                token.Add(content[current]);
+                current += 1;
+            }
+            throw new InvalidOperationException("unclosed parameter header --(...)--");
+        }
+
+        if (content.AsSpan(current).StartsWith("sql", StringComparison.Ordinal))
+        {
+            var token = new List<char> { '-', '-' };
+            while (current < contentLength)
+            {
+                var p = content[current];
+                var p1 = current + 1 < contentLength ? content[current + 1] : '\0';
+                if (p == '-' && p1 == '-')
+                {
+                    token.Add('-');
+                    token.Add('-');
+                    current += 2;
+                    return (current, new SqlToken { Type = "dash", Value = new string(token.ToArray()) });
+                }
+                token.Add(p);
+                current += 1;
+            }
+            throw new InvalidOperationException("unclosed --sql-- directive");
+        }
+
+        // SQL line comment: discard through end of line (keep newline for the lexer)
+        while (current < contentLength && content[current] != '\n')
+            current += 1;
+        return (current, null);
     }
 
     private static (int, SqlToken) LexCurlyBraces(int current, string content)
@@ -114,12 +160,12 @@ public static class Lexer
                 token.Add('}');
                 token.Add('}');
                 current += 2;
-                break;
+                return (current, new SqlToken { Type = "parameter", Value = new string(token.ToArray()) });
             }
             token.Add(content[current]);
             current += 1;
         }
-        return (current, new SqlToken { Type = "parameter", Value = new string(token.ToArray()) });
+        throw new InvalidOperationException("unclosed {{...}} parameter");
     }
 
     private static (int, SqlToken) LexString(int current, string content, char quote)
@@ -135,25 +181,25 @@ public static class Lexer
             {
                 token.Add(quote);
                 current += 1;
-                break;
+                return (current, new SqlToken { Type = "string", Value = new string(token.ToArray()) });
             }
             token.Add(content[current]);
             current += 1;
         }
-        return (current, new SqlToken { Type = "string", Value = new string(token.ToArray()) });
+        throw new InvalidOperationException("unclosed string literal");
     }
 
     private static (int, SqlToken) LexSpaces(int current, string content)
     {
         var start = current;
-        while (current < content.Length && content[current] == ' ')
+        while (current < content.Length && content[current] is ' ' or '\t' or '\r')
             current += 1;
         return (current, new SqlToken { Type = "space", Value = content[start..current] });
     }
 
     private static (int, SqlToken) LexWord(int current, string content)
     {
-        const string singles = "()'\"\n ";
+        const string singles = "()'\"\n \t\r";
         const string doubles = "{}-";
         var token = new List<char>();
         while (current < content.Length)

@@ -9,6 +9,13 @@ public static class OptionalDesugar
     public static string ParameterNameFromToken(SqlToken token) =>
         token.Value[2..^2].Trim().ToLowerInvariant();
 
+    private static int SkipWs(List<SqlToken> tokens, int i)
+    {
+        while (i < tokens.Count && tokens[i].Type is "space" or "newline")
+            i += 1;
+        return i;
+    }
+
     public static List<SqlToken> Desugar(List<SqlToken>? tokens)
     {
         if (tokens == null)
@@ -22,9 +29,7 @@ public static class OptionalDesugar
             var tok = tokens[i];
             if (tok.Type == "word" && tok.Value.Equals("optional", StringComparison.OrdinalIgnoreCase))
             {
-                var j = i + 1;
-                while (j < n && tokens[j].Type == "space")
-                    j += 1;
+                var j = SkipWs(tokens, i + 1);
 
                 if (j < n && tokens[j].Type == "brace" && tokens[j].Value == "(")
                 {

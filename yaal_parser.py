@@ -4,29 +4,62 @@
 
 import re
 
+KNOWN_PARAM_TYPES = frozenset({"integer", "string", "float", "bool", "blob"})
+
+_WS_TOKEN_TYPES = frozenset({"space", "newline"})
+
 
 def lex_dash(current, content):
-    token = []
-    token.extend(["-", "-"])
-    current = current + 2
+    """Lex `--...` as a Yaal directive, or skip a SQL line comment."""
     content_length = len(content)
-    while True:
-        if content_length <= current:
-            break
+    current = current + 2  # skip --
 
-        p = content[current]
-        if content_length > current + 1:
-            p1 = content[current + 1]
+    if current >= content_length:
+        return current, None
 
-        if p == "-" and p1 == "-":
-            token.extend(["-", "-"])
-            current = current + 2
-            break
+    # Malformed header: space(s) between -- and (
+    j = current
+    while j < content_length and content[j] in " \t\r":
+        j += 1
+    if j > current and j < content_length and content[j] == "(":
+        raise TypeError(
+            "invalid parameter header: use --(name type)-- without space after --"
+        )
 
-        token.extend(content[current])
+    if content[current] == "(":
+        token = ["-", "-", "("]
         current = current + 1
+        while current < content_length:
+            if (
+                current + 2 < content_length
+                and content[current] == ")"
+                and content[current + 1] == "-"
+                and content[current + 2] == "-"
+            ):
+                token.extend([")", "-", "-"])
+                current = current + 3
+                return current, {"type": "dash", "value": "".join(token)}
+            token.append(content[current])
+            current = current + 1
+        raise TypeError("unclosed parameter header --(...)--")
 
-    return current, {"type": "dash", "value": "".join(token)}
+    if content.startswith("sql", current):
+        token = ["-", "-"]
+        while current < content_length:
+            p = content[current]
+            p1 = content[current + 1] if current + 1 < content_length else ""
+            if p == "-" and p1 == "-":
+                token.extend(["-", "-"])
+                current = current + 2
+                return current, {"type": "dash", "value": "".join(token)}
+            token.append(p)
+            current = current + 1
+        raise TypeError("unclosed --sql-- directive")
+
+    # SQL line comment: discard through end of line (keep newline for the lexer)
+    while current < content_length and content[current] != "\n":
+        current = current + 1
+    return current, None
 
 
 def lex_curly_braces(current, content):
@@ -36,7 +69,7 @@ def lex_curly_braces(current, content):
     content_length = len(content)
     while True:
         if content_length <= current:
-            break
+            raise TypeError("unclosed {{...}} parameter")
 
         p = content[current]
 
@@ -48,12 +81,10 @@ def lex_curly_braces(current, content):
         if p == "}" and p1 == "}":
             token.extend(["}", "}"])
             current = current + 2
-            break
+            return current, {"type": "parameter", "value": "".join(token)}
 
         token.extend(content[current])
         current = current + 1
-
-    return current, {"type": "parameter", "value": "".join(token)}
 
 
 def lex_string(current, content, quote):
@@ -64,7 +95,7 @@ def lex_string(current, content, quote):
 
     while True:
         if content_length <= current:
-            break
+            raise TypeError("unclosed string literal")
 
         p = content[current]
 
@@ -91,14 +122,14 @@ def lex_spaces(current, content):
         if content_length <= current:
             break
         p = content[current]
-        if p != " ":
+        if p not in " \t\r":
             break
         current = current + 1
     return current, {"type": "space", "value": content[start:current]}
 
 
 def lex_word(current, content):
-    singles = "()'\"\n "
+    singles = "()'\"\n \t\r"
     doubles = "{}-"
     token = []
     content_length = len(content)
@@ -147,13 +178,14 @@ def lexer(content):
             tokens.append(t)
         elif p == "-" and p1 == "-":
             current, t = lex_dash(current, content)
-            tokens.append(t)
+            if t is not None:
+                tokens.append(t)
             continue
         elif p == "{" and p1 == "{":
             current, t = lex_curly_braces(current, content)
             tokens.append(t)
             continue
-        elif p == " ":
+        elif p in " \t\r":
             current, t = lex_spaces(current, content)
             tokens.append(t)
         elif p == "(" or p == ")":
@@ -179,6 +211,27 @@ def _parameter_name_from_token(token):
     return token["value"][2:-2].lstrip().rstrip().lower()
 
 
+def _skip_ws_tokens(tokens, i):
+    n = len(tokens)
+    while i < n and tokens[i]["type"] in _WS_TOKEN_TYPES:
+        i += 1
+    return i
+
+
+def _match_is_null_or_after(tokens, param_index):
+    """If tokens after param_index match `is null or` (any ws/case), return index of `null`."""
+    i = _skip_ws_tokens(tokens, param_index + 1)
+    if i >= len(tokens) or tokens[i]["type"] != "word" or tokens[i]["value"].lower() != "is":
+        return None
+    i = _skip_ws_tokens(tokens, i + 1)
+    if i >= len(tokens) or tokens[i]["type"] != "word" or tokens[i]["value"].lower() != "null":
+        return None
+    j = _skip_ws_tokens(tokens, i + 1)
+    if j >= len(tokens) or tokens[j]["type"] != "word" or tokens[j]["value"].lower() != "or":
+        return None
+    return i
+
+
 def _desugar_optional_tokens(tokens):
     """Expand optional(expr) into ({{param}} is null or expr) for existing nullable elision."""
     if not tokens:
@@ -190,9 +243,7 @@ def _desugar_optional_tokens(tokens):
     while i < n:
         tok = tokens[i]
         if tok["type"] == "word" and tok["value"].lower() == "optional":
-            j = i + 1
-            while j < n and tokens[j]["type"] == "space":
-                j += 1
+            j = _skip_ws_tokens(tokens, i + 1)
             if j < n and tokens[j]["type"] == "brace" and tokens[j]["value"] == "(":
                 open_tok = tokens[j]
                 group = open_tok["group"]
@@ -243,6 +294,58 @@ def _desugar_optional_tokens(tokens):
     return result
 
 
+def _parse_parameter_header(token_value, method):
+    if not (
+        token_value.startswith("--(")
+        and token_value.endswith(")--")
+    ):
+        return None
+
+    inner = token_value[3:-3]
+    if inner.strip() == "":
+        raise TypeError("empty parameter header in " + method + ".sql")
+
+    parameter_rx = re.compile(
+        r"\s*(?P<name>[\$\_\.A-Za-z0-9\[\]]+)\s+(?P<type>\w+)\s*"
+    )
+    params = []
+    seen = set()
+    for segment in inner.split(","):
+        if segment.strip() == "":
+            raise TypeError("invalid parameter declaration in " + method + ".sql")
+        m = parameter_rx.fullmatch(segment)
+        if not m:
+            raise TypeError(
+                "invalid parameter declaration '"
+                + segment.strip()
+                + "' in "
+                + method
+                + ".sql"
+            )
+        d = m.groupdict()
+        param_name = d["name"].lstrip().rstrip().lower()
+        param_type = d["type"].lower()
+        if param_type not in KNOWN_PARAM_TYPES:
+            raise TypeError(
+                "unknown parameter type '"
+                + param_type
+                + "' for {{"
+                + param_name
+                + "}} in "
+                + method
+                + ".sql (expected "
+                + ", ".join(sorted(KNOWN_PARAM_TYPES))
+                + ")"
+            )
+        if param_name in seen:
+            raise TypeError(
+                "duplicate parameter {{" + param_name + "}} in " + method + ".sql"
+            )
+        seen.add(param_name)
+        params.append({"name": param_name, "type": param_type})
+    return params
+
+
 def parser(tokens, method):
     if not tokens:
         return None
@@ -253,7 +356,6 @@ def parser(tokens, method):
     ast["sql_stmts"] = sql_stmts = []
     brace_groups = []
 
-    parameter_rx = re.compile(r"\s*(?P<name>[\$\_\.A-Za-z0-9\[\]]+)(\s+(?P<type>\w+))?\s*")
     sql_rx = re.compile(r"--sql\(\s*(?P<name>\w+)?\s*\)--")
 
     sql_stmt = {
@@ -262,6 +364,7 @@ def parser(tokens, method):
     }
 
     tc = 0
+    significant_seen = False
     while True:
         if len(tokens) <= tc:
             break
@@ -270,48 +373,40 @@ def parser(tokens, method):
         token_value = token["value"]
         token_type = token["type"]
 
+        if token_type in _WS_TOKEN_TYPES and not significant_seen:
+            tc += 1
+            continue
+
         if token_type == "parameter":
             parameter_name = token_value[2:len(token_value) - 2].lstrip().rstrip().lower()
             token["name"] = parameter_name
             sql_stmt["parameters"].append({"name": parameter_name})
 
-            if len(tokens) > (tc + 4):
-                token2 = tokens[tc + 1]
-                token3 = tokens[tc + 2]
-                token4 = tokens[tc + 3]
-                token5 = tokens[tc + 4]
-
-                if token2["type"] == "space" and \
-                        token3["value"] == "is" and \
-                        token4["type"] == "space" and \
-                        token5["value"] == "null":
-                    token = {
-                        "type": "parameter",
-                        "name": parameter_name,
-                        "value": "{{" + parameter_name + "}} is null",
-                        "nullable": True
-                    }
-                    tc += 4
+            null_idx = _match_is_null_or_after(tokens, tc)
+            if null_idx is not None:
+                if not brace_groups:
+                    raise TypeError(
+                        "{{"
+                        + parameter_name
+                        + "}} is null or must be wrapped in parentheses in "
+                        + method
+                        + ".sql"
+                    )
+                token = {
+                    "type": "parameter",
+                    "name": parameter_name,
+                    "value": "{{" + parameter_name + "}} is null",
+                    "nullable": True
+                }
+                tc = null_idx
 
         if token_type == "dash":
-            if token_value[:3] == "--(" and token_value[len(token_value) - 3:] == ")--" and tc == 0:
-                token_value = token_value[3:len(token_value) - 3]
-                params = token_value.split(",")
-                token["parameters"] = []
-                for p in params:
-                    m = parameter_rx.search(p)
-                    if m:
-                        d = m.groupdict()
-                        param_name = d["name"]
-                        if d["type"]:
-                            param_type = d["type"]
-                        else:
-                            param_type = ""
-                        token["parameters"].append({
-                            "name": param_name.lstrip().rstrip().lower(),
-                            "type": param_type
-                        })
-                ast["parameters"] = {x["name"]: x for x in token["parameters"]}
+            header_params = None
+            if not significant_seen:
+                header_params = _parse_parameter_header(token_value, method)
+            if header_params is not None:
+                ast["parameters"] = {x["name"]: x for x in header_params}
+                significant_seen = True
                 tc += 1
                 continue
             else:
@@ -328,6 +423,7 @@ def parser(tokens, method):
                     if m:
                         d = m.groupdict()
                         sql_stmt["connection"] = d["name"] or "db"
+                significant_seen = True
                 tc += 1
                 continue
 
@@ -347,6 +443,7 @@ def parser(tokens, method):
                 g["content"].append(token["value"])
 
         sql_stmt["content"].append(token)
+        significant_seen = True
 
         tc = tc + 1
 
@@ -369,7 +466,10 @@ def parser(tokens, method):
 
         sql_stmt["parameters"] = parameters
 
-    possible_null_parameter_rx = re.compile("^\(\s*{{(?P<name>[A-Za-z0-9_.$-]*?)}}\s+is\s+null\s+or", re.IGNORECASE)
+    possible_null_parameter_rx = re.compile(
+        r"^\(\s*{{(?P<name>[A-Za-z0-9_.$-]*?)}}\s+is\s+null\s+or",
+        re.IGNORECASE,
+    )
 
     for sql_stmt in sql_stmts:
 

@@ -43,7 +43,7 @@ Call path = folder path: `y.query("user/page", args={"page": 1, "page_size": 10}
 
 ## Parameters
 
-Declare types at the top of a SQL file; bind with `{{...}}`:
+Declare types at the top of a SQL file (first significant token; leading blank lines/spaces are fine); bind with `{{...}}`:
 
 ```sql
 --($args.id integer, name string)--
@@ -53,6 +53,10 @@ from users u
 where optional(u.user_id = {{$args.id}})
   and u.user_name = {{name}}
 ```
+
+Allowed types: `integer`, `string`, `float`, `bool`, `blob`. Each name needs a type; duplicates and unknown types are errors.
+
+Plain SQL `--` line comments are allowed in query text. Yaal directives are only `--(name type, ...)--` and `--sql--` / `--sql(connection)--`.
 
 | Prefix | Source |
 |---|---|
@@ -74,7 +78,7 @@ and optional(u.user_id = {{$args.id}})
 
 If the elided filter was the only predicate, the empty `WHERE` / ClickHouse `PREWHERE` is dropped — including before `)` or other clause starts (no leftover bare clause or `1 = 1`). Leading author `WHERE`/`PREWHERE 1 = 1 AND|OR …` is cleaned the same way when the rest remains. When both clauses appear, each is cleaned independently.
 
-Long form still works: `({{param}} is null or col = {{param}})`.
+Long form still works and must be parenthesized: `({{param}} is null or col = {{param}})` (case and surrounding whitespace are flexible).
 
 ```bash
 yaal explain user/list --arg active=1

@@ -26,9 +26,9 @@ class FakeExecutionContext:
 class FakeContentReader:
 
     def get_sql(self, method, path):
-        return """--(id1, id2)--
+        return """--(id1 integer, id2 string)--
 select {{id1}}
---query()--
+--sql--
         """
 
     def get_config(self, path, output_mapper=None):
@@ -43,7 +43,7 @@ class FakeContentReader1:
     def get_sql(self, method, path):
         return """--(id1 integer, id2 bool)--
 select {{id1}}, {{id2}}
---query()--
+--sql--
 select {{id2}}
         """
 

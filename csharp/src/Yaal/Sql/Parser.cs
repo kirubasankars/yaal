@@ -8,8 +8,13 @@ namespace Yaal.Sql;
 
 public static class SqlParser
 {
+    private static readonly HashSet<string> KnownParamTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "integer", "string", "float", "bool", "blob",
+    };
+
     private static readonly Regex ParameterRx = new(
-        @"\s*(?<name>[$_.A-Za-z0-9\[\]]+)(\s+(?<type>\w+))?\s*",
+        @"\s*(?<name>[$_.A-Za-z0-9\[\]]+)\s+(?<type>\w+)\s*",
         RegexOptions.Compiled);
 
     private static readonly Regex SqlRx = new(
@@ -19,6 +24,81 @@ public static class SqlParser
     private static readonly Regex PossibleNullParameterRx = new(
         @"^\(\s*{{(?<name>[A-Za-z0-9_.$-]*?)}}\s+is\s+null\s+or",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static int SkipWs(List<SqlToken> tokens, int i)
+    {
+        while (i < tokens.Count && tokens[i].Type is "space" or "newline")
+            i += 1;
+        return i;
+    }
+
+    /// <summary>
+    /// If tokens after paramIndex match <c>is null or</c> (any ws/case), return index of <c>null</c>.
+    /// </summary>
+    private static int? MatchIsNullOrAfter(List<SqlToken> tokens, int paramIndex)
+    {
+        var i = SkipWs(tokens, paramIndex + 1);
+        if (i >= tokens.Count || tokens[i].Type != "word" ||
+            !tokens[i].Value.Equals("is", StringComparison.OrdinalIgnoreCase))
+            return null;
+        i = SkipWs(tokens, i + 1);
+        if (i >= tokens.Count || tokens[i].Type != "word" ||
+            !tokens[i].Value.Equals("null", StringComparison.OrdinalIgnoreCase))
+            return null;
+        var j = SkipWs(tokens, i + 1);
+        if (j >= tokens.Count || tokens[j].Type != "word" ||
+            !tokens[j].Value.Equals("or", StringComparison.OrdinalIgnoreCase))
+            return null;
+        return i;
+    }
+
+    private static List<ParamDecl> ParseParameterHeader(string tokenValue, string method)
+    {
+        var inner = tokenValue[3..^3];
+        if (string.IsNullOrWhiteSpace(inner))
+            throw new InvalidOperationException("empty parameter header in " + method + ".sql");
+
+        var paramsList = new List<ParamDecl>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var segment in inner.Split(','))
+        {
+            if (string.IsNullOrWhiteSpace(segment))
+                throw new InvalidOperationException("invalid parameter declaration in " + method + ".sql");
+
+            var m = ParameterRx.Match(segment);
+            if (!m.Success || m.Index != 0 || m.Length != segment.Length)
+            {
+                throw new InvalidOperationException(
+                    "invalid parameter declaration '" + segment.Trim() + "' in " + method + ".sql");
+            }
+
+            var paramName = m.Groups["name"].Value.Trim().ToLowerInvariant();
+            var paramType = m.Groups["type"].Value.ToLowerInvariant();
+            if (!KnownParamTypes.Contains(paramType))
+            {
+                throw new InvalidOperationException(
+                    "unknown parameter type '" + paramType + "' for {{" + paramName + "}} in " +
+                    method + ".sql (expected bool, blob, float, integer, string)");
+            }
+            if (!seen.Add(paramName))
+            {
+                throw new InvalidOperationException(
+                    "duplicate parameter {{" + paramName + "}} in " + method + ".sql");
+            }
+            paramsList.Add(new ParamDecl { Name = paramName, Type = paramType });
+        }
+        return paramsList;
+    }
+
+    private static bool TryParseParameterHeader(string tokenValue, string method, out List<ParamDecl>? parameters)
+    {
+        parameters = null;
+        if (!tokenValue.StartsWith("--(", StringComparison.Ordinal) ||
+            !tokenValue.EndsWith(")--", StringComparison.Ordinal))
+            return false;
+        parameters = ParseParameterHeader(tokenValue, method);
+        return true;
+    }
 
     public static SqlAst? Parse(List<SqlToken>? tokens, string method)
     {
@@ -34,11 +114,18 @@ public static class SqlParser
         var sqlStmt = new Twig();
 
         var tc = 0;
+        var significantSeen = false;
         while (tc < tokens.Count)
         {
             var token = tokens[tc];
             var tokenValue = token.Value;
             var tokenType = token.Type;
+
+            if ((tokenType is "space" or "newline") && !significantSeen)
+            {
+                tc += 1;
+                continue;
+            }
 
             if (tokenType == "parameter")
             {
@@ -46,50 +133,32 @@ public static class SqlParser
                 token.Name = parameterName;
                 sqlStmt.Parameters.Add(new ParamDecl { Name = parameterName });
 
-                if (tc + 4 < tokens.Count)
+                var nullIdx = MatchIsNullOrAfter(tokens, tc);
+                if (nullIdx != null)
                 {
-                    var token2 = tokens[tc + 1];
-                    var token3 = tokens[tc + 2];
-                    var token4 = tokens[tc + 3];
-                    var token5 = tokens[tc + 4];
-
-                    if (token2.Type == "space" &&
-                        token3.Value == "is" &&
-                        token4.Type == "space" &&
-                        token5.Value == "null")
+                    if (braceGroups.Count == 0)
                     {
-                        token = new SqlToken
-                        {
-                            Type = "parameter",
-                            Name = parameterName,
-                            Value = "{{" + parameterName + "}} is null",
-                            Nullable = true,
-                        };
-                        tc += 4;
+                        throw new InvalidOperationException(
+                            "{{" + parameterName + "}} is null or must be wrapped in parentheses in " +
+                            method + ".sql");
                     }
+                    token = new SqlToken
+                    {
+                        Type = "parameter",
+                        Name = parameterName,
+                        Value = "{{" + parameterName + "}} is null",
+                        Nullable = true,
+                    };
+                    tc = nullIdx.Value;
                 }
             }
 
             if (tokenType == "dash")
             {
-                if (tokenValue.StartsWith("--(", StringComparison.Ordinal) &&
-                    tokenValue.EndsWith(")--", StringComparison.Ordinal) &&
-                    tc == 0)
+                if (!significantSeen && TryParseParameterHeader(tokenValue, method, out var headerParams))
                 {
-                    tokenValue = tokenValue[3..^3];
-                    var paramsList = tokenValue.Split(',');
-                    token.Parameters = new List<ParamDecl>();
-                    foreach (var p in paramsList)
-                    {
-                        var m = ParameterRx.Match(p);
-                        if (m.Success)
-                        {
-                            var paramName = m.Groups["name"].Value.Trim().ToLowerInvariant();
-                            var paramType = m.Groups["type"].Success ? m.Groups["type"].Value : "";
-                            token.Parameters.Add(new ParamDecl { Name = paramName, Type = paramType });
-                        }
-                    }
-                    ast.Parameters = token.Parameters.ToDictionary(x => x.Name, x => x);
+                    ast.Parameters = headerParams!.ToDictionary(x => x.Name, x => x);
+                    significantSeen = true;
                     tc += 1;
                     continue;
                 }
@@ -105,6 +174,7 @@ public static class SqlParser
                                          !string.IsNullOrEmpty(sqlMatch.Groups["name"].Value)
                         ? sqlMatch.Groups["name"].Value
                         : "db";
+                significantSeen = true;
                 tc += 1;
                 continue;
             }
@@ -136,6 +206,7 @@ public static class SqlParser
             }
 
             sqlStmt.Content.Add(token);
+            significantSeen = true;
             tc += 1;
         }
 
