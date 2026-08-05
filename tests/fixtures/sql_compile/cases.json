@@ -122,6 +122,15 @@
     "expect_param_names": []
   },
   {
+    "name": "optional_nested_subquery_where_before_close_paren",
+    "sql": "--($args.id integer)--\nselect * from (\nselect * from (\nselect 1 as id\n) u where optional(id = {{$args.id}})\n) x\n",
+    "nulls": [
+      "$args.id"
+    ],
+    "expect_sql": "select * from ( select * from ( select 1 as id ) u) x",
+    "expect_param_names": []
+  },
+  {
     "name": "optional_sugar_requires_one_param",
     "sql": "--(a integer)--\nselect * from a where optional(col = 1)\n",
     "expect_error_contains": "exactly one"
@@ -130,5 +139,126 @@
     "name": "optional_sugar_rejects_multiple_params",
     "sql": "--(a integer, b integer)--\nselect * from a where optional(col = {{a}} and other = {{b}})\n",
     "expect_error_contains": "exactly one"
+  },
+  {
+    "name": "prewhere_optional_sole_null",
+    "sql": "--(p integer)--\nselect * from a prewhere optional(col = {{p}})\n",
+    "nulls": [
+      "p"
+    ],
+    "expect_sql": "select * from a",
+    "expect_param_names": []
+  },
+  {
+    "name": "prewhere_optional_sole_non_null",
+    "sql": "--(p integer)--\nselect * from a prewhere optional(col = {{p}})\n",
+    "nulls": [],
+    "expect_sql": "select * from a prewhere (col = ?)",
+    "expect_param_names": [
+      "p"
+    ]
+  },
+  {
+    "name": "prewhere_one_equals_one_and_optional_null",
+    "sql": "--(p integer)--\nselect * from a prewhere 1 = 1 and optional(col = {{p}})\n",
+    "nulls": [
+      "p"
+    ],
+    "expect_sql": "select * from a",
+    "expect_param_names": []
+  },
+  {
+    "name": "prewhere_optional_before_order",
+    "sql": "--(p integer)--\nselect * from a prewhere optional(col = {{p}}) order by id\n",
+    "nulls": [
+      "p"
+    ],
+    "expect_sql": "select * from a order by id",
+    "expect_param_names": []
+  },
+  {
+    "name": "prewhere_optional_null_keeps_where",
+    "sql": "--(p integer)--\nselect * from a prewhere optional(a = {{p}}) where active = 1\n",
+    "nulls": [
+      "p"
+    ],
+    "expect_sql": "select * from a where active = 1",
+    "expect_param_names": []
+  },
+  {
+    "name": "prewhere_keeps_where_optional_null",
+    "sql": "--(p integer)--\nselect * from a prewhere a = 1 where optional(b = {{p}})\n",
+    "nulls": [
+      "p"
+    ],
+    "expect_sql": "select * from a prewhere a = 1",
+    "expect_param_names": []
+  },
+  {
+    "name": "prewhere_and_where_both_optional_null",
+    "sql": "--(a integer, b integer)--\nselect * from t prewhere optional(x = {{a}}) where optional(y = {{b}})\n",
+    "nulls": [
+      "a",
+      "b"
+    ],
+    "expect_sql": "select * from t",
+    "expect_param_names": []
+  },
+  {
+    "name": "prewhere_and_where_both_optional_mixed",
+    "sql": "--(a integer, b integer)--\nselect * from t prewhere optional(x = {{a}}) where optional(y = {{b}})\n",
+    "nulls": [
+      "a"
+    ],
+    "expect_sql": "select * from t where (y = ?)",
+    "expect_param_names": [
+      "b"
+    ]
+  },
+  {
+    "name": "prewhere_and_where_both_optional_both_bound",
+    "sql": "--(a integer, b integer)--\nselect * from t prewhere optional(x = {{a}}) where optional(y = {{b}})\n",
+    "nulls": [],
+    "expect_sql": "select * from t prewhere (x = ?) where (y = ?)",
+    "expect_param_names": [
+      "a",
+      "b"
+    ]
+  },
+  {
+    "name": "prewhere_1eq1_or_optional_null_with_where",
+    "sql": "--(p integer)--\nselect * from a prewhere 1 = 1 or optional(a = {{p}}) where b = 1\n",
+    "nulls": [
+      "p"
+    ],
+    "expect_sql": "select * from a where b = 1",
+    "expect_param_names": []
+  },
+  {
+    "name": "prewhere_optional_nested_before_close_paren",
+    "sql": "--(p integer)--\nselect * from (\nselect * from (\nselect 1 as id\n) u prewhere optional(id = {{p}})\n) x\n",
+    "nulls": [
+      "p"
+    ],
+    "expect_sql": "select * from ( select * from ( select 1 as id ) u) x",
+    "expect_param_names": []
+  },
+  {
+    "name": "where_after_prewhere_optional_before_close_paren",
+    "sql": "--(p integer)--\nselect * from (\nselect * from (\nselect 1 as id\n) u prewhere x = 1 where optional(id = {{p}})\n) x\n",
+    "nulls": [
+      "p"
+    ],
+    "expect_sql": "select * from ( select * from ( select 1 as id ) u prewhere x = 1) x",
+    "expect_param_names": []
+  },
+  {
+    "name": "prewhere_optional_with_remaining_and",
+    "sql": "--(p integer)--\nselect * from a prewhere a = 1 and optional(b = {{p}})\n",
+    "nulls": [
+      "p"
+    ],
+    "expect_sql": "select * from a prewhere a = 1",
+    "expect_param_names": []
   }
 ]

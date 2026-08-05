@@ -72,7 +72,7 @@ and optional(u.user_id = {{$args.id}})
 | value present | `and (u.user_id = ?)` with a bind |
 | value null / omitted | clause removed |
 
-If the elided filter was the only predicate, the empty `WHERE` is dropped (no leftover `WHERE 1 = 1`). Leading author `WHERE 1 = 1 AND|OR …` is cleaned the same way when the rest remains.
+If the elided filter was the only predicate, the empty `WHERE` / ClickHouse `PREWHERE` is dropped — including before `)` or other clause starts (no leftover bare clause or `1 = 1`). Leading author `WHERE`/`PREWHERE 1 = 1 AND|OR …` is cleaned the same way when the rest remains. When both clauses appear, each is cleaned independently.
 
 Long form still works: `({{param}} is null or col = {{param}})`.
 

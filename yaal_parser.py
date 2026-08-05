@@ -395,8 +395,10 @@ def _is_whitespace_sql_fragment(value):
 
 _CLAUSE_BOUNDARY = frozenset({
     "order", "group", "having", "limit", "offset", "fetch", "for",
-    "union", "except", "intersect", ")",
+    "union", "except", "intersect", ")", "where", "prewhere",
 })
+
+_FILTER_CLAUSES = frozenset({"where", "prewhere"})
 
 _ONE_EQUALS_ONE_COMPACT = re.compile(r"^1\s*=\s*1$")
 
@@ -452,7 +454,7 @@ def _trim_ws_before(tokens, i):
 
 
 def _cleanup_compiled_sql(tokens):
-    """Drop empty/tautology WHERE 1 = 1 left after optional-filter elision."""
+    """Drop empty/tautology WHERE|PREWHERE 1 = 1 left after optional-filter elision."""
     tokens = list(tokens)
     changed = True
     while changed:
@@ -460,23 +462,39 @@ def _cleanup_compiled_sql(tokens):
         for i, t in enumerate(tokens):
             if _is_whitespace_sql_fragment(t):
                 continue
-            if t.strip().lower() != "where":
+            if t.strip().lower() not in _FILTER_CLAUSES:
                 continue
 
             j, word = _next_significant(tokens, i + 1)
-            if j is None:
+            if j is None or word in _CLAUSE_BOUNDARY:
+                # Empty WHERE/PREWHERE at EOF, before ), ORDER/GROUP/WHERE/..., etc.
+                old_i = i
                 i = _trim_ws_before(tokens, i)
-                del tokens[i:]
+                if j is None:
+                    del tokens[i:]
+                else:
+                    j -= old_i - i
+                    del tokens[i:j]
+                    # Keep a space before the next keyword (not before ')').
+                    if (
+                        i > 0
+                        and i < len(tokens)
+                        and not _is_whitespace_sql_fragment(tokens[i - 1])
+                        and not _is_whitespace_sql_fragment(tokens[i])
+                        and tokens[i].strip() != ")"
+                    ):
+                        tokens.insert(i, " ")
                 changed = True
                 break
 
             one_end = _match_one_equals_one(tokens, j)
             if one_end is None:
-                break
+                # Real predicate; keep scanning for other WHERE/PREWHERE clauses.
+                continue
 
             k, next_word = _next_significant(tokens, one_end)
             if k is None or next_word in _CLAUSE_BOUNDARY:
-                # Sole WHERE 1 = 1 (or WHERE 1 = 1 before ORDER/GROUP/...).
+                # Sole WHERE/PREWHERE 1 = 1 (or before ORDER/GROUP/WHERE/...).
                 old_i = i
                 i = _trim_ws_before(tokens, i)
                 one_end -= old_i - i
@@ -492,7 +510,7 @@ def _cleanup_compiled_sql(tokens):
                 break
 
             if next_word in ("and", "or"):
-                # WHERE 1 = 1 AND|OR rest → WHERE rest
+                # WHERE/PREWHERE 1 = 1 AND|OR rest → WHERE/PREWHERE rest
                 del_end = k + 1
                 while del_end < len(tokens) and _is_whitespace_sql_fragment(tokens[del_end]):
                     del_end += 1
@@ -500,7 +518,7 @@ def _cleanup_compiled_sql(tokens):
                 changed = True
                 break
 
-            break
+            continue
     return tokens
 
 

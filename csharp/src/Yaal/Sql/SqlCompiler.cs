@@ -7,7 +7,12 @@ public static class SqlCompiler
     private static readonly HashSet<string> ClauseBoundary = new(StringComparer.OrdinalIgnoreCase)
     {
         "order", "group", "having", "limit", "offset", "fetch", "for",
-        "union", "except", "intersect", ")",
+        "union", "except", "intersect", ")", "where", "prewhere",
+    };
+
+    private static readonly HashSet<string> FilterClauses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "where", "prewhere",
     };
 
     private static readonly Regex OneEqualsOneCompact = new(
@@ -176,21 +181,43 @@ public static class SqlCompiler
             {
                 if (IsWhitespaceSqlFragment(tokens[i]))
                     continue;
-                if (!tokens[i].Trim().Equals("where", StringComparison.OrdinalIgnoreCase))
+                if (!FilterClauses.Contains(tokens[i].Trim()))
                     continue;
 
                 var (j, word) = NextSignificant(tokens, i + 1);
-                if (j == null)
+                if (j == null || (word != null && ClauseBoundary.Contains(word)))
                 {
+                    // Empty WHERE/PREWHERE at EOF, before ), ORDER/GROUP/WHERE/..., etc.
+                    var oldI = i;
                     i = TrimWsBefore(tokens, i);
-                    tokens.RemoveRange(i, tokens.Count - i);
+                    if (j == null)
+                    {
+                        tokens.RemoveRange(i, tokens.Count - i);
+                    }
+                    else
+                    {
+                        var adjustedJ = j.Value - (oldI - i);
+                        tokens.RemoveRange(i, adjustedJ - i);
+                        // Keep a space before the next keyword (not before ')').
+                        if (i > 0 &&
+                            i < tokens.Count &&
+                            !IsWhitespaceSqlFragment(tokens[i - 1]) &&
+                            !IsWhitespaceSqlFragment(tokens[i]) &&
+                            tokens[i].Trim() != ")")
+                        {
+                            tokens.Insert(i, " ");
+                        }
+                    }
                     changed = true;
                     break;
                 }
 
                 var oneEnd = MatchOneEqualsOne(tokens, j.Value);
                 if (oneEnd == null)
-                    break;
+                {
+                    // Real predicate; keep scanning for other WHERE/PREWHERE clauses.
+                    continue;
+                }
 
                 var (k, nextWord) = NextSignificant(tokens, oneEnd.Value);
                 if (k == null || (nextWord != null && ClauseBoundary.Contains(nextWord)))
@@ -223,8 +250,6 @@ public static class SqlCompiler
                     changed = true;
                     break;
                 }
-
-                break;
             }
         }
     }
