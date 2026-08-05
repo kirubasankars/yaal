@@ -1,0 +1,16 @@
+type: object
+properties:
+  app:
+    type: object
+    properties:
+      id:
+        mapped: user_id
+      name:
+        mapped: user_name
+  flags:
+    type: object
+    properties:
+      user_id:
+        mapped: user_id
+      vip:
+        mapped: vip

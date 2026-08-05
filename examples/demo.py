@@ -22,6 +22,7 @@ from yaal import Yaal  # noqa: E402
 
 API = ROOT / "tests" / "fixtures" / "api"
 SCHEMA = ROOT / "docker" / "sqlite" / "schema.sql"
+FLAGS_SCHEMA = ROOT / "docker" / "sqlite" / "flags_schema.sql"
 
 
 def _print(title: str, value) -> None:
@@ -33,10 +34,14 @@ def _print(title: str, value) -> None:
 def main() -> int:
     fd, db_path = tempfile.mkstemp(suffix=".db")
     os.close(fd)
+    fd2, flags_path = tempfile.mkstemp(suffix=".db")
+    os.close(fd2)
     try:
         sqlite3.connect(db_path).executescript(SCHEMA.read_text())
+        sqlite3.connect(flags_path).executescript(FLAGS_SCHEMA.read_text())
         y = Yaal(str(API), debug=True)
         y.setup_data_provider("db", "sqlite3:///" + db_path)
+        y.setup_data_provider("flags", "sqlite3:///" + flags_path)
 
         _print("user/get id=1", y.query("user/get", args={"id": 1}))
         _print("user/nested id=1", y.query("user/nested", args={"id": 1}))
@@ -45,6 +50,8 @@ def main() -> int:
             "user/page page=1 page_size=1",
             y.query("user/page", args={"page": 1, "page_size": 1}),
         )
+        _print("report/summary", y.query("report/summary"))
+        _print("user/combine id=1", y.query("user/combine", args={"id": 1}))
         _print(
             "user/create payload id=3 name=newbie",
             y.query("user/create", payload={"id": 3, "name": "newbie"}),
@@ -63,10 +70,11 @@ def main() -> int:
             print()
         return 0
     finally:
-        try:
-            os.unlink(db_path)
-        except OSError:
-            pass
+        for path in (db_path, flags_path):
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
 
 
 if __name__ == "__main__":

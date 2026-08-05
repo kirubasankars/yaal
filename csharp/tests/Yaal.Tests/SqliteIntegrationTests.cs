@@ -10,6 +10,7 @@ namespace Yaal.Tests;
 public class SqliteIntegrationTests : IDisposable
 {
     private readonly string _dbPath;
+    private readonly string _flagsPath;
     private readonly Yaal _yaal;
 
     private static string RepoRoot =>
@@ -17,23 +18,38 @@ public class SqliteIntegrationTests : IDisposable
 
     private static string FixtureApi => Path.Combine(RepoRoot, "tests", "fixtures", "api");
     private static string SchemaSql => Path.Combine(RepoRoot, "docker", "sqlite", "schema.sql");
+    private static string FlagsSchemaSql => Path.Combine(RepoRoot, "docker", "sqlite", "flags_schema.sql");
 
     public SqliteIntegrationTests()
     {
         _dbPath = Path.Combine(Path.GetTempPath(), "yaal-csharp-" + Guid.NewGuid().ToString("N") + ".db");
-        using var con = new SqliteConnection("Data Source=" + _dbPath);
-        con.Open();
-        using var cmd = con.CreateCommand();
-        cmd.CommandText = File.ReadAllText(SchemaSql);
-        cmd.ExecuteNonQuery();
+        _flagsPath = Path.Combine(Path.GetTempPath(), "yaal-csharp-flags-" + Guid.NewGuid().ToString("N") + ".db");
+
+        using (var con = new SqliteConnection("Data Source=" + _dbPath))
+        {
+            con.Open();
+            using var cmd = con.CreateCommand();
+            cmd.CommandText = File.ReadAllText(SchemaSql);
+            cmd.ExecuteNonQuery();
+        }
+
+        using (var con = new SqliteConnection("Data Source=" + _flagsPath))
+        {
+            con.Open();
+            using var cmd = con.CreateCommand();
+            cmd.CommandText = File.ReadAllText(FlagsSchemaSql);
+            cmd.ExecuteNonQuery();
+        }
 
         _yaal = new Yaal(FixtureApi, debug: true);
         _yaal.SetupDataProvider("db", "sqlite3:///" + _dbPath);
+        _yaal.SetupDataProvider("flags", "sqlite3:///" + _flagsPath);
     }
 
     public void Dispose()
     {
         try { File.Delete(_dbPath); } catch { /* ignore */ }
+        try { File.Delete(_flagsPath); } catch { /* ignore */ }
     }
 
     [Fact]
@@ -119,5 +135,28 @@ public class SqliteIntegrationTests : IDisposable
 
         var loaded = (Dictionary<string, object?>)_yaal.Query("user/get", args: new { id = 3 })!;
         loaded["name"]!.ToString().Should().Be("newbie");
+    }
+
+    [Fact]
+    public void Report_summary_with_aggregation()
+    {
+        var result = _yaal.Query("report/summary");
+        var dict = (Dictionary<string, object?>)result!;
+        AsInt64(dict["user_count"]).Should().Be(2);
+        AsInt64(dict["active_count"]).Should().Be(2);
+        AsInt64(dict["assignment_count"]).Should().Be(3);
+    }
+
+    [Fact]
+    public void User_combine_multi_database()
+    {
+        var result = _yaal.Query("user/combine", args: new { id = 1 });
+        var dict = (Dictionary<string, object?>)result!;
+        var app = (Dictionary<string, object?>)dict["app"]!;
+        AsInt64(app["id"]).Should().Be(1);
+        app["name"]!.ToString().Should().Be("admin");
+        var flags = (Dictionary<string, object?>)dict["flags"]!;
+        AsInt64(flags["user_id"]).Should().Be(1);
+        AsInt64(flags["vip"]).Should().Be(1);
     }
 }

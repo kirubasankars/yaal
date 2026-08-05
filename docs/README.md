@@ -31,3 +31,5 @@ Fixture operations:
 | `user/list` | Root array + `optional()` filter |
 | `user/page` | Sibling branches + `$action=params` |
 | `user/create` | Multi-twig INSERT → SELECT |
+| `report/summary` | `WITH` + aggregations → JSON |
+| `user/combine` | Multi-database (`--sql(flags)--`) |

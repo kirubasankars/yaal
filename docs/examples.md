@@ -1,12 +1,26 @@
 # Examples
 
-Every example below lives under [`tests/fixtures/api/`](../tests/fixtures/api/). Seed data: two users (`admin`, `guest`), two roles, join table — see [`docker/sqlite/schema.sql`](../docker/sqlite/schema.sql).
+Every example below lives under [`tests/fixtures/api/`](../tests/fixtures/api/). App seed: two users (`admin`, `guest`), two roles, join table — [`docker/sqlite/schema.sql`](../docker/sqlite/schema.sql). Multi-DB flags seed: [`docker/sqlite/flags_schema.sql`](../docker/sqlite/flags_schema.sql).
 
 ```bash
 make example              # full tour (Python)
 make example-csharp       # full tour (.NET)
 make yaal ARGS='list'
 ```
+
+## Feature index
+
+| Feature | Section | Fixture |
+|---|---|---|
+| JSON out / nested shape | [Nested get](#nested-get--userget) | `user/get` |
+| Output shaping (child SQL) | [Nested child SQL](#nested-child-sql--usernested) | `user/nested` |
+| Subtractive filters | [Optional list](#optional-list--userlist) | `user/list` |
+| API pagination | [Paginated nest](#paginated-nest--userpage) | `user/page` |
+| Multi-query + data passing | [Multi-twig write](#multi-twig-write--usercreate) | `user/create` |
+| Real SQL (`WITH` / agg) | [Report summary](#real-sql--reportsummary) | `report/summary` |
+| Multi-database | [Multi-database](#multi-database--usercombine) | `user/combine` |
+| Ahead-of-time compile | [Precompiled descriptors](#precompiled-descriptors) | *(any)* |
+| Dual runtime | [Dual runtime](#dual-runtime-python--c) | shared fixtures |
 
 ---
 
@@ -509,6 +523,216 @@ yaal query user/create --payload '{"name":"x"}'
 
 ---
 
+## Real SQL — `report/summary`
+
+Aggregations and `WITH` / CTEs are ordinary SQL in the descriptor—no query-builder escape hatch.
+
+### Descriptor
+
+```text
+report/summary/
+  $.sql
+  $.input.yaml
+  $.output.yaml
+```
+
+**`$.sql`**
+
+```sql
+WITH role_counts AS (
+    SELECT
+        ur.user_id,
+        COUNT(*) AS role_count
+    FROM user_roles ur
+    GROUP BY ur.user_id
+)
+SELECT
+    COUNT(*) AS user_count,
+    SUM(CASE WHEN u.active = 1 THEN 1 ELSE 0 END) AS active_count,
+    COALESCE(SUM(rc.role_count), 0) AS assignment_count
+FROM users u
+LEFT JOIN role_counts rc ON rc.user_id = u.user_id
+```
+
+**`$.output.yaml`**
+
+```yaml
+type: object
+properties:
+  user_count:
+    mapped: user_count
+  active_count:
+    mapped: active_count
+  assignment_count:
+    mapped: assignment_count
+```
+
+### Commands
+
+```bash
+yaal query report/summary
+```
+
+```python
+y.query("report/summary")
+```
+
+```csharp
+y.Query("report/summary");
+```
+
+### Sample JSON
+
+```json
+{
+  "user_count": 2,
+  "active_count": 2,
+  "assignment_count": 3
+}
+```
+
+---
+
+## Multi-database — `user/combine`
+
+One operation, two named providers. Sibling branches: `app` reads the default `"db"` connection; `flags` switches with `--sql(flags)--`.
+
+### Layout
+
+```text
+user/combine/
+  $.app.sql
+  $.flags.sql
+  $.input.yaml
+  $.output.yaml
+```
+
+**`$.app.sql`** (connection `"db"`)
+
+```sql
+--($args.id integer)--
+
+SELECT
+    u.user_id,
+    u.user_name
+FROM users u
+WHERE u.user_id = {{$args.id}}
+```
+
+**`$.flags.sql`** (connection `"flags"`)
+
+```sql
+--($args.id integer)--
+
+--sql(flags)--
+
+SELECT
+    f.user_id,
+    f.vip
+FROM external_flags f
+WHERE f.user_id = {{$args.id}}
+```
+
+**`$.output.yaml`**
+
+```yaml
+type: object
+properties:
+  app:
+    type: object
+    properties:
+      id:
+        mapped: user_id
+      name:
+        mapped: user_name
+  flags:
+    type: object
+    properties:
+      user_id:
+        mapped: user_id
+      vip:
+        mapped: vip
+```
+
+### Setup
+
+Seed app DB from [`schema.sql`](../docker/sqlite/schema.sql) and flags DB from [`flags_schema.sql`](../docker/sqlite/flags_schema.sql):
+
+```python
+y.setup_data_provider("db", "sqlite3:///" + app_db)
+y.setup_data_provider("flags", "sqlite3:///" + flags_db)
+y.query("user/combine", args={"id": 1})
+```
+
+```csharp
+y.SetupDataProvider("db", "sqlite3:///" + appDb);
+y.SetupDataProvider("flags", "sqlite3:///" + flagsDb);
+y.Query("user/combine", args: new { id = 1 });
+```
+
+### Sample JSON (`id=1`)
+
+```json
+{
+  "app": { "id": 1, "name": "admin" },
+  "flags": { "user_id": 1, "vip": 1 }
+}
+```
+
+---
+
+## Precompiled descriptors
+
+Compile SQL/YAML ahead of time (no database required). Elision still runs per request.
+
+```bash
+yaal --api tests/fixtures/api compile --out /tmp/yaal-precompiled
+yaal --api tests/fixtures/api --precompiled /tmp/yaal-precompiled query user/get --arg id=1
+```
+
+```python
+from yaal import Yaal
+
+y = Yaal("tests/fixtures/api", precompiled="/tmp/yaal-precompiled")
+y.setup_data_provider("db", "sqlite3:////tmp/app.db")
+y.query("user/get", args={"id": 1})
+```
+
+```csharp
+var y = new Yaal.Yaal("tests/fixtures/api", precompiled: "/tmp/yaal-precompiled");
+y.SetupDataProvider("db", "sqlite3:////tmp/app.db");
+y.Query("user/get", args: new { id = 1 });
+```
+
+`debug=True` forces live SQL/YAML and ignores `precompiled`. Details: [descriptors.md](descriptors.md#precompiled-descriptors).
+
+---
+
+## Dual runtime (Python / C#)
+
+Same descriptors, same JSON. Pick either runtime:
+
+```python
+from yaal import Yaal
+
+y = Yaal("tests/fixtures/api", debug=True)
+y.setup_data_provider("db", "sqlite3:////tmp/app.db")
+print(y.query("user/get", args={"id": 1}))
+```
+
+```csharp
+var y = new Yaal.Yaal("tests/fixtures/api", debug: true);
+y.SetupDataProvider("db", "sqlite3:////tmp/app.db");
+Console.WriteLine(y.QueryJson("user/get", args: new { id = 1 }));
+```
+
+```bash
+make example            # Python tour
+make example-csharp     # .NET tour (Docker SDK)
+```
+
+---
+
 ## Experiment sandbox
 
 Persistent local copy of the fixtures for editing:
@@ -564,6 +788,6 @@ y.Query("orders/list", args: new { status = "open" });
 | Python | [`examples/demo.py`](../examples/demo.py) · `make example` |
 | C# | [`csharp/examples/Yaal.Example`](../csharp/examples/Yaal.Example/) · `make example-csharp` |
 
-Both print get / nested / list / page / create and show `explain` elision for `user/list`.
+Both print get / nested / list / page / create / `report/summary` / `user/combine` and show `explain` elision for `user/list`.
 
 See also: [descriptors.md](descriptors.md) · [README.md](README.md)

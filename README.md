@@ -1,8 +1,141 @@
 # Yaal
 
-Yaal is a SQL→JSON framework. You author operations as SQL + YAML descriptor files; Yaal binds parameters, runs queries, and reshapes flat rows into nested JSON.
+**Yaal is a subtractive SQL ORM.**
 
-License: [MIT](LICENSE). Version: `0.1.0` (Python package + NuGet metadata).
+You author full SQL (plus YAML shapes). At bind time Yaal **subtracts** unused `optional(...)` / null-filter fragments, runs the remaining statements (optionally across named databases), and shapes flat rows into **nested JSON**. Aggregations, `WITH` / CTEs, and window functions stay ordinary SQL—not a query-builder escape hatch.
+
+That is the opposite of additive ORMs that build SQL up from models. Yaal is not ActiveRecord: no entity tracking, migrations, or query-builder DSL. SQL files remain the source of truth.
+
+Pipeline: *write SQL → subtract optionals → run (any named DB) → shape → JSON*.
+
+License: [MIT](LICENSE). Version: `0.1.0` (Python package + NuGet metadata). Python and .NET 8 share the same descriptor files.
+
+## Features
+
+Full walkthroughs: [`docs/examples.md`](docs/examples.md) (feature index at the top).
+
+### Subtractive filters
+
+`optional(...)` / null groups are **removed** when params are null. [Full example →](docs/examples.md#optional-list--userlist)
+
+```sql
+--($args.active integer)--
+select ... from users u
+where 1 = 1
+  and optional(u.active = {{$args.active}})
+```
+
+| Args | Compiled predicate | Binds |
+|---|---|---|
+| *(omitted)* | predicate removed; `where 1 = 1` | `[]` |
+| `active=1` | `and (u.active = ?)` | `[1]` |
+
+```bash
+yaal explain user/list
+yaal explain user/list --arg active=1
+```
+
+### JSON out
+
+Every `query` returns nested JSON. [Full example →](docs/examples.md#nested-get--userget)
+
+```bash
+yaal query user/get --arg id=1
+# {"id":1,"name":"admin","roles":[{"id":1,"name":"Administrator"},...]}
+```
+
+### Output shaping
+
+`mapped`, `partition_by`, `parent_rows`, or child SQL (`$.roles.sql`). [get](docs/examples.md#nested-get--userget) · [nested](docs/examples.md#nested-child-sql--usernested)
+
+```yaml
+roles:
+  type: array
+  partition_by: role_id
+  parent_rows: true
+  properties:
+    id: { mapped: role_id }
+    name: { mapped: role_name }
+```
+
+### Multi-query + data passing
+
+`--sql--` twigs share binds; `$action=params` / `$params` / `$last_inserted_id` pass data between them. [Full example →](docs/examples.md#multi-twig-write--usercreate)
+
+```sql
+INSERT INTO users (...) VALUES ({{id}}, {{name}}, 1)
+--sql--
+INSERT INTO user_roles (...) VALUES ({{id}}, 2)
+--sql--
+SELECT ... WHERE u.user_id = {{id}}
+```
+
+```bash
+yaal query user/create --payload '{"id":3,"name":"newbie"}'
+```
+
+### API pagination
+
+Sibling `$.paging.sql` + `$.data.sql` → `{ paging, data }` via `$action=params`. [Full example →](docs/examples.md#paginated-nest--userpage)
+
+```bash
+yaal query user/page --arg page=1 --arg page_size=10
+# {"paging":{"page":1,"page_size":10,"total_count":2},"data":[...]}
+```
+
+### Multi-database
+
+Named providers + `--sql(name)--` twigs in one operation. [Full example →](docs/examples.md#multi-database--usercombine)
+
+```python
+y.setup_data_provider("db", "sqlite3:///" + app_db)
+y.setup_data_provider("flags", "sqlite3:///" + flags_db)
+y.query("user/combine", args={"id": 1})
+# {"app":{"id":1,"name":"admin"},"flags":{"user_id":1,"vip":1}}
+```
+
+```sql
+--sql(flags)--
+SELECT f.user_id, f.vip FROM external_flags f WHERE f.user_id = {{$args.id}}
+```
+
+### Real SQL (`WITH` / aggregations)
+
+CTEs and aggregates stay ordinary SQL. [Full example →](docs/examples.md#real-sql--reportsummary)
+
+```sql
+WITH role_counts AS (
+  SELECT user_id, COUNT(*) AS role_count FROM user_roles GROUP BY user_id
+)
+SELECT COUNT(*) AS user_count, ... FROM users u LEFT JOIN role_counts rc ...
+```
+
+```bash
+yaal query report/summary
+# {"user_count":2,"active_count":2,"assignment_count":3}
+```
+
+### Dual runtime
+
+Python and .NET 8 share [`tests/fixtures/api/`](tests/fixtures/api/). [Full example →](docs/examples.md#dual-runtime-python--c)
+
+```python
+y.query("user/get", args={"id": 1})
+```
+
+```csharp
+y.Query("user/get", args: new { id = 1 });
+```
+
+### Ahead-of-time compile
+
+`yaal compile` / `precompiled=...`; elision still runs per request. [Full example →](docs/examples.md#precompiled-descriptors)
+
+```bash
+yaal --api tests/fixtures/api compile --out /tmp/yaal-precompiled
+yaal --api tests/fixtures/api --precompiled /tmp/yaal-precompiled \
+  query user/get --arg id=1
+```
 
 ## Install
 
@@ -31,7 +164,7 @@ make experiment ARGS='query user/page --arg page=1 --arg page_size=10'
 make experiment-reset                 # reseed DB only
 ```
 
-`make example` runs [`examples/demo.py`](examples/demo.py): temp SQLite from `docker/sqlite/schema.sql`, then get / list / page / create plus `explain` elision. CLI commands with `--db` omitted also seed a temp SQLite DB.
+`make example` runs [`examples/demo.py`](examples/demo.py): temp SQLite from `docker/sqlite/schema.sql` (+ flags DB), then get / nested / list / page / create / `report/summary` / `user/combine` plus `explain` elision. CLI commands with `--db` omitted also seed a temp SQLite DB.
 
 `make experiment` uses a local sandbox at `experiment/` (gitignored): a copy of `tests/fixtures/api` plus `yaal.db`. Edit `experiment/api/` and re-run; `make experiment-reset` reseeds the DB without wiping API edits.
 
@@ -71,11 +204,11 @@ for twig in y.explain_sql("user/get", args={"id": 1}):
 | Resource | Purpose |
 |---|---|
 | [`docs/examples.md`](docs/examples.md) | End-to-end walkthroughs (SQL, YAML, sample JSON, CLI/Python/C#) |
-| [`docs/descriptors.md`](docs/descriptors.md) | Trunk/branch/twig reference, shaping, `$action`, errors |
+| [`docs/descriptors.md`](docs/descriptors.md) | Trunk/branch/twig reference, shaping, `$action`, precompile, errors |
 | [`docs/README.md`](docs/README.md) | Docs index |
 | [`examples/demo.py`](examples/demo.py) | Runnable Python tour (`make example`) |
 | [`csharp/examples/Yaal.Example`](csharp/examples/Yaal.Example/) | Runnable .NET tour (`make example-csharp`) |
-| [`tests/fixtures/api/`](tests/fixtures/api/) | Shared descriptors: get, nested, list, page, create |
+| [`tests/fixtures/api/`](tests/fixtures/api/) | Shared descriptors: get, nested, list, page, create, summary, combine |
 
 ## Make targets
 
@@ -87,7 +220,7 @@ for twig in y.explain_sql("user/get", args={"id": 1}):
 | `make test-all` | Unit + integration |
 | `make example` | Run `examples/demo.py` (all fixture ops + explain) |
 | `make example-csharp` | Same tour in .NET SDK container |
-| `make yaal ARGS='...'` | Pass-through to CLI (`query` / `explain` / `list`) |
+| `make yaal ARGS='...'` | Pass-through to CLI (`query` / `explain` / `list` / `compile`) |
 | `make experiment` | FS+SQLite sandbox under `experiment/` (init if needed) |
 | `make experiment-init` / `experiment-reset` / `experiment-clean` | Create, reseed DB, or remove sandbox |
 | `make integration-up` / `integration-down` | Manage compose DBs |
@@ -100,9 +233,29 @@ SQLite-only usage does **not** need Docker. Compose is only for Postgres/MySQL/C
 api/
   user/
     get/                 # operation folder (name is yours; not an HTTP verb)
-      $.sql              # trunk query
+      $.sql              # trunk query (may contain --sql-- twigs)
       $.input.yaml       # input model (args / payload)
       $.output.yaml      # output shape (mapped / partition_by)
+    nested/
+      $.sql              # parent rows
+      $.roles.sql        # child SQL → output property "roles"
+      $.input.yaml
+      $.output.yaml
+    page/                # sibling branches (no trunk $.sql)
+      $.paging.sql
+      $.data.sql
+      $.input.yaml
+      $.output.yaml
+    combine/             # multi-DB sibling branches
+      $.app.sql          # connection "db"
+      $.flags.sql        # --sql(flags)--
+      $.input.yaml
+      $.output.yaml
+  report/
+    summary/             # WITH + aggregations
+      $.sql
+      $.input.yaml
+      $.output.yaml
 ```
 
 Call by descriptor path: `y.query("user/get", args={"id": 1})`.
@@ -120,7 +273,7 @@ where 1 = 1
   and optional(u.user_id = {{$args.id}})
 ```
 
-When a parameter is null, Yaal elides optional groups. Long form still works:
+When a parameter is null, Yaal **subtracts** the optional group (that is the subtractive core). Long form still works:
 
 ```sql
 ({{param}} is null or col = {{param}})
@@ -160,6 +313,65 @@ properties:
 - `parent_rows: true` — nest from parent rows without a child SQL file  
 - Child SQL file (`$.roles.sql`) — nest via `partition_by` join key; see [`user/nested`](tests/fixtures/api/user/nested/)
 
+### Multi-query and data passing
+
+Split one SQL file into ordered twigs with `--sql--` (or `--sql(name)--` for another connection). Args/payload binds are shared across twigs. Cross-twig values also flow through the `$params` bag.
+
+```sql
+--(id integer, name string)--
+
+INSERT INTO users (user_id, user_name, active) VALUES ({{id}}, {{name}}, 1)
+
+--sql--
+
+INSERT INTO user_roles (user_id, role_id) VALUES ({{id}}, 2)
+
+--sql--
+
+SELECT ... WHERE u.user_id = {{id}}   -- shaped to nested JSON
+```
+
+- `$action=params` — a result row with `'$action' = 'params'` copies its columns onto `$params` for later twigs (e.g. `total_count` in pagination)
+- `$params.$last_inserted_id` — set after each twig (engine-specific); prefer an explicit args/payload id when you need a stable key
+- `$run_id` — also on `$params`
+- Other `$action` values: `error` → soft `{"errors":[...]}`; `break` / `json` for early or custom branch results — see [`docs/descriptors.md`](docs/descriptors.md)
+
+Try: `yaal query user/create --payload '{"id":3,"name":"newbie"}'`. Full walkthrough: [`docs/examples.md`](docs/examples.md).
+
+### Pagination (API list + meta)
+
+For paginated APIs, use **sibling branches** (no trunk `$.sql`). File suffixes become JSON properties:
+
+```text
+user/page/
+  $.paging.sql    # COUNT → $params via $action=params, then page/page_size/total_count
+  $.data.sql      # LIMIT/OFFSET parents, then join children
+  $.output.yaml   # { paging: {...}, data: [ { id, name, roles: [...] } ] }
+```
+
+1. **`$.paging.sql`** — first twig runs `COUNT(*)` with `'$action' = 'params'` so `total_count` lands in `$params`; second twig returns `page`, `page_size`, and `total_count` for the `paging` object.
+2. **`$.data.sql`** — apply `LIMIT`/`OFFSET` to the **parent** entity in a subquery, then join children. If you limit the join instead, page size truncates join rows and nests incomplete children.
+3. **Shape** — `data` is an array with `partition_by` + nested roles (`parent_rows` or child SQL).
+
+This is the same multi-query + `$params` pattern as above, split across sibling branch files.
+
+```bash
+yaal query user/page --arg page=1 --arg page_size=10
+```
+
+Sample shape:
+
+```json
+{
+  "paging": { "page": 1, "page_size": 10, "total_count": 2 },
+  "data": [
+    { "id": 1, "name": "admin", "roles": [{ "id": 1, "name": "Administrator" }] }
+  ]
+}
+```
+
+Full SQL/YAML: [`user/page`](tests/fixtures/api/user/page/) · [`docs/examples.md`](docs/examples.md).
+
 ## Database URLs
 
 | Engine | Example |
@@ -171,13 +383,14 @@ properties:
 | MySQL | `mysql://user:pass@127.0.0.1:3306/yaal` |
 | ClickHouse | `clickhouse://user:pass@127.0.0.1:9000/yaal` |
 
-Register with:
+Register one or more named providers. The default twig connection is `"db"`; use `--sql(analytics)--` (etc.) to run a twig on another name and combine results in one operation / shape:
 
 ```python
 y.setup_data_provider("db", "sqlite3:////tmp/app.db")
+y.setup_data_provider("analytics", "postgresql://user:pass@127.0.0.1:5432/yaal")
 ```
 
-The default connection name used by SQL twigs is `"db"`.
+See twigs / named connections in [`docs/descriptors.md`](docs/descriptors.md).
 
 ### Input validation dialect
 

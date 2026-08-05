@@ -15,21 +15,27 @@ from yaal import Yaal
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURE_API = ROOT / "tests" / "fixtures" / "api"
 SCHEMA = ROOT / "docker" / "sqlite" / "schema.sql"
+FLAGS_SCHEMA = ROOT / "docker" / "sqlite" / "flags_schema.sql"
 
 
 class TestFixtureExamples(unittest.TestCase):
     def setUp(self):
         fd, self._db_path = tempfile.mkstemp(suffix=".db")
         os.close(fd)
+        fd2, self._flags_path = tempfile.mkstemp(suffix=".db")
+        os.close(fd2)
         sqlite3.connect(self._db_path).executescript(SCHEMA.read_text())
+        sqlite3.connect(self._flags_path).executescript(FLAGS_SCHEMA.read_text())
         self._yaal = Yaal(str(FIXTURE_API), debug=True)
         self._yaal.setup_data_provider("db", "sqlite3:///" + self._db_path)
+        self._yaal.setup_data_provider("flags", "sqlite3:///" + self._flags_path)
 
     def tearDown(self):
-        try:
-            os.unlink(self._db_path)
-        except OSError:
-            pass
+        for path in (self._db_path, self._flags_path):
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
 
     def test_user_get_nested_roles(self):
         result = self._yaal.query("user/get", args={"id": 1})
@@ -90,6 +96,17 @@ class TestFixtureExamples(unittest.TestCase):
 
         listed = self._yaal.query("user/get", args={"id": 3})
         self.assertEqual(listed["name"], "newbie")
+
+    def test_report_summary_with_aggregation(self):
+        result = self._yaal.query("report/summary")
+        self.assertEqual(result["user_count"], 2)
+        self.assertEqual(result["active_count"], 2)
+        self.assertEqual(result["assignment_count"], 3)
+
+    def test_user_combine_multi_database(self):
+        result = self._yaal.query("user/combine", args={"id": 1})
+        self.assertEqual(result["app"], {"id": 1, "name": "admin"})
+        self.assertEqual(result["flags"], {"user_id": 1, "vip": 1})
 
 
 if __name__ == "__main__":
