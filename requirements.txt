@@ -2,3 +2,4 @@ jsonschema>=4.0,<5
 PyYAML>=6.0,<7
 psycopg2-binary>=2.9,<3
 mysql-connector-python>=8.0,<10
+clickhouse-driver>=0.2,<1

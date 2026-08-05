@@ -163,7 +163,8 @@ def _parse_rfc1738_args(connection_url):
         raise ValueError(
             "Could not parse database URL %r. Expected forms like "
             "sqlite3:////abs/path.db, sqlite3://./rel/path.db, "
-            "postgresql://user:pass@host:5432/db, mysql://user:pass@host:3306/db"
+            "postgresql://user:pass@host:5432/db, mysql://user:pass@host:3306/db, "
+            "clickhouse://user:pass@host:9000/db"
             % connection_url
         )
 
@@ -239,12 +240,15 @@ class Yaal:
         elif provider_name == "mysql":
             from yaal_mysql import MySQLContextManager
             self._data_providers[name] = MySQLContextManager(options)
+        elif provider_name == "clickhouse":
+            from yaal_clickhouse import ClickHouseContextManager
+            self._data_providers[name] = ClickHouseContextManager(options)
         elif provider_name == "sqlite3":
             self._data_providers[name] = SQLiteContextManager(options)
         else:
             raise UnsupportedDatabaseUrlError(
                 "Unsupported database URL scheme %r for provider %r. "
-                "Supported schemes: sqlite3, postgresql, mysql"
+                "Supported schemes: sqlite3, postgresql, mysql, clickhouse"
                 % (provider_name, name)
             )
         self._data_provider_schemes[name] = provider_name
@@ -293,7 +297,7 @@ class Yaal:
 
     def _default_placeholder(self):
         for scheme in self._data_provider_schemes.values():
-            if scheme in ("postgresql", "mysql"):
+            if scheme in ("postgresql", "mysql", "clickhouse"):
                 return "%s"
             if scheme == "sqlite3":
                 return "?"

@@ -60,6 +60,13 @@ class TestDxApi(unittest.TestCase):
         self.assertIn("user_id = ?", sql)
         self.assertEqual(explained[0]["parameters"], [1])
 
+    def test_clickhouse_url_registers_and_uses_percent_s(self):
+        y = Yaal(str(FIXTURE_API), debug=True)
+        y.setup_data_provider("db", "clickhouse://yaal:yaal@127.0.0.1:9000/yaal")
+        self.assertEqual(y._data_provider_schemes["db"], "clickhouse")
+        self.assertEqual(y._default_placeholder(), "%s")
+        self.assertIn("db", y._data_providers)
+
     def test_unsupported_database_url(self):
         y = Yaal(str(FIXTURE_API), debug=True)
         with self.assertRaises(UnsupportedDatabaseUrlError):

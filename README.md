@@ -36,12 +36,12 @@ for twig in y.explain_sql("user/get", args={"id": 1}):
 |---|---|
 | `make install` | Create `venv` and install dependencies |
 | `make test` | Unit tests |
-| `make test-integration` | Start Docker Postgres/MySQL and run integration tests |
+| `make test-integration` | Start Docker Postgres/MySQL/ClickHouse and run integration tests |
 | `make test-all` | Unit + integration |
 | `make example` | Run `examples/run_user_get.py` |
 | `make integration-up` / `integration-down` | Manage compose DBs |
 
-SQLite-only usage does **not** need Docker. Compose is only for Postgres/MySQL integration tests.
+SQLite-only usage does **not** need Docker. Compose is only for Postgres/MySQL/ClickHouse integration tests.
 
 ## Descriptor layout
 
@@ -117,6 +117,7 @@ properties:
 | SQLite (memory) | `sqlite3:///` |
 | Postgres | `postgresql://user:pass@127.0.0.1:5432/yaal` |
 | MySQL | `mysql://user:pass@127.0.0.1:3306/yaal` |
+| ClickHouse | `clickhouse://user:pass@127.0.0.1:9000/yaal` |
 
 Register with:
 

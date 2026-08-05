@@ -10,10 +10,10 @@ help:
 	@echo "Targets:"
 	@echo "  make install            Create venv and install dependencies"
 	@echo "  make test               Run unit tests"
-	@echo "  make test-integration   Start Docker DBs and run integration tests"
+	@echo "  make test-integration   Start Docker DBs (Postgres/MySQL/ClickHouse) and run integration tests"
 	@echo "  make test-all           Unit + integration tests"
 	@echo "  make example            Run examples/run_user_get.py"
-	@echo "  make integration-up     Start Postgres/MySQL (docker compose)"
+	@echo "  make integration-up     Start Postgres/MySQL/ClickHouse (docker compose)"
 	@echo "  make integration-down   Stop and remove compose containers/volumes"
 	@echo "  make clean              Remove venv and caches"
 

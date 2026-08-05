@@ -13,6 +13,7 @@ SQLITE_SCHEMA = ROOT / "docker" / "sqlite" / "schema.sql"
 
 DEFAULT_PG_URL = "postgresql://yaal:yaal@127.0.0.1:54329/yaal"
 DEFAULT_MYSQL_URL = "mysql://yaal:yaal@127.0.0.1:33069/yaal"
+DEFAULT_CH_URL = "clickhouse://yaal:yaal@127.0.0.1:9000/yaal"
 
 
 def _wait_for(connect, attempts=60, delay=0.5):
@@ -128,6 +129,33 @@ class TestMysqlIntegration(SqlToJsonMixin, unittest.TestCase):
                 database="yaal",
             )
             con.close()
+
+        _wait_for(connect)
+
+
+@unittest.skipUnless(
+    os.environ.get("YAAL_INTEGRATION") == "1",
+    "set YAAL_INTEGRATION=1 with docker compose up",
+)
+class TestClickhouseIntegration(SqlToJsonMixin, unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        from clickhouse_driver import Client
+
+        cls.db_url = os.environ.get("YAAL_CH_URL", DEFAULT_CH_URL)
+
+        def connect():
+            client = Client(
+                host="127.0.0.1",
+                port=9000,
+                user="yaal",
+                password="yaal",
+                database="yaal",
+            )
+            try:
+                client.execute("SELECT 1")
+            finally:
+                client.disconnect()
 
         _wait_for(connect)
 
