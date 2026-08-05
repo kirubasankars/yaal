@@ -4,7 +4,7 @@ C# port of the Yaal SQL→JSON library. Same descriptor files, optional-filter S
 
 Package metadata: `Yaal` `0.1.0` (MIT). Add a project reference to [`src/Yaal/Yaal.csproj`](src/Yaal/Yaal.csproj); not published to NuGet yet.
 
-Descriptor cookbook: [`../docs/descriptors.md`](../docs/descriptors.md).
+Docs: [examples](../docs/examples.md) · [descriptors](../docs/descriptors.md) · [index](../docs/README.md).
 
 ## Requirements
 

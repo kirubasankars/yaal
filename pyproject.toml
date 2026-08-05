@@ -38,7 +38,7 @@ yaal = "yaal_cli:main"
 
 [project.urls]
 Homepage = "https://github.com/kirubasankars/yaal"
-Documentation = "https://github.com/kirubasankars/yaal/blob/main/docs/descriptors.md"
+Documentation = "https://github.com/kirubasankars/yaal/blob/main/docs/README.md"
 
 [tool.setuptools]
 py-modules = [

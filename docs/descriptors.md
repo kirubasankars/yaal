@@ -2,6 +2,8 @@
 
 Yaal operations are folders of SQL + YAML. You call them by path (`user/get`); Yaal binds parameters, runs queries, and reshapes flat rows into nested JSON.
 
+For full fixture walkthroughs (SQL + YAML + sample JSON + CLI/Python/C#), see [examples.md](examples.md).
+
 ```mermaid
 flowchart TD
   op["api/user/get/"] --> trunk["trunk $.sql"]
@@ -142,6 +144,30 @@ Useful for paging totals:
 
 ```sql
 SELECT 'params' AS "$action", COUNT(*) AS total_count FROM users
+```
+
+Guard a page number (soft error):
+
+```sql
+SELECT
+    'error' AS "$action",
+    1 AS code,
+    'page out of range' AS message
+WHERE {{$args.page}} < 1 OR {{$args.page}} > {{$params.total_pages}}
+```
+
+## Optional filter elision (explain)
+
+With `and optional(u.active = {{$args.active}})`:
+
+| Call | Compiled SQL |
+|---|---|
+| `args={"active": 1}` | `and (u.active = ?)` · binds `[1]` |
+| `args` omitted / `active` null | The `and optional(...)` clause is removed entirely · binds `[]` |
+
+```bash
+yaal explain user/list --arg active=1
+yaal explain user/list
 ```
 
 ## Cache and `output_mapper`

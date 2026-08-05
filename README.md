@@ -80,7 +80,11 @@ Shared under [`tests/fixtures/api/`](tests/fixtures/api/) (users / roles schema)
 | `user/page` | Multi-file branches (`$.paging.sql` + `$.data.sql`) + `$action=params` |
 | `user/create` | Multi-twig write (INSERT → INSERT → SELECT) |
 
-Descriptor cookbook (trunk / branch / twig, `$action`, errors, dual-port schema subset): [`docs/descriptors.md`](docs/descriptors.md).
+Docs:
+
+- **Examples** (every fixture end-to-end): [`docs/examples.md`](docs/examples.md)
+- **Descriptor reference**: [`docs/descriptors.md`](docs/descriptors.md)
+- Index: [`docs/README.md`](docs/README.md)
 
 ## Make targets
 
