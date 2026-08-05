@@ -33,14 +33,6 @@ class TestFixtureExamples(unittest.TestCase):
         self.assertEqual(result["name"], "admin")
         self.assertEqual(len(result["roles"]), 2)
 
-    def test_user_get_cached_output_mapper(self):
-        result = self._yaal.query(
-            "user/get", args={"id": 1}, output_mapper="cached"
-        )
-        self.assertEqual(result["id"], 1)
-        self.assertEqual(result["name"], "admin")
-        self.assertEqual(len(result["roles"]), 2)
-
     def test_user_page_branches(self):
         result = self._yaal.query(
             "user/page", args={"page": 1, "page_size": 10}

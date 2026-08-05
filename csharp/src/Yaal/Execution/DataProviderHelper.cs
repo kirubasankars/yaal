@@ -6,11 +6,13 @@ public delegate object? ValueConverter(string paramType, object? value);
 
 public sealed class DataProviderHelper
 {
-    private readonly Dictionary<string, object?> _cache = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, object?> _paramCache = new(StringComparer.Ordinal);
+    private readonly Dictionary<(Twig Twig, string NullsKey, string Placeholder), CompiledSql> _compileCache = new();
 
-    public void ClearCache() => _cache.Clear();
+    /// <summary>Clear bind-parameter cache (compile cache kept for the helper lifetime).</summary>
+    public void ClearCache() => _paramCache.Clear();
 
-    public static CompiledSql GetExecutableContent(string placeholder, Twig twig, Shape inputShape)
+    public CompiledSql GetExecutableContent(string placeholder, Twig twig, Shape inputShape)
     {
         var nulls = new List<string>();
         if (twig.Nullable != null)
@@ -21,7 +23,29 @@ public sealed class DataProviderHelper
                     nulls.Add(n);
             }
         }
-        return SqlCompiler.Compile(twig, nulls, placeholder);
+
+        var nullsKey = string.Join("\0", nulls.Select(n => n.ToLowerInvariant()).OrderBy(n => n, StringComparer.Ordinal));
+        var key = (twig, nullsKey, placeholder);
+        if (_compileCache.TryGetValue(key, out var cached))
+        {
+            return new CompiledSql
+            {
+                Content = cached.Content,
+                Parameters = cached.Parameters.ToList(),
+            };
+        }
+
+        var compiled = SqlCompiler.Compile(twig, nulls, placeholder);
+        _compileCache[key] = new CompiledSql
+        {
+            Content = compiled.Content,
+            Parameters = compiled.Parameters.ToList(),
+        };
+        return new CompiledSql
+        {
+            Content = compiled.Content,
+            Parameters = compiled.Parameters.ToList(),
+        };
     }
 
     public List<object?> BuildParameters(CompiledSql query, Shape inputShape, ValueConverter getValueConverter)
@@ -33,7 +57,7 @@ public sealed class DataProviderHelper
             var paramType = p.Type;
             object? paramValue;
 
-            if (_cache.TryGetValue(paramName, out var cached))
+            if (_paramCache.TryGetValue(paramName, out var cached))
             {
                 paramValue = cached;
             }
@@ -41,7 +65,7 @@ public sealed class DataProviderHelper
             {
                 paramValue = inputShape.GetProp(paramName);
                 if (paramName.StartsWith('$') && !paramName.Contains("$parent"))
-                    _cache[paramName] = paramValue;
+                    _paramCache[paramName] = paramValue;
             }
 
             try

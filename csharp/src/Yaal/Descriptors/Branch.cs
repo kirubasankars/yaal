@@ -12,7 +12,6 @@ public sealed class Branch
     public string OutputType { get; set; } = YaalConst.Array;
     public string? PartitionBy { get; set; }
     public bool UseParentRows { get; set; }
-    public bool Cache { get; set; }
     public Dictionary<string, ParamDecl>? Parameters { get; set; }
     public List<Twig>? Twigs { get; set; }
     public List<Branch>? Branches { get; set; }

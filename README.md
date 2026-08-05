@@ -31,7 +31,7 @@ make experiment ARGS='query user/page --arg page=1 --arg page_size=10'
 make experiment-reset                 # reseed DB only
 ```
 
-`make example` runs [`examples/demo.py`](examples/demo.py): temp SQLite from `docker/sqlite/schema.sql`, then get / cached / list / page / create plus `explain` elision. CLI commands with `--db` omitted also seed a temp SQLite DB.
+`make example` runs [`examples/demo.py`](examples/demo.py): temp SQLite from `docker/sqlite/schema.sql`, then get / list / page / create plus `explain` elision. CLI commands with `--db` omitted also seed a temp SQLite DB.
 
 `make experiment` uses a local sandbox at `experiment/` (gitignored): a copy of `tests/fixtures/api` plus `yaal.db`. Edit `experiment/api/` and re-run; `make experiment-reset` reseeds the DB without wiping API edits.
 

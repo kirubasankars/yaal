@@ -10,23 +10,39 @@ from yaal_parser import compile_sql
 class DataProviderHelper:
 
     def __init__(self):
-        self._cache = {}
+        self._param_cache = {}
+        self._compile_cache = {}
 
     def clear_cache(self):
-        self._cache = {}
+        """Clear bind-parameter cache (compile cache kept for the helper lifetime)."""
+        self._param_cache = {}
 
-    @staticmethod
-    def get_executable_content(char, twig, input_shape):
+    def get_executable_content(self, char, twig, input_shape):
         nulls = []
         if "nullable" in twig:
             for n in twig["nullable"]:
                 if input_shape.get_prop(n) is None:
                     nulls.append(n)
-        return compile_sql(twig, nulls, char)
+        key = (id(twig), frozenset(nulls), char)
+        cached = self._compile_cache.get(key)
+        if cached is not None:
+            return {
+                "content": cached["content"],
+                "parameters": list(cached["parameters"]),
+            }
+        compiled = compile_sql(twig, nulls, char)
+        self._compile_cache[key] = {
+            "content": compiled["content"],
+            "parameters": list(compiled.get("parameters") or []),
+        }
+        return {
+            "content": compiled["content"],
+            "parameters": list(compiled.get("parameters") or []),
+        }
 
     def build_parameters(self, query, input_shape, get_value_converter):
         values = []
-        _cache = self._cache
+        _cache = self._param_cache
         if "parameters" in query:
             parameters = query["parameters"]
             for p in parameters:
@@ -123,9 +139,9 @@ def _trunk_cleanup(data_providers, db_data_provider, failed):
             data_provider.end()
 
 
-def _execute_branch(branch, is_trunk, data_providers, context, parent_rows, cache_provider):
-    input_type, output_partition_by, cache = branch["input_type"], branch.get("partition_by"), branch.get("cache")
-    use_parent_rows, method = branch.get("use_parent_rows"), branch.get("method")
+def _execute_branch(branch, is_trunk, data_providers, context, parent_rows):
+    input_type, output_partition_by = branch["input_type"], branch.get("partition_by")
+    use_parent_rows = branch.get("use_parent_rows")
     output = []
     data_provider_helper = DataProviderHelper()
     db_data_provider = data_providers["db"]
@@ -133,9 +149,7 @@ def _execute_branch(branch, is_trunk, data_providers, context, parent_rows, cach
     failed = False
 
     try:
-        if cache and method in cache_provider:
-            output = copy.deepcopy(cache_provider[method])
-        elif use_parent_rows:
+        if use_parent_rows:
             output = copy.deepcopy(parent_rows)
         else:
             if is_trunk:
@@ -160,9 +174,6 @@ def _execute_branch(branch, is_trunk, data_providers, context, parent_rows, cach
                     failed = True
                     return None, errors
 
-            if cache:
-                cache_provider[method] = copy.deepcopy(output)
-
         branches = branch.get("branches")
         if branches:
             for branch_descriptor in branches:
@@ -174,7 +185,7 @@ def _execute_branch(branch, is_trunk, data_providers, context, parent_rows, cach
                         sub_node_shape = nested
 
                 sub_node_output, errors = _execute_branch(
-                    branch_descriptor, False, data_providers, sub_node_shape, output, cache_provider
+                    branch_descriptor, False, data_providers, sub_node_shape, output
                 )
                 if errors:
                     failed = True
@@ -298,7 +309,7 @@ def _output_mapper(output_type, output_modal, branches, result):
     return mapped_result
 
 
-def _get_result(descriptor, get_data_provider, ctx, cache_provider):
+def _get_result(descriptor, get_data_provider, ctx):
     errors = []
     args_shape = ctx.get_prop("$args")
     if args_shape is not None:
@@ -312,7 +323,7 @@ def _get_result(descriptor, get_data_provider, ctx, cache_provider):
     for con in descriptor["connections"]:
         data_providers[con] = get_data_provider(con)
 
-    rs, errors = _execute_branch(descriptor, True, data_providers, ctx, [], cache_provider)
+    rs, errors = _execute_branch(descriptor, True, data_providers, ctx, [])
 
     if errors:
         return {"errors": errors}
@@ -327,10 +338,10 @@ def _default_date_time_converter(o):
         return o.__str__()
 
 
-def get_result(descriptor, get_data_provider, context, cache_provider=None):
-    return _get_result(descriptor, get_data_provider, context, cache_provider or {})
+def get_result(descriptor, get_data_provider, context):
+    return _get_result(descriptor, get_data_provider, context)
 
 
-def get_result_json(descriptor, get_data_providers, context, cache_provider=None):
-    return json.dumps(get_result(descriptor, get_data_providers, context, cache_provider),
+def get_result_json(descriptor, get_data_providers, context):
+    return json.dumps(get_result(descriptor, get_data_providers, context),
                       default=_default_date_time_converter)

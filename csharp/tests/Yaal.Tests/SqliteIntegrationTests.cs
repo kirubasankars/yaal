@@ -68,17 +68,6 @@ public class SqliteIntegrationTests : IDisposable
     }
 
     [Fact]
-    public void User_get_cached_output_mapper()
-    {
-        var result = _yaal.Query("user/get", args: new { id = 1 }, outputMapper: "cached");
-        var dict = (Dictionary<string, object?>)result!;
-        dict["id"].Should().Be(1L);
-        dict["name"]!.ToString().Should().Be("admin");
-        var roles = ((System.Collections.IEnumerable)dict["roles"]!).Cast<object>().ToList();
-        roles.Should().HaveCount(2);
-    }
-
-    [Fact]
     public void User_page_branches()
     {
         var result = _yaal.Query("user/page", args: new { page = 1, page_size = 10 });

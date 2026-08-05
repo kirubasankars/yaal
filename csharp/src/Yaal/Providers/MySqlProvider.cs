@@ -19,12 +19,17 @@ public sealed class MySqlContextManager : IDataProviderContextManager
             Password = options.Password,
             Database = options.Database,
         };
-        var query = options.Query ?? new Dictionary<string, string>();
-        foreach (var key in new[] { "charset", "collation", "ssl_ca", "ssl_cert", "ssl_key", "connection_timeout", "use_pure", "autocommit" })
+        var query = options.Query ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var key in new[]
+                 {
+                     "charset", "collation", "ssl_ca", "ssl_cert", "ssl_key", "connection_timeout",
+                     "use_pure", "autocommit", "pooling", "maximumpoolsize", "max pool size",
+                     "pool_size", "minimumpoolsize", "min pool size"
+                 })
         {
             if (!query.TryGetValue(key, out var value))
                 continue;
-            switch (key)
+            switch (key.ToLowerInvariant().Replace(" ", ""))
             {
                 case "charset":
                     builder.CharacterSet = value;
@@ -40,6 +45,20 @@ public sealed class MySqlContextManager : IDataProviderContextManager
                     break;
                 case "ssl_key":
                     builder.SslKey = value;
+                    break;
+                case "pooling":
+                    builder.Pooling = value.Equals("1", StringComparison.OrdinalIgnoreCase)
+                                      || value.Equals("true", StringComparison.OrdinalIgnoreCase)
+                                      || value.Equals("yes", StringComparison.OrdinalIgnoreCase);
+                    break;
+                case "maximumpoolsize":
+                case "maxpoolsize":
+                case "pool_size":
+                    builder.MaximumPoolSize = uint.Parse(value);
+                    break;
+                case "minimumpoolsize":
+                case "minpoolsize":
+                    builder.MinimumPoolSize = uint.Parse(value);
                     break;
             }
         }
@@ -100,7 +119,7 @@ public sealed class MySqlDataProvider : IDataProvider
         Twig twig, Shape inputShape, DataProviderHelper helper)
     {
         var con = _conn!;
-        var sql = DataProviderHelper.GetExecutableContent("%s", twig, inputShape);
+        var sql = helper.GetExecutableContent("%s", twig, inputShape);
         var args = helper.BuildParameters(sql, inputShape, (_, v) => v);
         var (content, names) = PlaceholderUtil.ToNumbered(sql.Content, args.Count, i => "@p" + i);
 

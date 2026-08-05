@@ -77,7 +77,7 @@ public sealed class ClickHouseDataProvider : IDataProvider
         Twig twig, Shape inputShape, DataProviderHelper helper)
     {
         var client = _client!;
-        var sql = DataProviderHelper.GetExecutableContent("%s", twig, inputShape);
+        var sql = helper.GetExecutableContent("%s", twig, inputShape);
         var args = helper.BuildParameters(sql, inputShape, (_, v) => v);
         var (content, _) = PlaceholderUtil.ToNumbered(
             sql.Content,

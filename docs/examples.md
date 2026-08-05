@@ -21,7 +21,6 @@ user/get/
   $.sql
   $.input.yaml
   $.output.yaml
-  $.output.cached.yaml    # used when output_mapper="cached"
 ```
 
 **`$.sql`**
@@ -84,12 +83,10 @@ yaal explain user/get          # optional(...) removed; binds []
 
 ```python
 y.query("user/get", args={"id": 1})
-y.query("user/get", args={"id": 1}, output_mapper="cached")
 ```
 
 ```csharp
 y.Query("user/get", args: new { id = 1 });
-y.Query("user/get", args: new { id = 1 }, outputMapper: "cached");
 ```
 
 ### Sample JSON
@@ -412,22 +409,6 @@ yaal query user/create --payload '{"name":"x"}'
 
 ---
 
-## Alternate output — `output_mapper`
-
-Same SQL as `user/get`; different YAML:
-
-```text
-user/get/$.output.cached.yaml   # cache: true
-```
-
-```python
-y.query("user/get", args={"id": 1}, output_mapper="cached")
-```
-
-JSON shape matches the default get.
-
----
-
 ## Experiment sandbox
 
 Persistent local copy of the fixtures for editing:
@@ -483,6 +464,6 @@ y.Query("orders/list", args: new { status = "open" });
 | Python | [`examples/demo.py`](../examples/demo.py) · `make example` |
 | C# | [`csharp/examples/Yaal.Example`](../csharp/examples/Yaal.Example/) · `make example-csharp` |
 
-Both print get / cached / list / page / create and show `explain` elision for `user/list`.
+Both print get / list / page / create and show `explain` elision for `user/list`.
 
 See also: [descriptors.md](descriptors.md) · [README.md](README.md)

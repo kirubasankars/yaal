@@ -189,13 +189,6 @@ public static class TrunkBuilder
             if (outputModel.TryGetValue("parent_rows", out var pr) && pr is bool prBool)
                 branch.UseParentRows = prBool;
 
-            if (outputModel.TryGetValue("cache", out var cache) && cache is bool cacheBool)
-            {
-                if (branch.UseParentRows)
-                    throw new InvalidOperationException("cache and use_parent_rows can't be true at a same time");
-                branch.Cache = cacheBool;
-            }
-
             if (outputModel.TryGetValue("partition_by", out var pb))
                 branch.PartitionBy = pb?.ToString();
 

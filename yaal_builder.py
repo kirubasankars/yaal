@@ -58,7 +58,6 @@ def _build_branch(branch, map_by_files, content_reader, payload_model, output_mo
     _properties_str, _type_str, _partition_by_str = "properties", "type", "partition_by"
     _output_type_str, _use_parent_rows_str = "output_type", "use_parent_rows"
     _parameters_str, _twig_str, _parent_rows_str = "parameters", "twig", "parent_rows"
-    _cache_str = "cache"
 
     path, method = branch["path"], branch["method"]
     content = content_reader.get_sql(method, path)
@@ -82,12 +81,6 @@ def _build_branch(branch, map_by_files, content_reader, payload_model, output_mo
 
         if _parent_rows_str in output_model:
             branch[_use_parent_rows_str] = output_model[_parent_rows_str]
-
-        if _cache_str in output_model:
-            if _use_parent_rows_str in branch and branch[_use_parent_rows_str]:
-                raise Exception("cache and use_parent_rows can't be true at a same time")
-
-            branch[_cache_str] = output_model[_cache_str]
 
         if _partition_by_str in output_model:
             branch[_partition_by_str] = output_model[_partition_by_str]

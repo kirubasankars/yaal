@@ -35,10 +35,6 @@ def main() -> int:
         y.setup_data_provider("db", "sqlite3:///" + db_path)
 
         _print("user/get id=1", y.query("user/get", args={"id": 1}))
-        _print(
-            "user/get id=1 output_mapper=cached",
-            y.query("user/get", args={"id": 1}, output_mapper="cached"),
-        )
         _print("user/list active=1", y.query("user/list", args={"active": 1}))
         _print(
             "user/page page=1 page_size=1",

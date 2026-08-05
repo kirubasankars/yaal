@@ -12,7 +12,6 @@ public sealed class Yaal
     private readonly Dictionary<string, Branch> _descriptors = new();
     private readonly Dictionary<string, IDataProviderContextManager> _dataProviders = new();
     private readonly Dictionary<string, string> _dataProviderSchemes = new();
-    private readonly Dictionary<string, Dictionary<string, object?>> _cache = new();
     private readonly bool _debug;
 
     public Yaal(string rootPath, IContentReader? contentReader = null, bool debug = false)
@@ -62,10 +61,10 @@ public sealed class Yaal
         return descriptor;
     }
 
+    /// <summary>Clear cached descriptors (reload SQL/YAML on next query).</summary>
     public void ClearCache()
     {
         _descriptors.Clear();
-        _cache.Clear();
     }
 
     public object? Query(
@@ -74,9 +73,9 @@ public sealed class Yaal
         object? args = null,
         string? outputMapper = null)
     {
-        var (descriptor, cacheKey) = LoadDescriptor(descriptorPath, outputMapper);
+        var descriptor = LoadDescriptor(descriptorPath, outputMapper);
         var context = ContextFactory.CreateContext(descriptor, payload, args);
-        return GetResult(descriptor, context, cacheKey);
+        return GetResult(descriptor, context);
     }
 
     public string QueryJson(
@@ -85,9 +84,9 @@ public sealed class Yaal
         object? args = null,
         string? outputMapper = null)
     {
-        var (descriptor, cacheKey) = LoadDescriptor(descriptorPath, outputMapper);
+        var descriptor = LoadDescriptor(descriptorPath, outputMapper);
         var context = ContextFactory.CreateContext(descriptor, payload, args);
-        return GetResultJson(descriptor, context, cacheKey);
+        return GetResultJson(descriptor, context);
     }
 
     public List<Dictionary<string, object?>> ExplainSql(
@@ -97,7 +96,7 @@ public sealed class Yaal
         string? outputMapper = null,
         string? placeholder = null)
     {
-        var (descriptor, _) = LoadDescriptor(descriptorPath, outputMapper);
+        var descriptor = LoadDescriptor(descriptorPath, outputMapper);
         var context = ContextFactory.CreateContext(descriptor, payload, args);
         placeholder ??= DefaultPlaceholder();
 
@@ -110,7 +109,7 @@ public sealed class Yaal
             {
                 foreach (var twig in branch.Twigs)
                 {
-                    var compiled = DataProviderHelper.GetExecutableContent(placeholder, twig, shape);
+                    var compiled = helper.GetExecutableContent(placeholder, twig, shape);
                     explained.Add(new Dictionary<string, object?>
                     {
                         ["method"] = branch.Method,
@@ -142,41 +141,25 @@ public sealed class Yaal
         return explained;
     }
 
-    public object? GetResult(Branch descriptor, Shape context, string? cacheKey = null)
-    {
-        var key = cacheKey ?? descriptor.Path;
-        return Executor.GetResult(descriptor, GetDataProvider, context, CacheFor(key));
-    }
+    public object? GetResult(Branch descriptor, Shape context) =>
+        Executor.GetResult(descriptor, GetDataProvider, context);
 
-    public string GetResultJson(Branch descriptor, Shape context, string? cacheKey = null)
-    {
-        var key = cacheKey ?? descriptor.Path;
-        return Executor.GetResultJson(descriptor, GetDataProvider, context, CacheFor(key));
-    }
+    public string GetResultJson(Branch descriptor, Shape context) =>
+        Executor.GetResultJson(descriptor, GetDataProvider, context);
 
-    private (Branch Descriptor, string CacheKey) LoadDescriptor(string descriptorPath, string? outputMapper)
+    private Branch LoadDescriptor(string descriptorPath, string? outputMapper)
     {
-        var cacheKey = CacheKey(descriptorPath, outputMapper);
+        var cacheKey = DescriptorKey(descriptorPath, outputMapper);
         if (!_debug && _descriptors.TryGetValue(cacheKey, out var cached))
-            return (cached, cacheKey);
+            return cached;
 
         var descriptor = CreateDescriptor(descriptorPath, outputMapper);
         _descriptors[cacheKey] = descriptor;
-        return (descriptor, cacheKey);
+        return descriptor;
     }
 
-    private static string CacheKey(string descriptorPath, string? outputMapper) =>
+    private static string DescriptorKey(string descriptorPath, string? outputMapper) =>
         string.IsNullOrEmpty(outputMapper) ? descriptorPath : descriptorPath + "#" + outputMapper;
-
-    private Dictionary<string, object?> CacheFor(string path)
-    {
-        if (!_cache.TryGetValue(path, out var c))
-        {
-            c = new Dictionary<string, object?>();
-            _cache[path] = c;
-        }
-        return c;
-    }
 
     private string DefaultPlaceholder()
     {

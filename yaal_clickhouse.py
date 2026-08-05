@@ -1,5 +1,7 @@
 from clickhouse_driver import Client
 
+from yaal_provider import fetch_mapped_rows
+
 
 _CONNECT_QUERY_KEYS = (
     "secure",
@@ -106,5 +108,5 @@ class ClickHouseDataProvider:
         column_names = [
             name.rsplit(".", 1)[-1] for name, _type in columns_with_types
         ]
-        rows = [dict(zip(column_names, row)) for row in rows_raw]
+        rows = fetch_mapped_rows(rows_raw, column_names)
         return rows, None

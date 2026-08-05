@@ -2,7 +2,12 @@ import psycopg2 as pg
 from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
 
-from yaal_provider import commit_then_close, rollback_then_close
+from yaal_provider import (
+    commit_then_close,
+    fetch_dict_rows,
+    parse_pool_int,
+    rollback_then_close,
+)
 
 
 _CONNECT_QUERY_KEYS = (
@@ -31,7 +36,14 @@ class PostgresContextManager:
         for key in _CONNECT_QUERY_KEYS:
             if key in query:
                 kwargs[key] = query[key]
-        self._pool = pool.SimpleConnectionPool(1, 20, **kwargs)
+        # pool_size sets maxconn; minconn defaults to 1 (or minconn query key).
+        maxconn = parse_pool_int(query, "pool_size", 20)
+        if "maxconn" in query:
+            maxconn = parse_pool_int(query, "maxconn", maxconn)
+        minconn = parse_pool_int(query, "minconn", 1)
+        if minconn > maxconn:
+            minconn = maxconn
+        self._pool = pool.SimpleConnectionPool(minconn, maxconn, **kwargs)
 
     def get_context(self):
         return PostgresDataProvider(self._pool)
@@ -82,10 +94,7 @@ class PostgresDataProvider:
         try:
             args = helper.build_parameters(sql, input_shape, self.get_value_converter)
             cur.execute(sql["content"], args)
-            if cur.description is not None:
-                rows = [dict(row) for row in cur.fetchall()]
-            else:
-                rows = []
+            rows = [dict(row) for row in fetch_dict_rows(cur)]
             return rows, self._last_inserted_id(cur, rows)
         finally:
             cur.close()

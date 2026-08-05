@@ -1,7 +1,7 @@
 import sqlite3
 from urllib.parse import urlencode
 
-from yaal_provider import commit_then_close, rollback_then_close
+from yaal_provider import commit_then_close, fetch_dict_rows, rollback_then_close
 
 
 class SQLiteContextManager:
@@ -64,7 +64,7 @@ class SQLiteDataProvider:
         try:
             args = helper.build_parameters(sql, input_shape, self.get_value)
             cur.execute(sql["content"], args)
-            rows = cur.fetchall() if cur.description is not None else []
+            rows = fetch_dict_rows(cur)
             return rows, cur.lastrowid
         finally:
             cur.close()

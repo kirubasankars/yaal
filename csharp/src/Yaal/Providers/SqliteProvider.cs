@@ -77,7 +77,7 @@ public sealed class SqliteDataProvider : IDataProvider
         Twig twig, Shape inputShape, DataProviderHelper helper)
     {
         var con = _con!;
-        var sql = DataProviderHelper.GetExecutableContent("?", twig, inputShape);
+        var sql = helper.GetExecutableContent("?", twig, inputShape);
         using var cmd = con.CreateCommand();
         cmd.CommandText = sql.Content;
         var args = helper.BuildParameters(sql, inputShape, GetValue);

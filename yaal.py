@@ -240,7 +240,6 @@ class Yaal:
         self._descriptors = {}
         self._data_providers = {}
         self._data_provider_schemes = {}
-        self._cache = {}
         self._debug = debug
 
         if not content_reader:
@@ -289,27 +288,22 @@ class Yaal:
         return descriptor
 
     def clear_cache(self):
+        """Clear cached descriptors (reload SQL/YAML on next query)."""
         self._descriptors = {}
-        self._cache = {}
 
-    def _cache_key(self, descriptor_path, output_mapper=None):
+    def _descriptor_key(self, descriptor_path, output_mapper=None):
         if output_mapper:
             return descriptor_path + "#" + output_mapper
         return descriptor_path
 
     def _load_descriptor(self, descriptor_path, output_mapper=None):
-        cache_key = self._cache_key(descriptor_path, output_mapper)
+        cache_key = self._descriptor_key(descriptor_path, output_mapper)
         if not self._debug and cache_key in self._descriptors:
-            return self._descriptors[cache_key], cache_key
+            return self._descriptors[cache_key]
 
         descriptor = self.create_descriptor(descriptor_path, output_mapper)
         self._descriptors[cache_key] = descriptor
-        return descriptor, cache_key
-
-    def _cache_for(self, path):
-        if path not in self._cache:
-            self._cache[path] = {}
-        return self._cache[path]
+        return descriptor
 
     def _default_placeholder(self):
         for scheme in self._data_provider_schemes.values():
@@ -321,20 +315,20 @@ class Yaal:
 
     def query(self, descriptor_path, *, payload=None, args=None, output_mapper=None):
         """Load a descriptor, build context, and return the SQL→JSON result."""
-        descriptor, cache_key = self._load_descriptor(descriptor_path, output_mapper)
+        descriptor = self._load_descriptor(descriptor_path, output_mapper)
         context = create_context(descriptor, payload=payload, args=args)
-        return self.get_result(descriptor, context, cache_key=cache_key)
+        return self.get_result(descriptor, context)
 
     def query_json(self, descriptor_path, *, payload=None, args=None, output_mapper=None):
         """Same as query, but return a JSON string."""
-        descriptor, cache_key = self._load_descriptor(descriptor_path, output_mapper)
+        descriptor = self._load_descriptor(descriptor_path, output_mapper)
         context = create_context(descriptor, payload=payload, args=args)
-        return self.get_result_json(descriptor, context, cache_key=cache_key)
+        return self.get_result_json(descriptor, context)
 
     def explain_sql(self, descriptor_path, *, payload=None, args=None,
                     output_mapper=None, placeholder=None):
         """Return compiled SQL twigs after null-filter elision (for authoring/debug)."""
-        descriptor, _ = self._load_descriptor(descriptor_path, output_mapper)
+        descriptor = self._load_descriptor(descriptor_path, output_mapper)
         context = create_context(descriptor, payload=payload, args=args)
         if placeholder is None:
             placeholder = self._default_placeholder()
@@ -368,23 +362,11 @@ class Yaal:
         walk(descriptor, context)
         return explained
 
-    def get_result(self, descriptor, context, cache_key=None):
-        key = cache_key or descriptor.get("path")
-        return get_result(
-            descriptor,
-            self.get_data_provider,
-            context,
-            self._cache_for(key),
-        )
+    def get_result(self, descriptor, context):
+        return get_result(descriptor, self.get_data_provider, context)
 
-    def get_result_json(self, descriptor, context, cache_key=None):
-        key = cache_key or descriptor.get("path")
-        return get_result_json(
-            descriptor,
-            self.get_data_provider,
-            context,
-            self._cache_for(key),
-        )
+    def get_result_json(self, descriptor, context):
+        return get_result_json(descriptor, self.get_data_provider, context)
 
     def get_root_path(self):
         return self._root_path

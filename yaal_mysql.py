@@ -1,7 +1,12 @@
 import mysql.connector
 import mysql.connector.pooling
 
-from yaal_provider import commit_then_close, rollback_then_close
+from yaal_provider import (
+    commit_then_close,
+    fetch_dict_rows,
+    parse_pool_int,
+    rollback_then_close,
+)
 
 
 _CONNECT_QUERY_KEYS = (
@@ -14,6 +19,31 @@ _CONNECT_QUERY_KEYS = (
     "use_pure",
     "autocommit",
 )
+
+
+def _mysql_pool_release(conn, *, close):
+    """Return a pooled connection via close(); discard on error when possible."""
+    if conn is None:
+        return
+    if close:
+        # Best-effort invalidate before returning / closing a bad connection.
+        try:
+            conn.unread_result = False
+        except Exception:
+            pass
+        try:
+            if hasattr(conn, "is_connected") and conn.is_connected():
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+    try:
+        # For PooledMySQLConnection, close() returns the connection to the pool.
+        conn.close()
+    except Exception:
+        pass
 
 
 class MySQLContextManager:
@@ -36,9 +66,10 @@ class MySQLContextManager:
                 elif key in ("use_pure", "autocommit"):
                     value = str(value).lower() in ("1", "true", "yes")
                 db_config[key] = value
+        pool_size = parse_pool_int(query, "pool_size", 10)
         pool_name = "yaal-%s" % id(self)
         self._pool = mysql.connector.pooling.MySQLConnectionPool(
-            pool_name=pool_name, pool_size=3, **db_config
+            pool_name=pool_name, pool_size=pool_size, **db_config
         )
 
     def get_context(self):
@@ -57,12 +88,12 @@ class MySQLDataProvider:
     def end(self):
         conn = self._conn
         self._conn = None
-        commit_then_close(conn)
+        commit_then_close(conn, release=_mysql_pool_release)
 
     def error(self):
         conn = self._conn
         self._conn = None
-        rollback_then_close(conn)
+        rollback_then_close(conn, release=_mysql_pool_release)
 
     @staticmethod
     def get_value_converter(param_type, value):
@@ -76,7 +107,7 @@ class MySQLDataProvider:
             args = helper.build_parameters(sql, input_shape, self.get_value_converter)
             cur.execute(sql["content"], args)
             if cur.with_rows:
-                rows = cur.fetchall()
+                rows = fetch_dict_rows(cur)
             else:
                 rows = []
             return rows, cur.lastrowid

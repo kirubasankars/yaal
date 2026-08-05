@@ -30,7 +30,7 @@ api/user/get/
   $.sql
   $.input.yaml
   $.output.yaml
-  $.output.cached.yaml      # output_mapper="cached"
+  $.output.summary.yaml     # optional alternate shape (output_mapper="summary")
 
 api/user/page/
   $.paging.sql
@@ -154,14 +154,23 @@ SELECT
 WHERE {{$args.page}} < 1 OR {{$args.page}} > {{$params.total_pages}}
 ```
 
-## Cache and `output_mapper`
+## `output_mapper`
 
-- `cache: true` caches that branch’s row set for the request (by SQL method). Cannot combine with `parent_rows` on the **same** branch.
-- Alternate shapes: `$.output.<name>.yaml` via `output_mapper`:
+Alternate shapes use `$.output.<name>.yaml`:
 
 ```python
-y.query("user/get", args={"id": 1}, output_mapper="cached")
+y.query("user/get", args={"id": 1}, output_mapper="summary")
+# loads $.output.summary.yaml instead of $.output.yaml
 ```
+
+There is no process-wide or cross-query result cache. `clear_cache()` only clears cached descriptors (reload SQL/YAML).
+
+## Performance notes
+
+- Providers drain cursors with `fetchmany` into a per-branch row list; nesting (`partition_by`) still buffers that branch in memory.
+- Compiled SQL (after optional-filter elision) is cached per twig + null-set + placeholder for the duration of a trunk execution.
+- Postgres / MySQL URL query knobs: `pool_size` (and Postgres `minconn` / `maxconn`). Defaults: Postgres max 20, MySQL 10.
+- C# uses driver connection pooling (Npgsql / MySqlConnector); pass `pooling`, `pool_size` / `maximum pool size` in the URL query string.
 
 ## Errors
 
@@ -198,7 +207,6 @@ y.setup_data_provider("db", "sqlite3:////tmp/app.db")
 y.query("user/get", args={"id": 1})
 y.query_json("user/get", args={"id": 1})
 y.explain_sql("user/get", args={"id": 1})
-y.query("user/get", args={"id": 1}, output_mapper="cached")
 y.clear_cache()
 ```
 
@@ -213,7 +221,6 @@ y.SetupDataProvider("db", "sqlite3:////tmp/app.db");
 y.Query("user/get", args: new { id = 1 });
 y.QueryJson("user/get", args: new { id = 1 });
 y.ExplainSql("user/get", args: new { id = 1 });
-y.Query("user/get", args: new { id = 1 }, outputMapper: "cached");
 ```
 
 ### Database URLs
@@ -223,6 +230,6 @@ y.Query("user/get", args: new { id = 1 }, outputMapper: "cached");
 | SQLite (absolute) | `sqlite3:////tmp/app.db` |
 | SQLite (relative) | `sqlite3://./data/app.db` |
 | SQLite (memory) | `sqlite3:///` |
-| Postgres | `postgresql://user:pass@127.0.0.1:5432/yaal` |
-| MySQL | `mysql://user:pass@127.0.0.1:3306/yaal` |
+| Postgres | `postgresql://user:pass@127.0.0.1:5432/yaal?pool_size=20` |
+| MySQL | `mysql://user:pass@127.0.0.1:3306/yaal?pool_size=10` |
 | ClickHouse | `clickhouse://user:pass@127.0.0.1:9000/yaal` |

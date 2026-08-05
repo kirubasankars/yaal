@@ -27,7 +27,6 @@ Fixture operations:
 | Path | Shows |
 |---|---|
 | `user/get` | Nested object + `parent_rows` |
-| `user/get` + `output_mapper=cached` | Alternate `$.output.cached.yaml` |
 | `user/list` | Root array + `optional()` filter |
 | `user/page` | Multi-file branches + `$action=params` |
 | `user/create` | Multi-twig INSERT → SELECT |

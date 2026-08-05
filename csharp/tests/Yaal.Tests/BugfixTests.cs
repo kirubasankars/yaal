@@ -56,7 +56,7 @@ public class BugfixTests
         var ctx = ContextFactory.CreateContext(new Branch { Path = "p" });
         var (rows, errors) = Executor.ExecuteBranch(
             descriptor, true, new Dictionary<string, IDataProvider> { ["db"] = leak }, ctx,
-            new List<IDictionary<string, object?>>(), new Dictionary<string, object?>());
+            new List<IDictionary<string, object?>>());
         rows.Should().BeNull();
         errors.Should().NotBeNull().And.NotBeEmpty();
         leak.Begun.Should().BeTrue();
@@ -86,8 +86,7 @@ public class BugfixTests
             new Dictionary<string, object?> { ["user_id"] = 1, ["role_id"] = 1 },
         };
         var (rows, err) = Executor.ExecuteBranch(
-            branch, false, new Dictionary<string, IDataProvider> { ["db"] = dp }, ctx, parent,
-            new Dictionary<string, object?>());
+            branch, false, new Dictionary<string, IDataProvider> { ["db"] = dp }, ctx, parent);
         err.Should().BeNull();
         dp.Calls.Should().Be(0);
         rows.Should().HaveCount(1);

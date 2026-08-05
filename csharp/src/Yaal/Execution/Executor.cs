@@ -9,27 +9,24 @@ public static class Executor
     public static object? GetResult(
         Branch descriptor,
         Func<string, IDataProvider> getDataProvider,
-        Shape context,
-        Dictionary<string, object?>? cacheProvider = null)
+        Shape context)
     {
-        return GetResultCore(descriptor, getDataProvider, context, cacheProvider ?? new Dictionary<string, object?>());
+        return GetResultCore(descriptor, getDataProvider, context);
     }
 
     public static string GetResultJson(
         Branch descriptor,
         Func<string, IDataProvider> getDataProvider,
-        Shape context,
-        Dictionary<string, object?>? cacheProvider = null)
+        Shape context)
     {
-        var result = GetResult(descriptor, getDataProvider, context, cacheProvider);
+        var result = GetResult(descriptor, getDataProvider, context);
         return JsonUtil.Serialize(result);
     }
 
     private static object? GetResultCore(
         Branch descriptor,
         Func<string, IDataProvider> getDataProvider,
-        Shape ctx,
-        Dictionary<string, object?> cacheProvider)
+        Shape ctx)
     {
         var errors = new List<Dictionary<string, object?>>();
         var argsShape = ctx.GetProp("$args") as Shape;
@@ -44,7 +41,7 @@ public static class Executor
         foreach (var con in descriptor.Connections ?? new List<string> { "db" })
             dataProviders[con] = getDataProvider(con);
 
-        var (rs, execErrors) = ExecuteBranch(descriptor, true, dataProviders, ctx, new List<IDictionary<string, object?>>(), cacheProvider);
+        var (rs, execErrors) = ExecuteBranch(descriptor, true, dataProviders, ctx, new List<IDictionary<string, object?>>());
         if (execErrors != null)
             return new Dictionary<string, object?> { ["errors"] = execErrors };
 
@@ -169,14 +166,11 @@ public static class Executor
         bool isTrunk,
         Dictionary<string, IDataProvider> dataProviders,
         Shape context,
-        List<IDictionary<string, object?>> parentRows,
-        Dictionary<string, object?> cacheProvider)
+        List<IDictionary<string, object?>> parentRows)
     {
         var inputType = branch.InputType;
         var outputPartitionBy = branch.PartitionBy;
-        var cache = branch.Cache;
         var useParentRows = branch.UseParentRows;
-        var method = branch.Method;
         var output = new List<IDictionary<string, object?>>();
         var dataProviderHelper = new DataProviderHelper();
         var dbDataProvider = dataProviders["db"];
@@ -185,11 +179,7 @@ public static class Executor
 
         try
         {
-            if (cache && cacheProvider.TryGetValue(method, out var cachedObj))
-            {
-                output = JsonUtil.NormalizeRowList(JsonUtil.DeepCopy(cachedObj));
-            }
-            else if (useParentRows)
+            if (useParentRows)
             {
                 output = JsonUtil.DeepCopyRows(parentRows);
             }
@@ -228,9 +218,6 @@ public static class Executor
                     }
                     output = rs!;
                 }
-
-                if (cache)
-                    cacheProvider[method] = JsonUtil.DeepCopy(output);
             }
 
             var branches = branch.Branches;
@@ -245,7 +232,7 @@ public static class Executor
                         subNodeShape = nestedShape;
 
                     var (subNodeOutput, errors) = ExecuteBranch(
-                        branchDescriptor, false, dataProviders, subNodeShape, output, cacheProvider);
+                        branchDescriptor, false, dataProviders, subNodeShape, output);
                     if (errors != null)
                     {
                         failed = true;

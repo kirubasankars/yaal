@@ -82,7 +82,7 @@ class TestBugfixes(unittest.TestCase):
         }
         ctx = create_context({"path": "p"})
         leak = Leak()
-        out, errors = _execute_branch(descriptor, True, {"db": leak}, ctx, [], {})
+        out, errors = _execute_branch(descriptor, True, {"db": leak}, ctx, [])
         self.assertIsNone(out)
         self.assertTrue(errors)
         self.assertTrue(leak.begun)
@@ -107,7 +107,7 @@ class TestBugfixes(unittest.TestCase):
         }
         ctx = create_context({"path": "p"})
         parent = [{"user_id": 1, "role_id": 1}]
-        out, err = _execute_branch(branch, False, {"db": DP()}, ctx, parent, {})
+        out, err = _execute_branch(branch, False, {"db": DP()}, ctx, parent)
         self.assertIsNone(err)
         self.assertEqual(calls["n"], 0)
         self.assertEqual(out[0]["user_id"], 1)
@@ -149,7 +149,7 @@ class TestBugfixes(unittest.TestCase):
             ],
         }
         ctx = create_context({"path": "p"})
-        out, err = _execute_branch(trunk, True, {"db": DP()}, ctx, [], {})
+        out, err = _execute_branch(trunk, True, {"db": DP()}, ctx, [])
         self.assertIsNone(err)
         self.assertIsNot(out[0]["child"], out[1]["child"])
         out[0]["child"].append({"c": 2})

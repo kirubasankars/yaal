@@ -19,12 +19,17 @@ public sealed class PostgresContextManager : IDataProviderContextManager
             Password = options.Password,
             Database = options.Database,
         };
-        var query = options.Query ?? new Dictionary<string, string>();
-        foreach (var key in new[] { "sslmode", "sslcert", "sslkey", "sslrootcert", "connect_timeout", "application_name", "options" })
+        var query = options.Query ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var key in new[]
+                 {
+                     "sslmode", "sslcert", "sslkey", "sslrootcert", "connect_timeout",
+                     "application_name", "options", "pooling", "maximum pool size", "maxpoolsize",
+                     "pool_size", "minimum pool size", "minpoolsize"
+                 })
         {
             if (!query.TryGetValue(key, out var value))
                 continue;
-            switch (key)
+            switch (key.ToLowerInvariant())
             {
                 case "sslmode":
                     builder.SslMode = Enum.Parse<SslMode>(value, true);
@@ -37,6 +42,20 @@ public sealed class PostgresContextManager : IDataProviderContextManager
                     break;
                 case "options":
                     builder.Options = value;
+                    break;
+                case "pooling":
+                    builder.Pooling = value.Equals("1", StringComparison.OrdinalIgnoreCase)
+                                      || value.Equals("true", StringComparison.OrdinalIgnoreCase)
+                                      || value.Equals("yes", StringComparison.OrdinalIgnoreCase);
+                    break;
+                case "maximum pool size":
+                case "maxpoolsize":
+                case "pool_size":
+                    builder.MaxPoolSize = int.Parse(value);
+                    break;
+                case "minimum pool size":
+                case "minpoolsize":
+                    builder.MinPoolSize = int.Parse(value);
                     break;
             }
         }
@@ -100,7 +119,7 @@ public sealed class PostgresDataProvider : IDataProvider
         Twig twig, Shape inputShape, DataProviderHelper helper)
     {
         var con = _conn!;
-        var sql = DataProviderHelper.GetExecutableContent("%s", twig, inputShape);
+        var sql = helper.GetExecutableContent("%s", twig, inputShape);
         var args = helper.BuildParameters(sql, inputShape, (_, v) => v);
         var (content, _) = PlaceholderUtil.ToNumbered(sql.Content, args.Count, i => "$" + (i + 1));
 
