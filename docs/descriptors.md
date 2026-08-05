@@ -32,6 +32,12 @@ api/user/get/
   $.output.yaml
   $.output.summary.yaml     # optional alternate shape (output_mapper="summary")
 
+api/user/nested/
+  $.sql                     # parent rows
+  $.roles.sql               # child SQL → output property "roles"
+  $.input.yaml
+  $.output.yaml
+
 api/user/page/
   $.paging.sql
   $.data.sql
@@ -151,9 +157,13 @@ Fixture: [`user/create`](../tests/fixtures/api/user/create/).
 
 ## Multi-file branches
 
-Files `$.paging.sql` + `$.data.sql` become output properties `paging` and `data`. Branch names in `$.output.yaml` must match file suffixes.
+SQL file suffixes become branch names. Branch names in `$.output.yaml` must match those suffixes.
 
-When using `LIMIT`/`OFFSET` with join fan-out + `parent_rows`, page the parent entity in a subquery first — otherwise the limit truncates join rows and nests incomplete children. See [`user/page`](../tests/fixtures/api/user/page/).
+**Sibling branches** (no trunk `$.sql`): `$.paging.sql` + `$.data.sql` → properties `paging` and `data`. See [`user/page`](../tests/fixtures/api/user/page/).
+
+**Nested child SQL** under a trunk: `$.sql` + `$.roles.sql` → child property `roles`. Parent and child both return the join key; `partition_by` on the parent stitches child rows onto matching parents (no `parent_rows`). See [`user/nested`](../tests/fixtures/api/user/nested/).
+
+When using `LIMIT`/`OFFSET` with join fan-out + `parent_rows`, page the parent entity in a subquery first — otherwise the limit truncates join rows and nests incomplete children.
 
 ## `$action` rows
 

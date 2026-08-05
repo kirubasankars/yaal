@@ -53,6 +53,14 @@ public class SqliteIntegrationTests : IDisposable
     }
 
     [Fact]
+    public void User_nested_child_sql_matches_parent_rows()
+    {
+        var nested = JsonUtil.Serialize(_yaal.Query("user/nested", args: new { id = 1 }));
+        var joined = JsonUtil.Serialize(_yaal.Query("user/get", args: new { id = 1 }));
+        nested.Should().Be(joined);
+    }
+
+    [Fact]
     public void User_with_single_role()
     {
         var result = _yaal.Query("user/get", args: new { id = 2 });

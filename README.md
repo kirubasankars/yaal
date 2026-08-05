@@ -75,7 +75,7 @@ for twig in y.explain_sql("user/get", args={"id": 1}):
 | [`docs/README.md`](docs/README.md) | Docs index |
 | [`examples/demo.py`](examples/demo.py) | Runnable Python tour (`make example`) |
 | [`csharp/examples/Yaal.Example`](csharp/examples/Yaal.Example/) | Runnable .NET tour (`make example-csharp`) |
-| [`tests/fixtures/api/`](tests/fixtures/api/) | Shared descriptors: get, list, page, create |
+| [`tests/fixtures/api/`](tests/fixtures/api/) | Shared descriptors: get, nested, list, page, create |
 
 ## Make targets
 
@@ -158,6 +158,7 @@ properties:
 - `mapped` — column → JSON field  
 - `partition_by` — collapse join fan-out into nested objects/arrays  
 - `parent_rows: true` — nest from parent rows without a child SQL file  
+- Child SQL file (`$.roles.sql`) — nest via `partition_by` join key; see [`user/nested`](tests/fixtures/api/user/nested/)
 
 ## Database URLs
 

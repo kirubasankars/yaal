@@ -113,6 +113,106 @@ How shaping works on the flat result set:
 
 ---
 
+## Nested child SQL — `user/nested`
+
+Same JSON shape as `user/get`, but roles come from a **child SQL file** instead of a join + `parent_rows`.
+
+### Descriptor
+
+```text
+user/nested/
+  $.sql
+  $.roles.sql
+  $.input.yaml
+  $.output.yaml
+```
+
+**`$.sql`** — parent users only:
+
+```sql
+--($args.id integer)--
+
+select
+    u.user_id,
+    u.user_name
+from users u
+where u.active = 1
+  and optional(u.user_id = {{$args.id}})
+order by u.user_id
+```
+
+**`$.roles.sql`** — child query; include the parent join key (`user_id`):
+
+```sql
+--($args.id integer)--
+
+select
+    ur.user_id,
+    r.role_id,
+    r.role_name
+from user_roles ur
+inner join roles r on r.role_id = ur.role_id
+where r.active = 1
+  and optional(ur.user_id = {{$args.id}})
+order by ur.user_id, r.role_id
+```
+
+**`$.output.yaml`** — no `parent_rows`; the `roles` property matches the file suffix:
+
+```yaml
+type: object
+partition_by: user_id
+properties:
+  id:
+    mapped: user_id
+  name:
+    mapped: user_name
+  roles:
+    type: array
+    partition_by: role_id
+    properties:
+      id:
+        mapped: role_id
+      name:
+        mapped: role_name
+```
+
+Parent `partition_by: user_id` groups each user’s role rows from `$.roles.sql` onto that user.
+
+### Commands
+
+```bash
+yaal query user/nested --arg id=1
+```
+
+```python
+y.query("user/nested", args={"id": 1})
+```
+
+```csharp
+y.Query("user/nested", args: new { id = 1 });
+```
+
+### Sample JSON
+
+```json
+{
+  "id": 1,
+  "name": "admin",
+  "roles": [
+    { "id": 1, "name": "Administrator" },
+    { "id": 2, "name": "User" }
+  ]
+}
+```
+
+| Approach | Files | Nesting |
+|---|---|---|
+| `user/get` | one join `$.sql` | `parent_rows: true` |
+| `user/nested` | `$.sql` + `$.roles.sql` | `partition_by` join key in both result sets |
+
+---
+
 ## Optional list — `user/list`
 
 Root `type: array`. Omit `active` to return everyone; pass it to filter.
@@ -464,6 +564,6 @@ y.Query("orders/list", args: new { status = "open" });
 | Python | [`examples/demo.py`](../examples/demo.py) · `make example` |
 | C# | [`csharp/examples/Yaal.Example`](../csharp/examples/Yaal.Example/) · `make example-csharp` |
 
-Both print get / list / page / create and show `explain` elision for `user/list`.
+Both print get / nested / list / page / create and show `explain` elision for `user/list`.
 
 See also: [descriptors.md](descriptors.md) · [README.md](README.md)

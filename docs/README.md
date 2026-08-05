@@ -26,7 +26,8 @@ Fixture operations:
 
 | Path | Shows |
 |---|---|
-| `user/get` | Nested object + `parent_rows` |
+| `user/get` | Nested object + `parent_rows` (one join SQL) |
+| `user/nested` | Nested child SQL file (`$.roles.sql`) + `partition_by` |
 | `user/list` | Root array + `optional()` filter |
-| `user/page` | Multi-file branches + `$action=params` |
+| `user/page` | Sibling branches + `$action=params` |
 | `user/create` | Multi-twig INSERT → SELECT |

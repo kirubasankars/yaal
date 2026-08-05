@@ -37,6 +37,21 @@ class TestFixtureExamples(unittest.TestCase):
         self.assertEqual(result["name"], "admin")
         self.assertEqual(len(result["roles"]), 2)
 
+    def test_user_nested_child_sql(self):
+        result = self._yaal.query("user/nested", args={"id": 1})
+        self.assertEqual(result["id"], 1)
+        self.assertEqual(result["name"], "admin")
+        self.assertEqual(
+            result["roles"],
+            [
+                {"id": 1, "name": "Administrator"},
+                {"id": 2, "name": "User"},
+            ],
+        )
+        # Same shape as join + parent_rows.
+        joined = self._yaal.query("user/get", args={"id": 1})
+        self.assertEqual(result, joined)
+
     def test_user_page_branches(self):
         result = self._yaal.query(
             "user/page", args={"page": 1, "page_size": 10}

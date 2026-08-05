@@ -43,7 +43,7 @@ foreach (var twig in y.ExplainSql("user/get", args: new { id = 1 }))
     Console.WriteLine(twig["sql"]);
 ```
 
-Descriptors are shared with the Python library under [`../tests/fixtures/api/`](../tests/fixtures/api/) (`user/get`, `user/list`, `user/page`, `user/create`).
+Descriptors are shared with the Python library under [`../tests/fixtures/api/`](../tests/fixtures/api/) (`user/get`, `user/nested`, `user/list`, `user/page`, `user/create`).
 
 ## Database URLs
 

@@ -34,6 +34,7 @@ try
     }
 
     Print("user/get id=1", y.Query("user/get", args: new { id = 1 }));
+    Print("user/nested id=1", y.Query("user/nested", args: new { id = 1 }));
     Print("user/list active=1", y.Query("user/list", args: new { active = 1 }));
     Print(
         "user/page page=1 page_size=1",
