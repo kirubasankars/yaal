@@ -1,7 +1,0 @@
--
-  descriptor: user
-  route: user/{id}
-  mapper: user
--
-  descriptor: role
-  route: role/{id}
