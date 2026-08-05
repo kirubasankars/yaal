@@ -5,7 +5,7 @@
     "nulls": [
       "param1"
     ],
-    "expect_sql": "select * from a where 1 = 1",
+    "expect_sql": "select * from a",
     "expect_param_names": []
   },
   {
@@ -18,19 +18,19 @@
     "expect_param_names": []
   },
   {
-    "name": "sole_nullable_predicate_falls_back_to_one_equals_one",
+    "name": "sole_nullable_drops_where",
     "sql": "--(p integer)--\nselect * from a where ({{p}} is null or col = {{p}})\n",
     "nulls": [
       "p"
     ],
-    "expect_sql": "select * from a where 1 = 1",
+    "expect_sql": "select * from a",
     "expect_param_names": []
   },
   {
     "name": "non_null_strips_is_null_or_prefix",
     "sql": "--(param1 integer)--\nselect * from a where 1 = 1 or ({{param1}} is null or col1 = {{param1}})\n",
     "nulls": [],
-    "expect_sql": "select * from a where 1 = 1 or (col1 = ?)",
+    "expect_sql": "select * from a where (col1 = ?)",
     "expect_param_names": [
       "param1"
     ]
@@ -52,7 +52,7 @@
     "nulls": [
       "PARAM1"
     ],
-    "expect_sql": "select * from a where 1 = 1",
+    "expect_sql": "select * from a",
     "expect_param_names": [],
     "expect_nullable_contains": [
       "param1"
@@ -80,7 +80,7 @@
     "name": "optional_sugar_non_null_keeps_binds",
     "sql": "--(param1 integer)--\nselect * from a where 1 = 1 or optional(col1 = {{param1}})\n",
     "nulls": [],
-    "expect_sql": "select * from a where 1 = 1 or (col1 = ?)",
+    "expect_sql": "select * from a where (col1 = ?)",
     "expect_param_names": [
       "param1"
     ]
@@ -95,12 +95,12 @@
     ]
   },
   {
-    "name": "optional_sugar_sole_predicate_falls_back",
+    "name": "optional_sugar_sole_predicate_drops_where",
     "sql": "--(p integer)--\nselect * from a where optional(col = {{p}})\n",
     "nulls": [
       "p"
     ],
-    "expect_sql": "select * from a where 1 = 1",
+    "expect_sql": "select * from a",
     "expect_param_names": []
   },
   {
@@ -110,6 +110,15 @@
       "$args.id"
     ],
     "expect_sql": "select * from users u where u.active = 1 and r.active = 1 order by u.user_id",
+    "expect_param_names": []
+  },
+  {
+    "name": "optional_subquery_sole_filter_drops_where",
+    "sql": "--($args.id integer)--\nselect * from (\nselect 1 as id\n) u where optional(id = {{$args.id}})\n",
+    "nulls": [
+      "$args.id"
+    ],
+    "expect_sql": "select * from ( select 1 as id ) u",
     "expect_param_names": []
   },
   {

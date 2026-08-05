@@ -393,6 +393,14 @@ def _is_whitespace_sql_fragment(value):
     return value == "" or (isinstance(value, str) and value.isspace())
 
 
+_CLAUSE_BOUNDARY = frozenset({
+    "order", "group", "having", "limit", "offset", "fetch", "for",
+    "union", "except", "intersect", ")",
+})
+
+_ONE_EQUALS_ONE_COMPACT = re.compile(r"^1\s*=\s*1$")
+
+
 def _strip_preceding_connector(tokens):
     """Drop a preceding AND/OR and adjacent whitespace. Returns True if a connector was removed."""
     i = len(tokens) - 1
@@ -404,6 +412,96 @@ def _strip_preceding_connector(tokens):
     while tokens and _is_whitespace_sql_fragment(tokens[-1]):
         tokens.pop()
     return True
+
+
+def _next_significant(tokens, i):
+    while i < len(tokens):
+        if not _is_whitespace_sql_fragment(tokens[i]):
+            return i, tokens[i].strip().lower()
+        i += 1
+    return None, None
+
+
+def _match_one_equals_one(tokens, i):
+    """If tokens[i:] starts with 1 = 1 (flexible whitespace), return index after match."""
+    parts = []
+    j = i
+    while j < len(tokens) and len(parts) < 3:
+        if _is_whitespace_sql_fragment(tokens[j]):
+            j += 1
+            continue
+        parts.append((j, tokens[j].strip()))
+        j += 1
+        if len(parts) == 1 and _ONE_EQUALS_ONE_COMPACT.match(parts[0][1]):
+            return parts[0][0] + 1
+    if (
+        len(parts) >= 3
+        and parts[0][1] == "1"
+        and parts[1][1] == "="
+        and parts[2][1] == "1"
+    ):
+        return parts[2][0] + 1
+    return None
+
+
+def _trim_ws_before(tokens, i):
+    while i > 0 and _is_whitespace_sql_fragment(tokens[i - 1]):
+        del tokens[i - 1]
+        i -= 1
+    return i
+
+
+def _cleanup_compiled_sql(tokens):
+    """Drop empty/tautology WHERE 1 = 1 left after optional-filter elision."""
+    tokens = list(tokens)
+    changed = True
+    while changed:
+        changed = False
+        for i, t in enumerate(tokens):
+            if _is_whitespace_sql_fragment(t):
+                continue
+            if t.strip().lower() != "where":
+                continue
+
+            j, word = _next_significant(tokens, i + 1)
+            if j is None:
+                i = _trim_ws_before(tokens, i)
+                del tokens[i:]
+                changed = True
+                break
+
+            one_end = _match_one_equals_one(tokens, j)
+            if one_end is None:
+                break
+
+            k, next_word = _next_significant(tokens, one_end)
+            if k is None or next_word in _CLAUSE_BOUNDARY:
+                # Sole WHERE 1 = 1 (or WHERE 1 = 1 before ORDER/GROUP/...).
+                old_i = i
+                i = _trim_ws_before(tokens, i)
+                one_end -= old_i - i
+                del tokens[i:one_end]
+                while i < len(tokens) and _is_whitespace_sql_fragment(tokens[i]):
+                    if k is not None:
+                        break
+                    del tokens[i]
+                if k is None:
+                    while tokens and _is_whitespace_sql_fragment(tokens[-1]):
+                        tokens.pop()
+                changed = True
+                break
+
+            if next_word in ("and", "or"):
+                # WHERE 1 = 1 AND|OR rest → WHERE rest
+                del_end = k + 1
+                while del_end < len(tokens) and _is_whitespace_sql_fragment(tokens[del_end]):
+                    del_end += 1
+                del tokens[j:del_end]
+                changed = True
+                break
+
+            break
+    return tokens
 
 
 def compile_sql(sql_stmt, nulls, char):
@@ -428,9 +526,8 @@ def compile_sql(sql_stmt, nulls, char):
 
             if "nullable_parameter" in token and token["nullable_parameter"] in nulls_set:
                 # Elide optional ({{param}} is null or ...) and a preceding AND/OR.
-                # If this is the sole predicate, keep SQL valid with 1 = 1.
-                if not _strip_preceding_connector(tokens):
-                    tokens.append("1 = 1")
+                # Sole remaining WHERE is cleaned up below (no 1 = 1 injection).
+                _strip_preceding_connector(tokens)
                 group = token["group"]
                 skip_or_after_nullable = False
                 continue
@@ -457,4 +554,5 @@ def compile_sql(sql_stmt, nulls, char):
         else:
             tokens.append(token["value"])
 
+    tokens = _cleanup_compiled_sql(tokens)
     return {"content": "".join(tokens), "parameters": parameters}

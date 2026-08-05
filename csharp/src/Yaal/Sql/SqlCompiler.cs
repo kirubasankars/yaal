@@ -1,7 +1,18 @@
+using System.Text.RegularExpressions;
+
 namespace Yaal.Sql;
 
 public static class SqlCompiler
 {
+    private static readonly HashSet<string> ClauseBoundary = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "order", "group", "having", "limit", "offset", "fetch", "for",
+        "union", "except", "intersect", ")",
+    };
+
+    private static readonly Regex OneEqualsOneCompact = new(
+        @"^1\s*=\s*1$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
     public static CompiledSql Compile(Twig sqlStmt, IEnumerable<string> nulls, string placeholder)
     {
         Dictionary<string, ParamDecl>? parametersMeta = null;
@@ -34,8 +45,8 @@ public static class SqlCompiler
 
                 if (token.NullableParameter != null && nullsSet.Contains(token.NullableParameter))
                 {
-                    if (!StripPrecedingConnector(tokens))
-                        tokens.Add("1 = 1");
+                    // Elide optional group; sole remaining WHERE is cleaned below (no 1 = 1 injection).
+                    StripPrecedingConnector(tokens);
                     group = token.Group;
                     skipOrAfterNullable = false;
                     continue;
@@ -75,6 +86,8 @@ public static class SqlCompiler
             }
         }
 
+        CleanupCompiledSql(tokens);
+
         return new CompiledSql
         {
             Content = string.Concat(tokens),
@@ -102,5 +115,117 @@ public static class SqlCompiler
         while (tokens.Count > 0 && IsWhitespaceSqlFragment(tokens[^1]))
             tokens.RemoveAt(tokens.Count - 1);
         return true;
+    }
+
+    private static (int? Index, string? Word) NextSignificant(List<string> tokens, int i)
+    {
+        while (i < tokens.Count)
+        {
+            if (!IsWhitespaceSqlFragment(tokens[i]))
+                return (i, tokens[i].Trim().ToLowerInvariant());
+            i += 1;
+        }
+        return (null, null);
+    }
+
+    private static int? MatchOneEqualsOne(List<string> tokens, int i)
+    {
+        var parts = new List<(int Index, string Text)>();
+        var j = i;
+        while (j < tokens.Count && parts.Count < 3)
+        {
+            if (IsWhitespaceSqlFragment(tokens[j]))
+            {
+                j += 1;
+                continue;
+            }
+            parts.Add((j, tokens[j].Trim()));
+            j += 1;
+            if (parts.Count == 1 && OneEqualsOneCompact.IsMatch(parts[0].Text))
+                return parts[0].Index + 1;
+        }
+
+        if (parts.Count >= 3 &&
+            parts[0].Text == "1" &&
+            parts[1].Text == "=" &&
+            parts[2].Text == "1")
+        {
+            return parts[2].Index + 1;
+        }
+
+        return null;
+    }
+
+    private static int TrimWsBefore(List<string> tokens, int i)
+    {
+        while (i > 0 && IsWhitespaceSqlFragment(tokens[i - 1]))
+        {
+            tokens.RemoveAt(i - 1);
+            i -= 1;
+        }
+        return i;
+    }
+
+    internal static void CleanupCompiledSql(List<string> tokens)
+    {
+        var changed = true;
+        while (changed)
+        {
+            changed = false;
+            for (var i = 0; i < tokens.Count; i++)
+            {
+                if (IsWhitespaceSqlFragment(tokens[i]))
+                    continue;
+                if (!tokens[i].Trim().Equals("where", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var (j, word) = NextSignificant(tokens, i + 1);
+                if (j == null)
+                {
+                    i = TrimWsBefore(tokens, i);
+                    tokens.RemoveRange(i, tokens.Count - i);
+                    changed = true;
+                    break;
+                }
+
+                var oneEnd = MatchOneEqualsOne(tokens, j.Value);
+                if (oneEnd == null)
+                    break;
+
+                var (k, nextWord) = NextSignificant(tokens, oneEnd.Value);
+                if (k == null || (nextWord != null && ClauseBoundary.Contains(nextWord)))
+                {
+                    var oldI = i;
+                    i = TrimWsBefore(tokens, i);
+                    var adjustedEnd = oneEnd.Value - (oldI - i);
+                    tokens.RemoveRange(i, adjustedEnd - i);
+                    while (i < tokens.Count && IsWhitespaceSqlFragment(tokens[i]))
+                    {
+                        if (k != null)
+                            break;
+                        tokens.RemoveAt(i);
+                    }
+                    if (k == null)
+                    {
+                        while (tokens.Count > 0 && IsWhitespaceSqlFragment(tokens[^1]))
+                            tokens.RemoveAt(tokens.Count - 1);
+                    }
+                    changed = true;
+                    break;
+                }
+
+                if (nextWord is "and" or "or")
+                {
+                    var delEnd = k.Value + 1;
+                    while (delEnd < tokens.Count && IsWhitespaceSqlFragment(tokens[delEnd]))
+                        delEnd += 1;
+                    tokens.RemoveRange(j.Value, delEnd - j.Value);
+                    changed = true;
+                    break;
+                }
+
+                break;
+            }
+        }
     }
 }
