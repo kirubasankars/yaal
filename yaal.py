@@ -239,12 +239,13 @@ class FileContentReader:
 
 class Yaal:
 
-    def __init__(self, root_path, content_reader=None, *, debug=False):
+    def __init__(self, root_path, content_reader=None, *, debug=False, precompiled=None):
         self._root_path = root_path
         self._descriptors = {}
         self._data_providers = {}
         self._data_provider_schemes = {}
         self._debug = debug
+        self._precompiled = precompiled
 
         if not content_reader:
             self._content_reader = FileContentReader(self._root_path)
@@ -305,9 +306,25 @@ class Yaal:
         if not self._debug and cache_key in self._descriptors:
             return self._descriptors[cache_key]
 
-        descriptor = self.create_descriptor(descriptor_path, output_mapper)
+        # debug=True forces live SQL/YAML; otherwise prefer precompiled artifacts.
+        if self._precompiled and not self._debug:
+            descriptor = self._load_precompiled(descriptor_path, output_mapper)
+        else:
+            descriptor = self.create_descriptor(descriptor_path, output_mapper)
         self._descriptors[cache_key] = descriptor
         return descriptor
+
+    def _load_precompiled(self, descriptor_path, output_mapper=None):
+        from yaal_precompile import load_precompiled_file, resolve_precompiled_path
+
+        file_path = resolve_precompiled_path(
+            self._precompiled, descriptor_path, output_mapper
+        )
+        if not os.path.isfile(file_path):
+            raise DescriptorNotFoundError(
+                "No precompiled descriptor at %s" % file_path
+            )
+        return load_precompiled_file(file_path)
 
     def _default_placeholder(self):
         for scheme in self._data_provider_schemes.values():

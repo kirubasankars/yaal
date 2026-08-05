@@ -122,12 +122,27 @@ def _build_parser():
     parser.add_argument(
         "--debug",
         action="store_true",
-        help="Disable descriptor caching (Yaal debug=True)",
+        help="Disable descriptor caching / force live SQL+YAML (ignores --precompiled)",
+    )
+    parser.add_argument(
+        "--precompiled",
+        default=None,
+        help="Load descriptors from a directory produced by `yaal compile`",
     )
 
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("list", help="List descriptor paths under --api")
+
+    compile_p = sub.add_parser(
+        "compile",
+        help="Precompile descriptors under --api to JSON (no database required)",
+    )
+    compile_p.add_argument(
+        "--out",
+        required=True,
+        help="Output directory for *.json descriptor artifacts",
+    )
 
     for name, help_text in (
         ("query", "Run Yaal.query and print nested JSON"),
@@ -160,7 +175,7 @@ def _build_parser():
 def _with_yaal(ns, fn):
     from yaal import Yaal
 
-    y = Yaal(ns.api, debug=ns.debug)
+    y = Yaal(ns.api, debug=ns.debug, precompiled=ns.precompiled)
     if ns.db:
         y.setup_data_provider(ns.provider, ns.db)
         return fn(y)
@@ -175,6 +190,16 @@ def _with_yaal(ns, fn):
 def cmd_list(ns):
     for path in list_descriptors(Path(ns.api)):
         print(path)
+    return 0
+
+
+def cmd_compile(ns):
+    from yaal_precompile import compile_api
+
+    written = compile_api(ns.api, ns.out)
+    for rel in written:
+        print(rel)
+    print("wrote %d descriptor(s) to %s" % (len(written), ns.out), file=sys.stderr)
     return 0
 
 
@@ -209,6 +234,7 @@ def main(argv=None):
     ns = parser.parse_args(argv)
     handlers = {
         "list": cmd_list,
+        "compile": cmd_compile,
         "query": cmd_query,
         "explain": cmd_explain,
     }

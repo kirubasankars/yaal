@@ -45,7 +45,7 @@ public static class JsonUtil
         if (value is JsonElement je)
         {
             if (je.ValueKind == JsonValueKind.Object)
-                return JsonSerializer.Deserialize<Dictionary<string, object?>>(je.GetRawText());
+                return (Dictionary<string, object?>?)FromJsonElement(je);
         }
         return ObjectToDictionary(value);
     }

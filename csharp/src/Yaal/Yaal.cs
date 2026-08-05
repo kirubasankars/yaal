@@ -17,11 +17,17 @@ public sealed class Yaal
     private readonly Dictionary<string, IDataProviderContextManager> _dataProviders = new();
     private readonly Dictionary<string, string> _dataProviderSchemes = new();
     private readonly bool _debug;
+    private readonly string? _precompiled;
 
-    public Yaal(string rootPath, IContentReader? contentReader = null, bool debug = false)
+    public Yaal(
+        string rootPath,
+        IContentReader? contentReader = null,
+        bool debug = false,
+        string? precompiled = null)
     {
         _rootPath = rootPath;
         _debug = debug;
+        _precompiled = precompiled;
         _contentReader = contentReader ?? new FileContentReader(_rootPath);
     }
 
@@ -157,7 +163,13 @@ public sealed class Yaal
         if (!_debug && _descriptors.TryGetValue(cacheKey, out var cached))
             return cached;
 
-        var descriptor = CreateDescriptor(descriptorPath, outputMapper);
+        // debug=true forces live SQL/YAML; otherwise prefer precompiled artifacts.
+        Branch descriptor;
+        if (!string.IsNullOrEmpty(_precompiled) && !_debug)
+            descriptor = Precompiled.LoadFromDirectory(_precompiled, descriptorPath, outputMapper);
+        else
+            descriptor = CreateDescriptor(descriptorPath, outputMapper);
+
         _descriptors[cacheKey] = descriptor;
         return descriptor;
     }

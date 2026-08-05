@@ -189,6 +189,22 @@ y.query("user/get", args={"id": 1}, output_mapper="summary")
 
 There is no process-wide or cross-query result cache. `clear_cache()` only clears cached descriptors (reload SQL/YAML).
 
+## Precompiled descriptors
+
+Compile SQL/YAML once to JSON (token twigs preserved), then load at runtime without re-lexing sources:
+
+```bash
+yaal --api path/to/api compile --out path/to/precompiled
+```
+
+```python
+y = Yaal("path/to/api", precompiled="path/to/precompiled")
+y.setup_data_provider("db", "sqlite3:////tmp/app.db")
+y.query("user/get", args={"id": 1})
+```
+
+`debug=True` forces live SQL/YAML and ignores `precompiled`. Artifacts are one JSON file per path (`user/get.json`; alternate mappers as `user/get#summary.json`). Optional-filter SQL elision still runs per request.
+
 ## Performance notes
 
 - Providers drain cursors with `fetchmany` into a per-branch row list; nesting (`partition_by`) still buffers that branch in memory.
@@ -225,7 +241,7 @@ Avoid dialect-only keywords if both ports must accept the same fixtures.
 ```python
 from yaal import Yaal
 
-y = Yaal("path/to/api", debug=True)
+y = Yaal("path/to/api", debug=True)  # or precompiled="path/to/precompiled"
 y.setup_data_provider("db", "sqlite3:////tmp/app.db")
 
 y.query("user/get", args={"id": 1})
