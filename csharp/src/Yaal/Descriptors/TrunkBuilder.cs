@@ -185,10 +185,14 @@ public static class TrunkBuilder
         Dictionary<string, object?>? outputProperties = null;
         if (outputModel != null)
         {
-            branch.OutputType = outputModel.TryGetValue("type", out var ot) ? ot?.ToString() ?? "array" : "array";
+            outputModel = OutputSchema.Normalize(outputModel)!;
 
             if (outputModel.TryGetValue("properties", out var op) && op is Dictionary<string, object?> opDict)
                 outputProperties = opDict;
+
+            branch.OutputType = outputModel.TryGetValue("type", out var ot) && ot != null
+                ? ot.ToString() ?? "array"
+                : "array";
 
             if (outputModel.TryGetValue("parent_rows", out var pr) && pr is bool prBool)
                 branch.UseParentRows = prBool;

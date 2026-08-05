@@ -237,17 +237,20 @@ def _execute_branch(branch, is_trunk, data_providers, context, parent_rows):
 
 
 def _output_mapper(output_type, output_modal, branches, result):
+    from yaal_output_schema import normalize_output_model
+
     mapped_result = []
 
     _type_str, _mapped_str = "type", "mapped"
 
-    output_model = output_modal
+    output_model = normalize_output_model(output_modal) if output_modal else output_modal
     if output_model and "properties" in output_model:
         output_properties = output_model["properties"]
     else:
         output_properties = None
 
-    output_type = output_type
+    if output_model and "type" in output_model:
+        output_type = output_model["type"]
 
     for row in result:
         mapped_obj = {}
@@ -276,7 +279,6 @@ def _output_mapper(output_type, output_modal, branches, result):
         if output_properties:
             prop_count = 0
             for k, v in output_properties.items():
-
                 _mapped, _type = None, None
 
                 if type(v) == str:

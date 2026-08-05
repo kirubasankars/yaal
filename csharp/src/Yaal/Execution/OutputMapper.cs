@@ -16,6 +16,14 @@ public static class OutputMapper
     {
         var mappedResult = new List<object?>();
 
+        outputModel = OutputSchema.Normalize(outputModel);
+        if (outputModel != null &&
+            outputModel.TryGetValue("type", out var modelType) &&
+            modelType != null)
+        {
+            outputType = modelType.ToString() ?? outputType;
+        }
+
         Dictionary<string, object?>? outputProperties = null;
         if (outputModel != null &&
             outputModel.TryGetValue("properties", out var props) &&

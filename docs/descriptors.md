@@ -87,8 +87,24 @@ yaal explain user/list
 
 ## Output shaping
 
+Root `type` is `object` (one result) or `array` (list). Fields are a flat map under `properties`. Named nested branches use their own `type` + `properties`.
+
 ```yaml
-type: object                 # or array
+type: array
+partition_by: id
+properties:
+  id:
+    mapped: id
+  details:
+    type: object
+    parent_rows: true
+    properties:
+      name:
+        mapped: name
+```
+
+```yaml
+type: object
 partition_by: user_id
 properties:
   id:
@@ -96,18 +112,20 @@ properties:
   roles:
     type: array
     partition_by: role_id
-    parent_rows: true        # nest from parent rows; no child SQL
+    parent_rows: true
     properties:
       id:
         mapped: role_id
 ```
+
+Invalid: bare `type: object` / `type: array` under `properties` (including a nested item wrapper). Root `type` already sets array/object. A JSON field named `type` uses `type: { mapped: col }`.
 
 | Key | Role |
 |---|---|
 | `mapped` | SQL column → JSON field |
 | `partition_by` | Collapse join fan-out |
 | `parent_rows` | Nest from parent rows (parent must set `partition_by`) |
-| root `type` | `object` → one object; `array` → list |
+| root / branch `type` | `object` → one object; `array` → list |
 
 ## Multi-twig writes
 

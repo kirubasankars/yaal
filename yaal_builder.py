@@ -59,6 +59,8 @@ def _build_trunk_map_by_files(name_list):
 
 
 def _build_branch(branch, map_by_files, content_reader, payload_model, output_model, model, bag):
+    from yaal_output_schema import normalize_output_model
+
     _properties_str, _type_str, _partition_by_str = "properties", "type", "partition_by"
     _output_type_str, _use_parent_rows_str = "output_type", "use_parent_rows"
     _parameters_str, _twig_str, _parent_rows_str = "parameters", "twig", "parent_rows"
@@ -75,13 +77,14 @@ def _build_branch(branch, map_by_files, content_reader, payload_model, output_mo
 
     output_properties = None
     if output_model:
+        output_model = normalize_output_model(output_model)
+        if _properties_str in output_model:
+            output_properties = output_model[_properties_str]
+
         if _type_str in output_model:
             branch[_output_type_str] = output_model[_type_str]
         else:
             branch[_output_type_str] = "array"
-
-        if _properties_str in output_model:
-            output_properties = output_model[_properties_str]
 
         if _parent_rows_str in output_model:
             branch[_use_parent_rows_str] = output_model[_parent_rows_str]
