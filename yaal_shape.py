@@ -1,3 +1,4 @@
+import copy
 import json
 
 import yaal_const
@@ -7,24 +8,50 @@ def _to_lower_keys(obj):
     if obj:
         if type(obj) == dict:
             return {k.lower(): v for k, v in obj.items()}
-        elif type(obj) == list and type(obj[0]) == dict:
+        elif type(obj) == list and len(obj) > 0 and type(obj[0]) == dict:
             return [_to_lower_keys(item) for item in obj]
     return obj
 
 
 def _to_lower_keys_deep(obj):
-    if obj:
-        if type(obj) == dict:
-            o = {}
-            for k, v in obj.items():
-                if type(v) == list or type(v) == dict:
-                    o[k.lower()] = _to_lower_keys(v)
-                else:
-                    o[k.lower()] = v
-            return o
-        elif type(obj) == list and type(obj[0]) == dict:
-            return [_to_lower_keys(item) for item in obj]
+    """Normalize JSON-schema-like dicts: lowercase keys, property names, and required entries."""
+    if type(obj) == dict:
+        result = {}
+        for k, v in obj.items():
+            key = k.lower() if isinstance(k, str) else k
+            if key == "properties" and type(v) == dict:
+                result[key] = {
+                    (pk.lower() if isinstance(pk, str) else pk): _to_lower_keys_deep(pv)
+                    for pk, pv in v.items()
+                }
+            elif key == "required" and type(v) == list:
+                result[key] = [x.lower() if isinstance(x, str) else x for x in v]
+            elif type(v) == dict:
+                result[key] = _to_lower_keys_deep(v)
+            elif type(v) == list:
+                result[key] = [
+                    _to_lower_keys_deep(item) if type(item) == dict else item for item in v
+                ]
+            else:
+                result[key] = v
+        return result
+    if type(obj) == list:
+        return [_to_lower_keys_deep(item) if type(item) == dict else item for item in obj]
     return obj
+
+
+def _coerce_boolean(value):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)) and value in (0, 1):
+        return bool(value)
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in ("true", "1", "yes", "y", "on"):
+            return True
+        if lowered in ("false", "0", "no", "n", "off"):
+            return False
+    raise ValueError("value expected as boolean, given " + str(type(value)))
 
 
 class Shape:
@@ -39,13 +66,11 @@ class Shape:
         self._validator = validator
 
         self._parent = parent_shape
-        self._data = data or {}
-        self._o_data = data or {}
-
         self._extras = extras
 
         # TODO: CRITICAL implement no properties start with $ is allowed
         if data is not None \
+                and type(data) == dict \
                 and (yaal_const.PARENT in data or yaal_const.LENGTH in data or
                      yaal_const.JSON in data or yaal_const.INDEX in data):
             raise ValueError("$parent or $length is reversed keywords. You can't use them.")
@@ -56,21 +81,32 @@ class Shape:
         if parent_shape is not None and type(parent_shape) != Shape:
             raise TypeError("$parent should be type shape.")
 
-        schema = schema or {"type":"object"}
+        schema = schema or {"type": "object"}
 
         if yaal_const.PROPERTIES in schema:
             self._input_properties = schema[yaal_const.PROPERTIES]
         self._input_properties = self._input_properties or {}
 
         _type = schema[yaal_const.TYPE]
+        if data is None:
+            # Keep _data and _o_data as distinct objects (set_prop mutates both).
+            if _type == yaal_const.ARRAY:
+                self._data = []
+                self._o_data = []
+            else:
+                self._data = {}
+                self._o_data = {}
+        else:
+            self._data = data
+            self._o_data = data
+
         if _type == yaal_const.ARRAY:
             self._array = True
-            if data:
-                if type(data) != list:
-                    raise TypeError("input expected as array. object is given.")
+            if data is not None and type(data) != list:
+                raise TypeError("input expected as array. object is given.")
         else:
             self._object = True
-            if data:
+            if data is not None:
                 if type(data) == dict:
                     self._data = _to_lower_keys(data)
                 else:
@@ -78,21 +114,21 @@ class Shape:
 
         if self._array:
             shapes = []
-            schema[yaal_const.TYPE] = yaal_const.OBJECT
+            item_schema = copy.deepcopy(schema)
+            item_schema[yaal_const.TYPE] = yaal_const.OBJECT
             idx = 0
             for item in self._data:
-                s = Shape(schema=schema, data=item, parent_shape=self, extras=extras)
+                s = Shape(schema=item_schema, data=item, parent_shape=self, extras=extras)
                 s._index = idx
                 shapes.append(s)
                 idx = idx + 1
-            schema[yaal_const.TYPE] = yaal_const.ARRAY
         else:
             shapes = {}
             for k, v in self._input_properties.items():
                 k = k.lower()
                 if type(v) == dict:
                     _type_value = v.get(yaal_const.TYPE)
-                    if _type_value and _type_value == yaal_const.ARRAY or _type_value == yaal_const.OBJECT:
+                    if _type_value and (_type_value == yaal_const.ARRAY or _type_value == yaal_const.OBJECT):
                         shapes[k] = Shape(schema=v, data=self._data.get(k), parent_shape=self, extras=extras)
 
         self._shapes = shapes
@@ -111,7 +147,7 @@ class Shape:
             if self._array:
                 try:
                     idx = int(path[1:])
-                except:
+                except Exception:
                     raise KeyError("array path excepted as $index.")
                 return shapes[idx].get_prop(remaining_path)
 
@@ -146,7 +182,7 @@ class Shape:
             if self._array:
                 try:
                     idx = int(prop[1:])
-                except:
+                except Exception:
                     raise KeyError("array path excepted as $index.")
                 return shapes[idx]
 
@@ -175,7 +211,7 @@ class Shape:
             if self._array:
                 try:
                     idx = int(path[1:])
-                except:
+                except Exception:
                     raise KeyError("array path excepted as $index.")
 
                 return shapes[idx].set_prop(remaining_path, value)
@@ -232,7 +268,7 @@ class Shape:
                     if parameter_type == "float" and not isinstance(value, float):
                         return float(value)
                     if parameter_type == "boolean" and not isinstance(value, bool):
-                        return bool(value)
+                        return _coerce_boolean(value)
             except ValueError:
                 raise ValueError("value expected as " + parameter_type + ", given " + str(type(value)))
         return value
