@@ -6,10 +6,24 @@ Yaal is a SQL→JSON framework. You author operations as SQL + YAML descriptor f
 
 ```bash
 make install
-make example
+make example                          # demo: user/get id=1
+make yaal ARGS='explain user/get --arg id=1'
+make yaal ARGS='list'
 ```
 
-`make example` builds a temp SQLite DB, runs the fixture `user/get` with `args={"id": 1}`, and prints nested JSON.
+`make example` (and `yaal_cli.py` when `--db` is omitted) builds a temp SQLite DB from `docker/sqlite/schema.sql`, runs the fixture `user/get` with `args={"id": 1}`, and prints nested JSON.
+
+### CLI
+
+```bash
+# zero-config demo (temp SQLite + tests/fixtures/api)
+python yaal_cli.py query user/get --arg id=1
+python yaal_cli.py explain user/get --arg id=1
+python yaal_cli.py list
+
+# your own descriptors / database
+python yaal_cli.py query orders/list --api ./my-api --db 'sqlite3:////tmp/app.db' --args '{"status":"open"}'
+```
 
 ### Programmatic usage
 
@@ -38,7 +52,8 @@ for twig in y.explain_sql("user/get", args={"id": 1}):
 | `make test` | Unit tests |
 | `make test-integration` | Start Docker Postgres/MySQL/ClickHouse and run integration tests |
 | `make test-all` | Unit + integration |
-| `make example` | Run `examples/run_user_get.py` |
+| `make example` | Demo via `yaal_cli.py query user/get --arg id=1` |
+| `make yaal ARGS='...'` | Pass-through to `yaal_cli.py` (`query` / `explain` / `list`) |
 | `make integration-up` / `integration-down` | Manage compose DBs |
 
 SQLite-only usage does **not** need Docker. Compose is only for Postgres/MySQL/ClickHouse integration tests.

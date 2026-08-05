@@ -4,7 +4,7 @@ PIP := $(VENV)/bin/pip
 PY := $(VENV)/bin/python
 COMPOSE ?= docker compose
 
-.PHONY: help venv install test test-unit test-integration test-all example \
+.PHONY: help venv install test test-unit test-integration test-all example yaal \
 	integration-up integration-down integration-ps clean \
 	test-csharp test-csharp-integration example-csharp
 
@@ -14,7 +14,8 @@ help:
 	@echo "  make test               Run unit tests"
 	@echo "  make test-integration   Start Docker DBs (Postgres/MySQL/ClickHouse) and run integration tests"
 	@echo "  make test-all           Unit + integration tests"
-	@echo "  make example            Run examples/run_user_get.py"
+	@echo "  make example            Demo: yaal_cli.py query user/get --arg id=1"
+	@echo "  make yaal ARGS='...'    Run yaal_cli.py (query / explain / list)"
 	@echo "  make test-csharp        Run .NET tests in sdk container (SQLite / unit)"
 	@echo "  make test-csharp-integration  Compose DBs + .NET tests in sdk container"
 	@echo "  make example-csharp     Run csharp example in sdk container"
@@ -49,7 +50,10 @@ test-integration: integration-up
 test-all: test-unit test-integration
 
 example:
-	$(PY) examples/run_user_get.py
+	$(PY) yaal_cli.py query user/get --arg id=1
+
+yaal:
+	$(PY) yaal_cli.py $(ARGS)
 
 # .NET tests always run in mcr.microsoft.com/dotnet/sdk:8.0 (no local SDK needed).
 test-csharp:
