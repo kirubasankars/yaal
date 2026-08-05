@@ -1,0 +1,7 @@
+args:
+  type: object
+  properties:
+    page:
+      type: integer
+    page_size:
+      type: integer

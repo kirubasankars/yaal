@@ -17,12 +17,12 @@ EXP_FIXTURE_API := tests/fixtures/api
 
 help:
 	@echo "Targets:"
-	@echo "  make install            Create venv and install dependencies"
+	@echo "  make install            Create venv and pip install -e . (editable)"
 	@echo "  make test               Run unit tests"
 	@echo "  make test-integration   Start Docker DBs (Postgres/MySQL/ClickHouse) and run integration tests"
 	@echo "  make test-all           Unit + integration tests"
-	@echo "  make example            Demo: yaal_cli.py query user/get --arg id=1"
-	@echo "  make yaal ARGS='...'    Run yaal_cli.py (query / explain / list)"
+	@echo "  make example            Demo: yaal query user/get --arg id=1"
+	@echo "  make yaal ARGS='...'    Run yaal CLI (query / explain / list)"
 	@echo "  make experiment         FS+SQLite sandbox (init if needed); ARGS defaults to query user/get"
 	@echo "  make experiment-init    Create $(EXP_DIR)/api + seed $(EXP_DB)"
 	@echo "  make experiment-reset   Reseed $(EXP_DB) only (keep API edits)"
@@ -39,7 +39,7 @@ venv:
 	$(PIP) install --upgrade pip
 
 install: venv
-	$(PIP) install -r requirements.txt
+	$(PIP) install -e .
 
 test: test-unit
 
@@ -61,10 +61,10 @@ test-integration: integration-up
 test-all: test-unit test-integration
 
 example:
-	$(PY) yaal_cli.py query user/get --arg id=1
+	$(PY) -m yaal_cli query user/get --arg id=1
 
 yaal:
-	$(PY) yaal_cli.py $(ARGS)
+	$(PY) -m yaal_cli $(ARGS)
 
 # Local FS descriptor tree + persistent SQLite for editing/experiments.
 define seed_experiment_db
@@ -89,7 +89,7 @@ experiment-clean:
 
 experiment:
 	@if [ ! -d "$(EXP_API)" ] || [ ! -f "$(EXP_DB)" ]; then $(MAKE) experiment-init; fi
-	$(PY) yaal_cli.py --api $(EXP_API) --db '$(EXP_DB_URL)' --debug $(if $(ARGS),$(ARGS),query user/get --arg id=1)
+	$(PY) -m yaal_cli --api $(EXP_API) --db '$(EXP_DB_URL)' --debug $(if $(ARGS),$(ARGS),query user/get --arg id=1)
 
 # .NET tests always run in mcr.microsoft.com/dotnet/sdk:8.0 (no local SDK needed).
 test-csharp:

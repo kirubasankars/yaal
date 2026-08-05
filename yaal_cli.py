@@ -92,7 +92,7 @@ def _demo_db_url(schema_path: Path):
 
 def _build_parser():
     parser = argparse.ArgumentParser(
-        prog="yaal_cli.py",
+        prog="yaal",
         description="Query, explain, and list Yaal SQL→JSON descriptors.",
     )
     parser.add_argument(

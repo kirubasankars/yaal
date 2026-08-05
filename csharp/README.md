@@ -2,6 +2,10 @@
 
 C# port of the Yaal SQL→JSON library. Same descriptor files, optional-filter SQL DSL, nested JSON shaping, and multi-engine providers.
 
+Package metadata: `Yaal` `0.1.0` (MIT). Add a project reference to [`src/Yaal/Yaal.csproj`](src/Yaal/Yaal.csproj); not published to NuGet yet.
+
+Descriptor cookbook: [`../docs/descriptors.md`](../docs/descriptors.md).
+
 ## Requirements
 
 - Docker (tests run in `mcr.microsoft.com/dotnet/sdk:8.0` — no local SDK required)
@@ -20,6 +24,7 @@ With a local .NET 8 SDK you can still run directly:
 
 ```bash
 cd csharp && dotnet test && dotnet run --project examples/Yaal.Example
+dotnet pack src/Yaal/Yaal.csproj -c Release
 ```
 
 ### Programmatic usage
@@ -30,12 +35,13 @@ y.SetupDataProvider("db", "sqlite3:////tmp/app.db");
 
 var result = y.Query("user/get", args: new { id = 1 });
 string json = y.QueryJson("user/get", args: new { id = 1 });
+var page = y.Query("user/page", args: new { page = 1, page_size = 10 });
 
 foreach (var twig in y.ExplainSql("user/get", args: new { id = 1 }))
     Console.WriteLine(twig["sql"]);
 ```
 
-Descriptors are shared with the Python library under [`../tests/fixtures/api/`](../tests/fixtures/api/).
+Descriptors are shared with the Python library under [`../tests/fixtures/api/`](../tests/fixtures/api/) (`user/get`, `user/list`, `user/page`, `user/create`, plus `output_mapper: "cached"`).
 
 ## Database URLs
 

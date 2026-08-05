@@ -4,6 +4,15 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <PackageId>Yaal</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Kiruba Sankar Swaminathan</Authors>
+    <Description>SQL→JSON library: descriptor-driven queries with nested output shaping.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/kirubasankars/yaal</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/kirubasankars/yaal</RepositoryUrl>
+    <PackageTags>sql;json;database;yaml;descriptors</PackageTags>
+    <IsPackable>true</IsPackable>
   </PropertyGroup>
 
   <ItemGroup>

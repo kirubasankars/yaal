@@ -1,0 +1,28 @@
+type: object
+properties:
+  paging:
+    type: object
+    properties:
+      page:
+        mapped: page
+      page_size:
+        mapped: page_size
+      total_count:
+        mapped: total_count
+  data:
+    type: array
+    partition_by: user_id
+    properties:
+      id:
+        mapped: user_id
+      name:
+        mapped: user_name
+      roles:
+        type: array
+        partition_by: role_id
+        parent_rows: true
+        properties:
+          id:
+            mapped: role_id
+          name:
+            mapped: role_name

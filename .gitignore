@@ -11,3 +11,6 @@ csharp/**/obj/
 *.suo
 .vs/
 experiment/
+*.egg-info/
+dist/
+build/

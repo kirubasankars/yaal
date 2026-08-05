@@ -66,4 +66,57 @@ public class SqliteIntegrationTests : IDisposable
         json.Should().StartWith("{");
         json.Should().Contain("admin");
     }
+
+    [Fact]
+    public void User_get_cached_output_mapper()
+    {
+        var result = _yaal.Query("user/get", args: new { id = 1 }, outputMapper: "cached");
+        var dict = (Dictionary<string, object?>)result!;
+        dict["id"].Should().Be(1L);
+        dict["name"]!.ToString().Should().Be("admin");
+        var roles = ((System.Collections.IEnumerable)dict["roles"]!).Cast<object>().ToList();
+        roles.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void User_page_branches()
+    {
+        var result = _yaal.Query("user/page", args: new { page = 1, page_size = 10 });
+        var dict = (Dictionary<string, object?>)result!;
+        var paging = (Dictionary<string, object?>)dict["paging"]!;
+        AsInt64(paging["page"]).Should().Be(1);
+        AsInt64(paging["page_size"]).Should().Be(10);
+        AsInt64(paging["total_count"]).Should().Be(2);
+
+        var data = ((System.Collections.IEnumerable)dict["data"]!).Cast<object>().ToList();
+        data.Should().HaveCount(2);
+        var admin = (Dictionary<string, object?>)data[0];
+        admin["name"]!.ToString().Should().Be("admin");
+        var roles = ((System.Collections.IEnumerable)admin["roles"]!).Cast<object>().ToList();
+        roles.Should().HaveCount(2);
+    }
+
+    private static long AsInt64(object? value) => value switch
+    {
+        long l => l,
+        int i => i,
+        short s => s,
+        byte b => b,
+        System.Text.Json.JsonElement je when je.TryGetInt64(out var n) => n,
+        _ => Convert.ToInt64(Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture)),
+    };
+
+    [Fact]
+    public void User_create_multi_twig()
+    {
+        var result = _yaal.Query("user/create", payload: new { id = 3, name = "newbie" });
+        var dict = (Dictionary<string, object?>)result!;
+        dict["id"].Should().Be(3L);
+        dict["name"]!.ToString().Should().Be("newbie");
+        var roles = ((System.Collections.IEnumerable)dict["roles"]!).Cast<object>().ToList();
+        roles.Should().HaveCount(1);
+
+        var loaded = (Dictionary<string, object?>)_yaal.Query("user/get", args: new { id = 3 })!;
+        loaded["name"]!.ToString().Should().Be("newbie");
+    }
 }

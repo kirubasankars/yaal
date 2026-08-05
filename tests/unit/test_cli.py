@@ -24,6 +24,8 @@ class TestCli(unittest.TestCase):
         lines = out.splitlines()
         self.assertIn("user/get", lines)
         self.assertIn("user/list", lines)
+        self.assertIn("user/page", lines)
+        self.assertIn("user/create", lines)
 
     def test_query_user_get(self):
         code, out = self._run([

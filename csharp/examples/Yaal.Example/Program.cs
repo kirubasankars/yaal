@@ -20,10 +20,16 @@ try
     var y = new Yaal.Yaal(apiPath, debug: true);
     y.SetupDataProvider("db", "sqlite3:///" + dbPath);
 
-    var result = y.Query("user/get", args: new { id = 1 });
-    Console.WriteLine(JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }));
+    var opts = new JsonSerializerOptions { WriteIndented = true };
 
-    Console.WriteLine("\n-- explain_sql (args.id present) --");
+    Console.WriteLine("-- user/get --");
+    Console.WriteLine(JsonSerializer.Serialize(y.Query("user/get", args: new { id = 1 }), opts));
+
+    Console.WriteLine("\n-- user/page --");
+    Console.WriteLine(JsonSerializer.Serialize(
+        y.Query("user/page", args: new { page = 1, page_size = 10 }), opts));
+
+    Console.WriteLine("\n-- explain_sql user/get (args.id present) --");
     foreach (var twig in y.ExplainSql("user/get", args: new { id = 1 }))
     {
         Console.WriteLine(twig["sql"]!.ToString()!.Trim());

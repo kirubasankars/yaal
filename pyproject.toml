@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "yaal"
+version = "0.1.0"
+description = "SQL→JSON framework: descriptor-driven queries with nested output shaping"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.9"
+authors = [{ name = "Kiruba Sankar Swaminathan" }]
+keywords = ["sql", "json", "database", "yaml", "descriptors"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Database",
+]
+dependencies = [
+    "jsonschema>=4.0,<5",
+    "PyYAML>=6.0,<7",
+    "psycopg2-binary>=2.9,<3",
+    "mysql-connector-python>=8.0,<10",
+    "clickhouse-driver>=0.2,<1",
+]
+
+[project.optional-dependencies]
+dev = []
+
+[project.scripts]
+yaal = "yaal_cli:main"
+
+[project.urls]
+Homepage = "https://github.com/kirubasankars/yaal"
+Documentation = "https://github.com/kirubasankars/yaal/blob/main/docs/descriptors.md"
+
+[tool.setuptools]
+py-modules = [
+    "yaal",
+    "yaal_builder",
+    "yaal_cli",
+    "yaal_clickhouse",
+    "yaal_const",
+    "yaal_errors",
+    "yaal_executor",
+    "yaal_mysql",
+    "yaal_parser",
+    "yaal_postgres",
+    "yaal_provider",
+    "yaal_shape",
+    "yaal_sqlite",
+]
