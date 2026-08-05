@@ -5,8 +5,6 @@ FORMAT = "format"
 OBJECT = "object"
 ARRAY = "array"
 PARAMS = "params"
-COOKIE = "cookie"
-HEADER = "header"
 
 LENGTH = "$length"
 PARENT = "$parent"

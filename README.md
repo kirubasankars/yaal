@@ -1,6 +1,6 @@
 # Yaal
 
-Yaal is a SQL→JSON framework. You author endpoints as SQL + YAML descriptor files; Yaal binds parameters, runs queries, and reshapes flat rows into nested JSON.
+Yaal is a SQL→JSON framework. You author operations as SQL + YAML descriptor files; Yaal binds parameters, runs queries, and reshapes flat rows into nested JSON.
 
 ## Quick start
 
@@ -9,7 +9,7 @@ make install
 make example
 ```
 
-`make example` builds a temp SQLite DB, runs the fixture `user/1` get, and prints nested JSON.
+`make example` builds a temp SQLite DB, runs the fixture `user/get` with `args={"id": 1}`, and prints nested JSON.
 
 ### Programmatic usage
 
@@ -19,14 +19,14 @@ from yaal import Yaal
 y = Yaal("tests/fixtures/api", debug=True)
 y.setup_data_provider("db", "sqlite3:////tmp/app.db")
 
-result = y.execute("user/1", "get")
+result = y.query("user/get", args={"id": 1})
 # {'id': 1, 'name': 'admin', 'roles': [{'id': 1, 'name': 'Administrator'}, ...]}
 ```
 
 Preview compiled SQL (after null-filter elision):
 
 ```python
-for twig in y.explain_sql("user/1", "get"):
+for twig in y.explain_sql("user/get", args={"id": 1}):
     print(twig["sql"], twig["parameters"])
 ```
 
@@ -47,44 +47,41 @@ SQLite-only usage does **not** need Docker. Compose is only for Postgres/MySQL i
 
 ```text
 api/
-  routes.yaml
   user/
-    get/
-      $.sql            # trunk query
-      $.input.yaml     # input model (path/query/payload/…)
-      $.output.yaml    # output shape (mapped / partition_by)
+    get/                 # operation folder (name is yours; not an HTTP verb)
+      $.sql              # trunk query
+      $.input.yaml       # input model (args / payload)
+      $.output.yaml      # output shape (mapped / partition_by)
 ```
 
-Example route ([`tests/fixtures/api/routes.yaml`](tests/fixtures/api/routes.yaml)):
-
-```yaml
--
-  descriptor: user
-  route: user/{id}
-```
-
-HTTP method is the **directory** name (`user/get/`), not the SQL filename.
+Call by descriptor path: `y.query("user/get", args={"id": 1})`.
 
 ### Parameters
 
-Declare types at the top of the SQL file, then bind with `{{...}}`:
+Declare types at the top of the SQL file, then bind with `{{...}}`. Use `$args` for operation keys and the payload root for body fields:
 
 ```sql
---($path.id integer)--
+--($args.id integer)--
 
 select *
 from users u
 where 1 = 1
-  and ({{$path.id}} is null or u.user_id = {{$path.id}})
+  and optional(u.user_id = {{$args.id}})
 ```
 
-When a parameter is null, Yaal elides optional groups that match:
+When a parameter is null, Yaal elides optional groups. Long form still works:
 
 ```sql
 ({{param}} is null or col = {{param}})
 ```
 
 including a preceding `AND`/`OR`. If that group is the only predicate, it becomes `1 = 1`.
+
+Shorter sugar (param once):
+
+```sql
+optional(col = {{param}})
+```
 
 ### Output shaping
 

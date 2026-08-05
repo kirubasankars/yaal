@@ -22,7 +22,7 @@ class TestDxApi(unittest.TestCase):
                 con.executescript(SQLITE_SCHEMA.read_text())
             y = Yaal(str(FIXTURE_API), debug=True)
             y.setup_data_provider("db", "sqlite3:///%s" % path)
-            result = y.query("user/1", "get")
+            result = y.query("user/get", args={"id": 1})
             self.assertEqual(result["id"], 1)
             self.assertEqual(result["name"], "admin")
             self.assertEqual(len(result["roles"]), 2)
@@ -37,24 +37,24 @@ class TestDxApi(unittest.TestCase):
                 con.executescript(SQLITE_SCHEMA.read_text())
             y = Yaal(str(FIXTURE_API), debug=True)
             y.setup_data_provider("db", "sqlite3:///%s" % path)
-            raw = y.query_json("user/1")
+            raw = y.query_json("user/get", args={"id": 1})
             self.assertIn('"id": 1', raw)
             self.assertIn('"name": "admin"', raw)
         finally:
             os.unlink(path)
 
-    def test_explain_sql_elides_null_path_id(self):
+    def test_explain_sql_elides_null_args_id(self):
         y = Yaal(str(FIXTURE_API), debug=True)
-        explained = y.explain_sql("user", "get", path_values={})
+        explained = y.explain_sql("user/get", args={})
         self.assertTrue(explained)
         sql = explained[0]["sql"]
         self.assertIn("u.active = 1", sql)
         self.assertNotIn("user_id = ?", sql)
         self.assertEqual(explained[0]["parameters"], [])
 
-    def test_explain_sql_binds_path_id(self):
+    def test_explain_sql_binds_args_id(self):
         y = Yaal(str(FIXTURE_API), debug=True)
-        explained = y.explain_sql("user/1", "get")
+        explained = y.explain_sql("user/get", args={"id": 1})
         self.assertTrue(explained)
         sql = explained[0]["sql"]
         self.assertIn("user_id = ?", sql)
