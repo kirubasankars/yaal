@@ -91,7 +91,8 @@ public static class TrunkBuilder
     {
         if (schema == null)
             return null;
-        // Use default dialect (2020-12). Fixture schemas are simple type/properties shapes.
+        // Json.Schema defaults to 2020-12. Python uses Draft4Validator. Keep input models to the
+        // common subset (type/properties/required) so both dialects accept the same fixtures.
         var copy = (Dictionary<string, object?>)JsonUtil.DeepCopy(schema)!;
         copy.Remove("$schema");
         var node = JsonUtil.ToJsonNode(copy);

@@ -417,6 +417,8 @@ def compile_sql(sql_stmt, nulls, char):
     tokens = []
     parameters = []
     group = None
+    # After skipping a non-null "{{p}} is null" marker, drop the following " or ".
+    skip_or_after_nullable = False
     for token in stmt:
         if token["type"] == "brace":
             if group is not None:
@@ -430,17 +432,28 @@ def compile_sql(sql_stmt, nulls, char):
                 if not _strip_preceding_connector(tokens):
                     tokens.append("1 = 1")
                 group = token["group"]
+                skip_or_after_nullable = False
                 continue
 
         if group is not None:
             continue
 
+        if skip_or_after_nullable:
+            value = token.get("value", "")
+            if _is_whitespace_sql_fragment(value):
+                continue
+            if token["type"] == "word" and value.strip().lower() == "or":
+                # Stay in skip mode to also drop whitespace after "or".
+                continue
+            skip_or_after_nullable = False
+
         if token["type"] == "parameter":
-            if "nullable" in token:
-                tokens.append("1 = 2")
-            else:
-                tokens.append(char)
-                parameters.append(parameters_meta[token["name"]])
+            if token.get("nullable"):
+                # Param is known non-null: drop "{{p}} is null or", keep the predicate.
+                skip_or_after_nullable = True
+                continue
+            tokens.append(char)
+            parameters.append(parameters_meta[token["name"]])
         else:
             tokens.append(token["value"])
 

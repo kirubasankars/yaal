@@ -16,24 +16,24 @@ public sealed class FileContentReader : IContentReader
 
     public FileContentReader(string rootPath)
     {
-        _rootPath = rootPath;
+        _rootPath = Path.GetFullPath(rootPath);
     }
 
     public string RootPath => _rootPath;
 
     public string? GetSql(string method, string path)
     {
-        var filePath = Path.Combine(_rootPath, path, method + ".sql");
+        var filePath = Resolve(path, method + ".sql");
         return Get(filePath);
     }
 
     public Dictionary<string, object?> GetConfig(string path, string? outputMapper)
     {
-        var inputPath = Path.Combine(_rootPath, path, "$.input");
+        var inputPath = Resolve(path, "$.input");
         var inputConfig = GetConfigFile(inputPath);
 
         var outputSuffix = string.IsNullOrEmpty(outputMapper) ? "" : "." + outputMapper;
-        var outputPath = Path.Combine(_rootPath, path, "$.output" + outputSuffix);
+        var outputPath = Resolve(path, "$.output" + outputSuffix);
         var outputConfig = GetConfigFile(outputPath);
 
         return new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
@@ -47,7 +47,7 @@ public sealed class FileContentReader : IContentReader
     {
         try
         {
-            var dir = Path.Combine(_rootPath, path);
+            var dir = Resolve(path);
             return Directory.GetFiles(dir)
                 .Select(Path.GetFileName)
                 .Where(f => f != null && f.EndsWith(".sql", StringComparison.OrdinalIgnoreCase))
@@ -58,6 +58,22 @@ public sealed class FileContentReader : IContentReader
         {
             return null;
         }
+    }
+
+    private string Resolve(params string[] parts)
+    {
+        var joined = Path.Combine(new[] { _rootPath }.Concat(parts).ToArray());
+        var candidate = Path.GetFullPath(joined);
+        var root = _rootPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (candidate.Equals(root, StringComparison.OrdinalIgnoreCase) ||
+            candidate.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
+            candidate.StartsWith(root + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        {
+            return candidate;
+        }
+
+        throw new PathEscapeException(
+            $"descriptor path resolves outside API root '{_rootPath}'");
     }
 
     private static Dictionary<string, object?>? GetConfigFile(string filePath)

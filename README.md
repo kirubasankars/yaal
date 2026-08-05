@@ -153,14 +153,19 @@ y.setup_data_provider("db", "sqlite3:////tmp/app.db")
 
 The default connection name used by SQL twigs is `"db"`.
 
+### Input validation dialect
+
+Python validates `$.input.yaml` with **JSON Schema Draft-4** (`jsonschema.Draft4Validator`). C# uses Json.Schema’s default **2020-12** dialect. Keep models to the common subset (`type` / `properties` / `required`) so both ports accept the same fixtures.
+
 ## Tests
 
 ```bash
 make test                 # tests/unit
 YAAL_INTEGRATION=1 make test-integration
+make test-csharp          # .NET unit tests (sdk container)
 ```
 
-Integration fixtures live under [`tests/fixtures/api/`](tests/fixtures/api/).
+CI (GitHub Actions) runs Python unit tests and .NET tests on every PR. Shared SQL compile goldens live under [`tests/fixtures/sql_compile/`](tests/fixtures/sql_compile/). Descriptor fixtures live under [`tests/fixtures/api/`](tests/fixtures/api/).
 
 ## C# (.NET 8)
 

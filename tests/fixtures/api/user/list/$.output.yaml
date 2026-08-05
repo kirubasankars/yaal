@@ -1,0 +1,9 @@
+type: array
+partition_by: user_id
+properties:
+  id:
+    mapped: user_id
+  name:
+    mapped: user_name
+  active:
+    mapped: active

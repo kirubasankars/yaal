@@ -4,8 +4,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from yaal import Yaal
-from yaal_errors import DescriptorNotFoundError, UnsupportedDatabaseUrlError, YaalError
+from yaal import Yaal, FileContentReader
+from yaal_errors import (
+    DescriptorNotFoundError,
+    PathEscapeError,
+    UnsupportedDatabaseUrlError,
+    YaalError,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURE_API = ROOT / "tests" / "fixtures" / "api"
@@ -86,6 +91,27 @@ class TestDxApi(unittest.TestCase):
         y = Yaal(str(FIXTURE_API), debug=True)
         with self.assertRaises(YaalError):
             y.get_data_provider("db")
+
+    def test_query_user_list(self):
+        fd, path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        try:
+            with sqlite3.connect(path) as con:
+                con.executescript(SQLITE_SCHEMA.read_text())
+            y = Yaal(str(FIXTURE_API), debug=True)
+            y.setup_data_provider("db", "sqlite3:///%s" % path)
+            result = y.query("user/list")
+            self.assertEqual(len(result), 2)
+            self.assertEqual(result[0]["name"], "admin")
+            active_only = y.query("user/list", args={"active": 1})
+            self.assertEqual(len(active_only), 2)
+        finally:
+            os.unlink(path)
+
+    def test_path_escape_rejected(self):
+        reader = FileContentReader(str(FIXTURE_API))
+        with self.assertRaises(PathEscapeError):
+            reader.get_sql("$", "../secrets")
 
 
 if __name__ == "__main__":

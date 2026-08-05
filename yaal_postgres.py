@@ -2,6 +2,8 @@ import psycopg2 as pg
 from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
 
+from yaal_provider import commit_then_close, rollback_then_close
+
 
 _CONNECT_QUERY_KEYS = (
     "sslmode",
@@ -47,35 +49,12 @@ class PostgresDataProvider:
     def end(self):
         conn = self._conn
         self._conn = None
-        if not conn:
-            return
-        try:
-            conn.commit()
-            self._pool.putconn(conn)
-        except Exception:
-            try:
-                conn.rollback()
-            except Exception:
-                pass
-            try:
-                self._pool.putconn(conn, close=True)
-            except Exception:
-                pass
-            raise
+        commit_then_close(conn, release=self._pool.putconn)
 
     def error(self):
         conn = self._conn
         self._conn = None
-        if not conn:
-            return
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-        try:
-            self._pool.putconn(conn, close=True)
-        except Exception:
-            pass
+        rollback_then_close(conn, release=self._pool.putconn)
 
     @staticmethod
     def get_value_converter(param_type, value):

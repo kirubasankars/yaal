@@ -43,6 +43,8 @@ public class ShapeTests
     {
         var act = () => new Shape(data: new Dictionary<string, object?> { ["$parent"] = 1 });
         act.Should().Throw<ArgumentException>();
+        var actFoo = () => new Shape(data: new Dictionary<string, object?> { ["$foo"] = 1 });
+        actFoo.Should().Throw<ArgumentException>();
     }
 
     [Fact]

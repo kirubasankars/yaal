@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: make install
+      - name: Unit tests
+        run: make test-unit
+
+  csharp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Restore
+        working-directory: csharp
+        run: dotnet restore Yaal.sln
+      - name: Unit tests
+        working-directory: csharp
+        # IntegrationTests Skip when YAAL_INTEGRATION is unset (Xunit.SkippableFact).
+        run: dotnet test Yaal.sln --no-restore

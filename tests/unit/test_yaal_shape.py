@@ -10,6 +10,7 @@ class TestShape(unittest.TestCase):
     def test_shape_no_reserved_keywords(self):
         with self.assertRaises(ValueError): Shape(data={"$parent": "1"})
         with self.assertRaises(ValueError): Shape(data={"$length": "1"})
+        with self.assertRaises(ValueError): Shape(data={"$foo": "1"})
 
     def test_shape_expected_types(self):
         with self.assertRaises(TypeError): Shape(schema={"type": "object"}, data=[{"number": 1}])

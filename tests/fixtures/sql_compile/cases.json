@@ -1,0 +1,125 @@
+[
+  {
+    "name": "null_strips_or_after_one_equals_one",
+    "sql": "--(param1 integer)--\nselect * from a where 1 = 1 or ({{param1}} is null or col1 = {{param1}})\n",
+    "nulls": [
+      "param1"
+    ],
+    "expect_sql": "select * from a where 1 = 1",
+    "expect_param_names": []
+  },
+  {
+    "name": "null_strips_and_after_predicate",
+    "sql": "--(p integer)--\nselect * from a where a = 1 and ({{p}} is null or col = {{p}})\n",
+    "nulls": [
+      "p"
+    ],
+    "expect_sql": "select * from a where a = 1",
+    "expect_param_names": []
+  },
+  {
+    "name": "sole_nullable_predicate_falls_back_to_one_equals_one",
+    "sql": "--(p integer)--\nselect * from a where ({{p}} is null or col = {{p}})\n",
+    "nulls": [
+      "p"
+    ],
+    "expect_sql": "select * from a where 1 = 1",
+    "expect_param_names": []
+  },
+  {
+    "name": "non_null_strips_is_null_or_prefix",
+    "sql": "--(param1 integer)--\nselect * from a where 1 = 1 or ({{param1}} is null or col1 = {{param1}})\n",
+    "nulls": [],
+    "expect_sql": "select * from a where 1 = 1 or (col1 = ?)",
+    "expect_param_names": [
+      "param1"
+    ]
+  },
+  {
+    "name": "elided_params_omitted_from_bind_list",
+    "sql": "--(a integer, b integer)--\nselect * from t where col = {{a}} and ({{b}} is null or other = {{b}})\n",
+    "nulls": [
+      "b"
+    ],
+    "expect_sql": "select * from t where col = ?",
+    "expect_param_names": [
+      "a"
+    ]
+  },
+  {
+    "name": "nullable_name_match_is_case_insensitive",
+    "sql": "--(Param1 integer)--\nselect * from a where 1 = 1 OR ({{Param1}} is null or col1 = {{Param1}})\n",
+    "nulls": [
+      "PARAM1"
+    ],
+    "expect_sql": "select * from a where 1 = 1",
+    "expect_param_names": [],
+    "expect_nullable_contains": [
+      "param1"
+    ]
+  },
+  {
+    "name": "args_id_style_filter_like_fixture",
+    "sql": "--($args.id integer)--\nselect * from users u\nwhere u.active = 1\n  and r.active = 1\n  and ({{$args.id}} is null or u.user_id = {{$args.id}})\norder by u.user_id\n",
+    "nulls": [
+      "$args.id"
+    ],
+    "expect_sql": "select * from users u where u.active = 1 and r.active = 1 order by u.user_id",
+    "expect_param_names": []
+  },
+  {
+    "name": "optional_sugar_null_strips_and",
+    "sql": "--(p integer)--\nselect * from a where a = 1 and optional(col = {{p}})\n",
+    "nulls": [
+      "p"
+    ],
+    "expect_sql": "select * from a where a = 1",
+    "expect_param_names": []
+  },
+  {
+    "name": "optional_sugar_non_null_keeps_binds",
+    "sql": "--(param1 integer)--\nselect * from a where 1 = 1 or optional(col1 = {{param1}})\n",
+    "nulls": [],
+    "expect_sql": "select * from a where 1 = 1 or (col1 = ?)",
+    "expect_param_names": [
+      "param1"
+    ]
+  },
+  {
+    "name": "optional_sugar_non_null_fixture_style",
+    "sql": "--($args.id integer)--\nselect * from users u\nwhere u.active = 1\n  and r.active = 1\n  and optional(u.user_id = {{$args.id}})\norder by u.user_id\n",
+    "nulls": [],
+    "expect_sql": "select * from users u where u.active = 1 and r.active = 1 and (u.user_id = ?) order by u.user_id",
+    "expect_param_names": [
+      "$args.id"
+    ]
+  },
+  {
+    "name": "optional_sugar_sole_predicate_falls_back",
+    "sql": "--(p integer)--\nselect * from a where optional(col = {{p}})\n",
+    "nulls": [
+      "p"
+    ],
+    "expect_sql": "select * from a where 1 = 1",
+    "expect_param_names": []
+  },
+  {
+    "name": "optional_sugar_args_id_fixture_style",
+    "sql": "--($args.id integer)--\nselect * from users u\nwhere u.active = 1\n  and r.active = 1\n  and optional(u.user_id = {{$args.id}})\norder by u.user_id\n",
+    "nulls": [
+      "$args.id"
+    ],
+    "expect_sql": "select * from users u where u.active = 1 and r.active = 1 order by u.user_id",
+    "expect_param_names": []
+  },
+  {
+    "name": "optional_sugar_requires_one_param",
+    "sql": "--(a integer)--\nselect * from a where optional(col = 1)\n",
+    "expect_error_contains": "exactly one"
+  },
+  {
+    "name": "optional_sugar_rejects_multiple_params",
+    "sql": "--(a integer, b integer)--\nselect * from a where optional(col = {{a}} and other = {{b}})\n",
+    "expect_error_contains": "exactly one"
+  }
+]

@@ -54,6 +54,10 @@ def _coerce_boolean(value):
     raise ValueError("value expected as boolean, given " + str(type(value)))
 
 
+# Framework-owned keys allowed in Shape data; user/schema properties may not start with $.
+_ALLOWED_DOLLAR_DATA_KEYS = frozenset({"$run_id"})
+
+
 class Shape:
 
     def __init__(self, schema=None, data=None, validator=None, parent_shape=None, extras=None):
@@ -68,12 +72,23 @@ class Shape:
         self._parent = parent_shape
         self._extras = extras
 
-        # TODO: CRITICAL implement no properties start with $ is allowed
-        if data is not None \
-                and type(data) == dict \
-                and (yaal_const.PARENT in data or yaal_const.LENGTH in data or
-                     yaal_const.JSON in data or yaal_const.INDEX in data):
-            raise ValueError("$parent or $length is reversed keywords. You can't use them.")
+        if schema and type(schema) == dict:
+            props = schema.get(yaal_const.PROPERTIES) or {}
+            if type(props) == dict:
+                for key in props:
+                    if isinstance(key, str) and key.startswith("$"):
+                        raise ValueError(
+                            "schema properties must not start with $. Reserved keyword %r is not allowed."
+                            % key
+                        )
+
+        if data is not None and type(data) == dict:
+            for key in data:
+                if isinstance(key, str) and key.startswith("$") and key not in _ALLOWED_DOLLAR_DATA_KEYS:
+                    raise ValueError(
+                        "properties must not start with $. Reserved keyword %r is not allowed."
+                        % key
+                    )
 
         if extras and len([e for e in extras if type(extras[e]) != Shape]):
             raise TypeError("$extra should be type shape.")

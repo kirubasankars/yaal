@@ -8,3 +8,7 @@ class DescriptorNotFoundError(YaalError):
 
 class UnsupportedDatabaseUrlError(YaalError):
     """Raised when a database URL scheme is missing or unsupported."""
+
+
+class PathEscapeError(YaalError):
+    """Raised when a descriptor path resolves outside the API root."""

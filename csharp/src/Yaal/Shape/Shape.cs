@@ -28,13 +28,33 @@ public sealed class Shape
         _parent = parentShape;
         _extras = extras;
 
-        if (data is Dictionary<string, object?> dataDict &&
-            (dataDict.ContainsKey(YaalConst.Parent) ||
-             dataDict.ContainsKey(YaalConst.Length) ||
-             dataDict.ContainsKey(YaalConst.Json) ||
-             dataDict.ContainsKey(YaalConst.Index)))
+        // Framework-owned keys allowed in Shape data; user/schema properties may not start with $.
+        var allowedDollarDataKeys = new HashSet<string>(StringComparer.Ordinal) { "$run_id" };
+
+        if (schema != null &&
+            schema.TryGetValue(YaalConst.Properties, out var schemaPropsObj) &&
+            schemaPropsObj is Dictionary<string, object?> schemaProps)
         {
-            throw new ArgumentException("$parent or $length is reversed keywords. You can't use them.");
+            foreach (var key in schemaProps.Keys)
+            {
+                if (key.StartsWith('$'))
+                {
+                    throw new ArgumentException(
+                        $"schema properties must not start with $. Reserved keyword '{key}' is not allowed.");
+                }
+            }
+        }
+
+        if (data is Dictionary<string, object?> dataDict)
+        {
+            foreach (var key in dataDict.Keys)
+            {
+                if (key.StartsWith('$') && !allowedDollarDataKeys.Contains(key))
+                {
+                    throw new ArgumentException(
+                        $"properties must not start with $. Reserved keyword '{key}' is not allowed.");
+                }
+            }
         }
 
         if (extras != null && extras.Values.Any(e => e is null))

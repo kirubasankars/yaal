@@ -106,4 +106,4 @@ clean: experiment-clean
 	rm -rf $(VENV) __pycache__ .pytest_cache
 	find . -type d -name '__pycache__' -prune -exec rm -rf {} +
 	find . -type f -name '*.py[co]' -delete
-	rm -rf csharp/**/bin csharp/**/obj
+	find csharp -type d \( -name bin -o -name obj \) -prune -exec rm -rf {} +

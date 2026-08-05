@@ -15,3 +15,8 @@ public class UnsupportedDatabaseUrlException : YaalException
 {
     public UnsupportedDatabaseUrlException(string message) : base(message) { }
 }
+
+public class PathEscapeException : YaalException
+{
+    public PathEscapeException(string message) : base(message) { }
+}

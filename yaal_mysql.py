@@ -1,6 +1,8 @@
 import mysql.connector
 import mysql.connector.pooling
 
+from yaal_provider import commit_then_close, rollback_then_close
+
 
 _CONNECT_QUERY_KEYS = (
     "charset",
@@ -55,35 +57,12 @@ class MySQLDataProvider:
     def end(self):
         conn = self._conn
         self._conn = None
-        if not conn:
-            return
-        try:
-            conn.commit()
-        except Exception:
-            try:
-                conn.rollback()
-            except Exception:
-                pass
-            try:
-                conn.close()
-            except Exception:
-                pass
-            raise
-        conn.close()
+        commit_then_close(conn)
 
     def error(self):
         conn = self._conn
         self._conn = None
-        if not conn:
-            return
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-        try:
-            conn.close()
-        except Exception:
-            pass
+        rollback_then_close(conn)
 
     @staticmethod
     def get_value_converter(param_type, value):

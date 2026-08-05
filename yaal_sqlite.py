@@ -1,6 +1,8 @@
 import sqlite3
 from urllib.parse import urlencode
 
+from yaal_provider import commit_then_close, rollback_then_close
+
 
 class SQLiteContextManager:
 
@@ -42,22 +44,12 @@ class SQLiteDataProvider:
     def end(self):
         con = self._con
         self._con = None
-        if not con:
-            return
-        try:
-            con.commit()
-        finally:
-            con.close()
+        commit_then_close(con)
 
     def error(self):
         con = self._con
         self._con = None
-        if not con:
-            return
-        try:
-            con.rollback()
-        finally:
-            con.close()
+        rollback_then_close(con)
 
     @staticmethod
     def get_value(parameter_type, value):

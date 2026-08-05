@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using FluentAssertions;
 using Yaal.Sql;
@@ -6,160 +7,60 @@ namespace Yaal.Tests;
 
 public class NullableFiltersTests
 {
-    private static CompiledSql Compile(string sql, IEnumerable<string> nulls, string placeholder = "?")
-    {
-        var ast = SqlParser.Parse(Lexer.Lex(sql), "$")!;
-        var twig = ast.SqlStmts![0];
-        return SqlCompiler.Compile(twig, nulls, placeholder);
-    }
+    private static string CasesPath =>
+        Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory, "..", "..", "..", "..", "..", "..",
+            "tests", "fixtures", "sql_compile", "cases.json"));
 
     private static string NormalizeWs(string sql) =>
         Regex.Replace(sql, @"\s+", " ").Trim();
 
     [Fact]
-    public void Null_strips_or_after_one_equals_one()
+    public void Shared_sql_compile_goldens()
     {
-        var sql = """
-                  --(param1 integer)--
-                  select * from a where 1 = 1 or ({{param1}} is null or col1 = {{param1}})
-                  """;
-        var compiled = Compile(sql, new[] { "param1" });
-        NormalizeWs(compiled.Content).Should().Be("select * from a where 1 = 1");
-        compiled.Parameters.Should().BeEmpty();
-    }
+        var json = File.ReadAllText(CasesPath);
+        using var doc = JsonDocument.Parse(json);
+        doc.RootElement.GetArrayLength().Should().BeGreaterThan(0);
 
-    [Fact]
-    public void Null_strips_and_after_predicate()
-    {
-        var sql = """
-                  --(p integer)--
-                  select * from a where a = 1 and ({{p}} is null or col = {{p}})
-                  """;
-        var compiled = Compile(sql, new[] { "p" });
-        NormalizeWs(compiled.Content).Should().Be("select * from a where a = 1");
-        compiled.Parameters.Should().BeEmpty();
-    }
+        foreach (var caseEl in doc.RootElement.EnumerateArray())
+        {
+            var name = caseEl.GetProperty("name").GetString()!;
+            var sql = caseEl.GetProperty("sql").GetString()!;
 
-    [Fact]
-    public void Sole_nullable_predicate_falls_back_to_one_equals_one()
-    {
-        var sql = """
-                  --(p integer)--
-                  select * from a where ({{p}} is null or col = {{p}})
-                  """;
-        var compiled = Compile(sql, new[] { "p" });
-        NormalizeWs(compiled.Content).Should().Be("select * from a where 1 = 1");
-        compiled.Parameters.Should().BeEmpty();
-    }
+            if (caseEl.TryGetProperty("expect_error_contains", out var errEl))
+            {
+                var needle = errEl.GetString()!;
+                Action act = () => SqlParser.Parse(Lexer.Lex(sql), "$");
+                act.Should().Throw<Exception>(because: name)
+                    .Where(ex => ex.Message.Contains(needle, StringComparison.OrdinalIgnoreCase));
+                continue;
+            }
 
-    [Fact]
-    public void Non_null_keeps_binds_and_rewrites_is_null()
-    {
-        var sql = """
-                  --(param1 integer)--
-                  select * from a where 1 = 1 or ({{param1}} is null or col1 = {{param1}})
-                  """;
-        var compiled = Compile(sql, Array.Empty<string>());
-        NormalizeWs(compiled.Content).Should().Be("select * from a where 1 = 1 or (1 = 2 or col1 = ?)");
-        compiled.Parameters.Should().HaveCount(1);
-        compiled.Parameters[0].Name.Should().Be("param1");
-    }
+            var ast = SqlParser.Parse(Lexer.Lex(sql), "$")!;
+            var twig = ast.SqlStmts![0];
 
-    [Fact]
-    public void Elided_params_omitted_from_bind_list()
-    {
-        var sql = """
-                  --(a integer, b integer)--
-                  select * from t where col = {{a}} and ({{b}} is null or other = {{b}})
-                  """;
-        var compiled = Compile(sql, new[] { "b" });
-        NormalizeWs(compiled.Content).Should().Be("select * from t where col = ?");
-        compiled.Parameters.Select(p => p.Name).Should().Equal("a");
-    }
+            if (caseEl.TryGetProperty("expect_nullable_contains", out var nullableEl))
+            {
+                foreach (var n in nullableEl.EnumerateArray())
+                    twig.Nullable.Should().Contain(n.GetString(), because: name);
+            }
 
-    [Fact]
-    public void Nullable_name_match_is_case_insensitive()
-    {
-        var sql = """
-                  --(Param1 integer)--
-                  select * from a where 1 = 1 OR ({{Param1}} is null or col1 = {{Param1}})
-                  """;
-        var ast = SqlParser.Parse(Lexer.Lex(sql), "$")!;
-        var twig = ast.SqlStmts![0];
-        twig.Nullable.Should().Contain("param1");
-        var compiled = SqlCompiler.Compile(twig, new[] { "PARAM1" }, "?");
-        NormalizeWs(compiled.Content).Should().Be("select * from a where 1 = 1");
-        compiled.Parameters.Should().BeEmpty();
-    }
+            var nulls = caseEl.TryGetProperty("nulls", out var nullsEl)
+                ? nullsEl.EnumerateArray().Select(x => x.GetString()!).ToArray()
+                : Array.Empty<string>();
+            var placeholder = caseEl.TryGetProperty("placeholder", out var phEl)
+                ? phEl.GetString() ?? "?"
+                : "?";
 
-    [Fact]
-    public void Args_id_style_filter_like_fixture()
-    {
-        var sql = """
-                  --($args.id integer)--
-                  select * from users u
-                  where u.active = 1
-                    and r.active = 1
-                    and ({{$args.id}} is null or u.user_id = {{$args.id}})
-                  order by u.user_id
-                  """;
-        var compiled = Compile(sql, new[] { "$args.id" });
-        NormalizeWs(compiled.Content).Should().Be(
-            "select * from users u where u.active = 1 and r.active = 1 order by u.user_id");
-        compiled.Parameters.Should().BeEmpty();
-    }
+            var compiled = SqlCompiler.Compile(twig, nulls, placeholder);
+            NormalizeWs(compiled.Content).Should().Be(
+                NormalizeWs(caseEl.GetProperty("expect_sql").GetString()!),
+                because: name);
 
-    [Fact]
-    public void Optional_sugar_null_strips_and()
-    {
-        var sql = """
-                  --(p integer)--
-                  select * from a where a = 1 and optional(col = {{p}})
-                  """;
-        var compiled = Compile(sql, new[] { "p" });
-        NormalizeWs(compiled.Content).Should().Be("select * from a where a = 1");
-        compiled.Parameters.Should().BeEmpty();
-    }
-
-    [Fact]
-    public void Optional_sugar_non_null_keeps_binds()
-    {
-        var sql = """
-                  --(param1 integer)--
-                  select * from a where 1 = 1 or optional(col1 = {{param1}})
-                  """;
-        var compiled = Compile(sql, Array.Empty<string>());
-        NormalizeWs(compiled.Content).Should().Be("select * from a where 1 = 1 or (1 = 2 or col1 = ?)");
-        compiled.Parameters.Should().HaveCount(1);
-        compiled.Parameters[0].Name.Should().Be("param1");
-    }
-
-    [Fact]
-    public void Optional_sugar_sole_predicate_falls_back()
-    {
-        var sql = """
-                  --(p integer)--
-                  select * from a where optional(col = {{p}})
-                  """;
-        var compiled = Compile(sql, new[] { "p" });
-        NormalizeWs(compiled.Content).Should().Be("select * from a where 1 = 1");
-        compiled.Parameters.Should().BeEmpty();
-    }
-
-    [Fact]
-    public void Optional_sugar_args_id_fixture_style()
-    {
-        var sql = """
-                  --($args.id integer)--
-                  select * from users u
-                  where u.active = 1
-                    and r.active = 1
-                    and optional(u.user_id = {{$args.id}})
-                  order by u.user_id
-                  """;
-        var compiled = Compile(sql, new[] { "$args.id" });
-        NormalizeWs(compiled.Content).Should().Be(
-            "select * from users u where u.active = 1 and r.active = 1 order by u.user_id");
-        compiled.Parameters.Should().BeEmpty();
+            var expectParams = caseEl.TryGetProperty("expect_param_names", out var epEl)
+                ? epEl.EnumerateArray().Select(x => x.GetString()!).ToArray()
+                : Array.Empty<string>();
+            compiled.Parameters.Select(p => p.Name).Should().Equal(expectParams, because: name);
+        }
     }
 }

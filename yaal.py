@@ -8,7 +8,12 @@ from urllib.parse import parse_qsl, unquote_plus
 import yaml
 
 from yaal_builder import create_trunk
-from yaal_errors import DescriptorNotFoundError, UnsupportedDatabaseUrlError, YaalError
+from yaal_errors import (
+    DescriptorNotFoundError,
+    PathEscapeError,
+    UnsupportedDatabaseUrlError,
+    YaalError,
+)
 from yaal_executor import DataProviderHelper, get_result, get_result_json
 from yaal_shape import Shape
 from yaal_sqlite import SQLiteContextManager
@@ -172,27 +177,38 @@ def _parse_rfc1738_args(connection_url):
 class FileContentReader:
 
     def __init__(self, root_path):
-        self._root_path = root_path
+        self._root_path = os.path.realpath(root_path)
 
     def get_sql(self, method, path):
-        file_path = path_join(*[self._root_path, path, method + ".sql"])
+        file_path = self._resolve(path, method + ".sql")
         return self._get(file_path)
 
     def get_config(self, path, output_mapper):
-        input_path = path_join(*[self._root_path, path, "$.input"])
+        input_path = self._resolve(path, "$.input")
         input_config = self._get_config(input_path)
 
-        output_path = path_join(*[self._root_path, path, "$.output" + ("." + output_mapper if output_mapper else "")])
+        output_name = "$.output" + ("." + output_mapper if output_mapper else "")
+        output_path = self._resolve(path, output_name)
         output_config = self._get_config(output_path)
 
         return {"input.model": input_config, "output.model": output_config}
 
     def list_sql(self, path):
         try:
-            files = os.listdir(path_join(*[self._root_path, path]))
+            files = os.listdir(self._resolve(path))
             return [f.replace(".sql", "") for f in files if f.endswith(".sql")]
         except FileNotFoundError:
             return None
+
+    def _resolve(self, *parts):
+        """Join under root and reject paths that escape the API tree."""
+        candidate = os.path.realpath(path_join(self._root_path, *parts))
+        root = self._root_path
+        if candidate == root or candidate.startswith(root + os.sep):
+            return candidate
+        raise PathEscapeError(
+            "descriptor path %r resolves outside API root %r" % (parts, root)
+        )
 
     def _get_config(self, file_path):
         yaml_path = file_path + ".yaml"

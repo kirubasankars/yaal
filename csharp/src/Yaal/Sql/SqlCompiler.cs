@@ -18,6 +18,8 @@ public static class SqlCompiler
         var tokens = new List<string>();
         var parameters = new List<ParamDecl>();
         int? group = null;
+        // After skipping a non-null "{{p}} is null" marker, drop the following " or ".
+        var skipOrAfterNullable = false;
 
         foreach (var token in stmt)
         {
@@ -35,6 +37,7 @@ public static class SqlCompiler
                     if (!StripPrecedingConnector(tokens))
                         tokens.Add("1 = 1");
                     group = token.Group;
+                    skipOrAfterNullable = false;
                     continue;
                 }
             }
@@ -42,17 +45,29 @@ public static class SqlCompiler
             if (group != null)
                 continue;
 
+            if (skipOrAfterNullable)
+            {
+                if (IsWhitespaceSqlFragment(token.Value))
+                    continue;
+                if (token.Type == "word" && token.Value.Trim().Equals("or", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Stay in skip mode to also drop whitespace after "or".
+                    continue;
+                }
+                skipOrAfterNullable = false;
+            }
+
             if (token.Type == "parameter")
             {
                 if (token.Nullable)
                 {
-                    tokens.Add("1 = 2");
+                    // Param is known non-null: drop "{{p}} is null or", keep the predicate.
+                    skipOrAfterNullable = true;
+                    continue;
                 }
-                else
-                {
-                    tokens.Add(placeholder);
-                    parameters.Add(parametersMeta![token.Name!]);
-                }
+
+                tokens.Add(placeholder);
+                parameters.Add(parametersMeta![token.Name!]);
             }
             else
             {

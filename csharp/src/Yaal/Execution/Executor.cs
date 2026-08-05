@@ -164,7 +164,7 @@ public static class Executor
         }
     }
 
-    private static (List<IDictionary<string, object?>>? Rows, List<IDictionary<string, object?>>? Errors) ExecuteBranch(
+    internal static (List<IDictionary<string, object?>>? Rows, List<IDictionary<string, object?>>? Errors) ExecuteBranch(
         Branch branch,
         bool isTrunk,
         Dictionary<string, IDataProvider> dataProviders,

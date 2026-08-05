@@ -21,7 +21,9 @@ class TestCli(unittest.TestCase):
     def test_list_includes_user_get(self):
         code, out = self._run(["--api", FIXTURE_API, "list"])
         self.assertEqual(code, 0)
-        self.assertIn("user/get", out.splitlines())
+        lines = out.splitlines()
+        self.assertIn("user/get", lines)
+        self.assertIn("user/list", lines)
 
     def test_query_user_get(self):
         code, out = self._run([

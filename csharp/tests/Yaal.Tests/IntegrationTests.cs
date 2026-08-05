@@ -19,11 +19,10 @@ public class IntegrationTests
         roles.Should().HaveCount(2);
     }
 
-    [Fact]
+    [SkippableFact]
     public void Postgres_user_with_nested_roles()
     {
-        if (!IntegrationEnabled)
-            return; // skip when not requested
+        Skip.IfNot(IntegrationEnabled, "Set YAAL_INTEGRATION=1 to run engine integration tests");
 
         var y = new Yaal(FixtureApi, debug: true);
         y.SetupDataProvider("db", Environment.GetEnvironmentVariable("YAAL_PG_URL")
@@ -31,11 +30,10 @@ public class IntegrationTests
         AssertUserAdmin(y.Query("user/get", args: new { id = 1 }));
     }
 
-    [Fact]
+    [SkippableFact]
     public void Mysql_user_with_nested_roles()
     {
-        if (!IntegrationEnabled)
-            return;
+        Skip.IfNot(IntegrationEnabled, "Set YAAL_INTEGRATION=1 to run engine integration tests");
 
         var y = new Yaal(FixtureApi, debug: true);
         y.SetupDataProvider("db", Environment.GetEnvironmentVariable("YAAL_MYSQL_URL")
@@ -43,11 +41,10 @@ public class IntegrationTests
         AssertUserAdmin(y.Query("user/get", args: new { id = 1 }));
     }
 
-    [Fact]
+    [SkippableFact]
     public void Clickhouse_user_with_nested_roles()
     {
-        if (!IntegrationEnabled)
-            return;
+        Skip.IfNot(IntegrationEnabled, "Set YAAL_INTEGRATION=1 to run engine integration tests");
 
         var y = new Yaal(FixtureApi, debug: true);
         y.SetupDataProvider("db", Environment.GetEnvironmentVariable("YAAL_CH_URL")

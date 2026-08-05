@@ -1,0 +1,7 @@
+type: object
+properties:
+  args:
+    type: object
+    properties:
+      active:
+        type: integer
