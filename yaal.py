@@ -65,118 +65,47 @@ def get_descriptor_json(descriptor, pretty=False):
         return json.dumps(d)
 
 
-def create_context(descriptor, payload=None, query=None, path_values=None, header=None, cookie=None):
-    query_str, path_str, header_str, cookie_str, payload_str = "query", "path", "header", "cookie", "payload"
+def create_context(descriptor, payload=None, args=None):
+    args_str, payload_str = "args", "payload"
 
     model = descriptor.get("model")
     validators = descriptor.get("_validators")
     if model and validators:
-        if query_str in model:
-            query_schema = model[query_str]
-            query_validator = validators[query_str]
+        if args_str in model:
+            args_schema = model[args_str]
+            args_validator = validators.get(args_str)
         else:
-            query_schema = None
-            query_validator = None
-
-        if path_str in model:
-            path_schema = model[path_str]
-            path_validator = validators[path_str]
-        else:
-            path_schema = None
-            path_validator = None
-
-        if header_str in model:
-            header_schema = model[header_str]
-            header_validator = validators[header_str]
-        else:
-            header_schema = None
-            header_validator = None
-
-        if cookie_str in model:
-            cookie_schema = model[cookie_str]
-            cookie_validator = validators[cookie_str]
-        else:
-            cookie_schema = None
-            cookie_validator = None
+            args_schema = None
+            args_validator = None
 
         if payload_str in model:
             payload_schema = model[payload_str]
-            payload_validator = validators[payload_str]
+            payload_validator = validators.get(payload_str)
         else:
             payload_schema = None
             payload_validator = None
     else:
-        query_schema = None
-        query_validator = None
-        path_schema = None
-        path_validator = None
-        header_schema = None
-        header_validator = None
-        cookie_schema = None
-        cookie_validator = None
+        args_schema = None
+        args_validator = None
         payload_schema = None
         payload_validator = None
 
-    query_shape = Shape(schema=query_schema, validator=query_validator)
-    if query:
-        for k, v in query.items():
-            query_shape.set_prop(k, v)
+    args_shape = Shape(schema=args_schema, validator=args_validator)
+    if args:
+        for k, v in args.items():
+            args_shape.set_prop(k, v)
 
-    path_shape = Shape(schema=path_schema, validator=path_validator)
-    if path_values:
-        for k, v in path_values.items():
-            path_shape.set_prop(k, v)
-
-    header_shape = Shape(schema=header_schema, validator=header_validator, data=header)
-    cookie_shape = Shape(schema=cookie_schema, validator=cookie_validator, data=cookie)
-
-    request_extras = {
-        "$query": query_shape,
-        "$path": path_shape,
-        "$header": header_shape,
-        "$cookie": cookie_shape
-    }
-
-    request_data = {"id": str(uuid.uuid4()) }
-    request_shape = Shape(data=request_data, extras=request_extras)
-
-    response_extras = {
-        "$header": Shape(),
-        "$cookie": Shape()
-    }
-    response_shape = Shape(extras=response_extras)
-
-    vars = {
-        "path": descriptor["path"]
-    }
-    vars_shape = Shape(data=vars)
+    params_shape = Shape(data={
+        "path": descriptor["path"],
+        "$run_id": str(uuid.uuid4()),
+    })
 
     extras = {
-        "$params": vars_shape,
-        "$query": query_shape,
-        "$path": path_shape,
-        "$header": header_shape,
-        "$cookie": cookie_shape,
-        "$request": request_shape,
-        "$response": response_shape
+        "$params": params_shape,
+        "$args": args_shape,
     }
 
     return Shape(schema=payload_schema, validator=payload_validator, data=payload, extras=extras)
-
-
-def _build_routes(routes):
-    _routes = []
-    if routes:
-        for r in routes:
-            if "route" in r and "descriptor" in r:
-                p = "^" + re.sub(r"{(.*?)}", r"(?P<\1>[^/]+)", r["route"]) + "/?$"
-                _routes.append({
-                    "route": re.compile(p),
-                    "descriptor": r["descriptor"],
-                    "path": r["route"],
-                    "output_mapper": r["mapper"] if "mapper" in r else None
-                })
-    return _routes
 
 
 def _normalize_sqlite_options(options):
@@ -248,10 +177,6 @@ class FileContentReader:
         file_path = path_join(*[self._root_path, path, method + ".sql"])
         return self._get(file_path)
 
-    def get_routes_config(self, path):
-        routes_path = path_join(*[self._root_path, path])
-        return self._get_config(routes_path)
-
     def get_config(self, path, output_mapper):
         input_path = path_join(*[self._root_path, path, "$.input"])
         input_config = self._get_config(input_path)
@@ -306,11 +231,6 @@ class Yaal:
         else:
             self._content_reader = content_reader
 
-        self._routes = _build_routes(self._content_reader.get_routes_config("routes"))
-
-    def get_routes(self):
-        return self._routes
-
     def setup_data_provider(self, name, database_uri):
         provider_name, options = _parse_rfc1738_args(database_uri)
         if provider_name == "postgresql":
@@ -351,65 +271,25 @@ class Yaal:
     def clear_cache(self):
         self._descriptors = {}
         self._cache = {}
-        self._routes = _build_routes(self._content_reader.get_routes_config("routes"))
 
-    def get_descriptor(self, descriptor_ctx):
-        path = descriptor_ctx["path"]
-        if not self._debug and path in self._descriptors:
-            return self._descriptors[path]
+    def _cache_key(self, descriptor_path, output_mapper=None):
+        if output_mapper:
+            return descriptor_path + "#" + output_mapper
+        return descriptor_path
 
-        descriptor_path = descriptor_ctx["descriptor_path"]
-        output_mapper = descriptor_ctx["output_mapper"]
+    def _load_descriptor(self, descriptor_path, output_mapper=None):
+        cache_key = self._cache_key(descriptor_path, output_mapper)
+        if not self._debug and cache_key in self._descriptors:
+            return self._descriptors[cache_key], cache_key
+
         descriptor = self.create_descriptor(descriptor_path, output_mapper)
-        self._descriptors[path] = descriptor
-        return descriptor
-
-    def get_descriptor_path_by_route(self, path, method):
-        path_values, descriptor_path, route_path, output_mapper = None, None, None, None
-
-        for r in self._routes:
-            m = r["route"].match(path)
-            if m:
-                path_values = {}
-                for k, v in m.groupdict().items():
-                    path_values[k] = v
-                descriptor_path = path_join(*[r["descriptor"], method])
-                route_path = r["path"]
-                output_mapper = r["output_mapper"]
-                break
-
-        if not descriptor_path:
-            descriptor_path = path_join(*[path, method])
-            path_values = None
-
-        return {
-            "descriptor_path": descriptor_path,
-            "route_path": route_path,
-            "path_values": path_values,
-            "output_mapper": output_mapper,
-            "path": route_path if route_path else descriptor_path
-        }
+        self._descriptors[cache_key] = descriptor
+        return descriptor, cache_key
 
     def _cache_for(self, path):
         if path not in self._cache:
             self._cache[path] = {}
         return self._cache[path]
-
-    def _resolve_context(self, path, method, *, payload=None, query=None,
-                         path_values=None, header=None, cookie=None):
-        descriptor_ctx = self.get_descriptor_path_by_route(path, method)
-        if path_values is None:
-            path_values = descriptor_ctx.get("path_values")
-        descriptor = self.get_descriptor(descriptor_ctx)
-        context = create_context(
-            descriptor,
-            payload=payload,
-            query=query,
-            path_values=path_values,
-            header=header,
-            cookie=cookie,
-        )
-        return descriptor, descriptor_ctx, context
 
     def _default_placeholder(self):
         for scheme in self._data_provider_schemes.values():
@@ -419,49 +299,23 @@ class Yaal:
                 return "?"
         return "?"
 
-    def query(self, path, method="get", *, payload=None, query=None, path_values=None,
-              header=None, cookie=None):
-        """Resolve a route, build context, and return the SQL→JSON result."""
-        descriptor, descriptor_ctx, context = self._resolve_context(
-            path,
-            method,
-            payload=payload,
-            query=query,
-            path_values=path_values,
-            header=header,
-            cookie=cookie,
-        )
-        return self.get_result(descriptor, descriptor_ctx, context)
+    def query(self, descriptor_path, *, payload=None, args=None, output_mapper=None):
+        """Load a descriptor, build context, and return the SQL→JSON result."""
+        descriptor, cache_key = self._load_descriptor(descriptor_path, output_mapper)
+        context = create_context(descriptor, payload=payload, args=args)
+        return self.get_result(descriptor, context, cache_key=cache_key)
 
-    def query_json(self, path, method="get", *, payload=None, query=None, path_values=None,
-                   header=None, cookie=None):
+    def query_json(self, descriptor_path, *, payload=None, args=None, output_mapper=None):
         """Same as query, but return a JSON string."""
-        descriptor, descriptor_ctx, context = self._resolve_context(
-            path,
-            method,
-            payload=payload,
-            query=query,
-            path_values=path_values,
-            header=header,
-            cookie=cookie,
-        )
-        return self.get_result_json(descriptor, descriptor_ctx, context)
+        descriptor, cache_key = self._load_descriptor(descriptor_path, output_mapper)
+        context = create_context(descriptor, payload=payload, args=args)
+        return self.get_result_json(descriptor, context, cache_key=cache_key)
 
-    # Back-compat alias
-    execute = query
-
-    def explain_sql(self, path, method="get", *, payload=None, query=None, path_values=None,
-                    header=None, cookie=None, placeholder=None):
+    def explain_sql(self, descriptor_path, *, payload=None, args=None,
+                    output_mapper=None, placeholder=None):
         """Return compiled SQL twigs after null-filter elision (for authoring/debug)."""
-        descriptor, _, context = self._resolve_context(
-            path,
-            method,
-            payload=payload,
-            query=query,
-            path_values=path_values,
-            header=header,
-            cookie=cookie,
-        )
+        descriptor, _ = self._load_descriptor(descriptor_path, output_mapper)
+        context = create_context(descriptor, payload=payload, args=args)
         if placeholder is None:
             placeholder = self._default_placeholder()
 
@@ -494,20 +348,22 @@ class Yaal:
         walk(descriptor, context)
         return explained
 
-    def get_result(self, descriptor, descriptor_ctx, context):
+    def get_result(self, descriptor, context, cache_key=None):
+        key = cache_key or descriptor.get("path")
         return get_result(
             descriptor,
             self.get_data_provider,
             context,
-            self._cache_for(descriptor_ctx["path"]),
+            self._cache_for(key),
         )
 
-    def get_result_json(self, descriptor, descriptor_ctx, context):
+    def get_result_json(self, descriptor, context, cache_key=None):
+        key = cache_key or descriptor.get("path")
         return get_result_json(
             descriptor,
             self.get_data_provider,
             context,
-            self._cache_for(descriptor_ctx["path"]),
+            self._cache_for(key),
         )
 
     def get_root_path(self):

@@ -33,9 +33,6 @@ select {{id1}}
     def list_sql(self, path):
         return ["$"]
 
-    def get_routes_config(self, path):
-        return None
-
 
 class FakeContentReader1:
 
@@ -51,9 +48,6 @@ select {{id2}}
 
     def list_sql(self, path):
         return ["$"]
-
-    def get_routes_config(self, path):
-        return None
 
 
 class TestYaal(unittest.TestCase):

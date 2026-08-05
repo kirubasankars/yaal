@@ -69,7 +69,7 @@ class TestBugfixes(unittest.TestCase):
                 self.errored = True
 
             def execute(self, twig, ctx, helper):
-                return [{"$action": "error", "$http_status_code": 400}], None
+                return [{"$action": "error", "message": "boom"}], None
 
         descriptor = {
             "path": "p",

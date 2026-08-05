@@ -27,11 +27,11 @@ def main():
         y = Yaal(str(API), debug=True)
         y.setup_data_provider("db", "sqlite3:///%s" % db_path)
 
-        result = y.query("user/1", "get")
+        result = y.query("user/get", args={"id": 1})
         print(json.dumps(result, indent=2))
 
-        print("\n-- explain_sql (path.id present) --")
-        for twig in y.explain_sql("user/1", "get"):
+        print("\n-- explain_sql (args.id present) --")
+        for twig in y.explain_sql("user/get", args={"id": 1}):
             print(twig["sql"].strip())
             print("binds:", twig["parameters"])
     finally:

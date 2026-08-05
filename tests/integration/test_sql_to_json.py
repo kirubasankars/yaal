@@ -34,7 +34,7 @@ def _build_yaal(db_url):
 
 
 def _fetch_user(y, user_id):
-    return y.query("user/%s" % user_id, "get")
+    return y.query("user/get", args={"id": user_id})
 
 
 class SqlToJsonMixin:

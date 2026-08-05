@@ -182,17 +182,9 @@ def _expand_parameter(model, prop, value):
                 model = model["$parent"]
             else:
                 model = None
-        elif path == "$query":
-            model = model["query"]
-        elif path == "$cookie":
-            model = model["cookie"]
-        elif path == "$header":
-            model = model["header"]
-        elif path == "$path":
-            model = model["path"]
+        elif path == "$args":
+            model = model["args"]
         elif path == "$params":
-            return
-        elif path == "$request":
             return
         else:
             if "properties" not in model:
@@ -236,38 +228,19 @@ def create_trunk(path, output_mapper, content_reader):
     config = content_reader.get_config(path, output_mapper)
 
     input_model_str, output_model_str = "input.model", "output.model"
-    query_str, path_str, header_str, cookie_str, payload_str = "query", "path", "header", "cookie", "payload"
-    payload_schema, output_schema = None, None
-    query_schema, path_schema, header_schema, cookie_schema = None, None, None, None
+    args_str, payload_str = "args", "payload"
+    payload_schema, args_schema, output_schema = None, None, None
 
     if config:
         input_model = config.get(input_model_str)
         if input_model:
             payload_schema = _to_lower_keys_deep(input_model.get(payload_str))
-            query_schema = _to_lower_keys_deep(input_model.get(query_str))
-            path_schema = _to_lower_keys_deep(input_model.get(path_str))
-            header_schema = _to_lower_keys_deep(input_model.get(header_str))
-            cookie_schema = _to_lower_keys_deep(input_model.get(cookie_str))
+            args_schema = _to_lower_keys_deep(input_model.get(args_str))
 
         output_schema = config.get(output_model_str)
 
-    if not query_schema:
-        query_schema = {
-            "type": "object",
-            "properties": {}
-        }
-    if not path_schema:
-        path_schema = {
-            "type": "object",
-            "properties": {}
-        }
-    if not header_schema:
-        header_schema = {
-            "type": "object",
-            "properties": {}
-        }
-    if not cookie_schema:
-        cookie_schema = {
+    if not args_schema:
+        args_schema = {
             "type": "object",
             "properties": {}
         }
@@ -287,10 +260,7 @@ def create_trunk(path, output_mapper, content_reader):
         "method": "$",
         "path": path,
         "model": {
-            "query": query_schema,
-            "path": path_schema,
-            "header": header_schema,
-            "cookie": cookie_schema,
+            "args": args_schema,
             "payload": payload_schema,
             "output": output_schema
         }
@@ -301,35 +271,17 @@ def create_trunk(path, output_mapper, content_reader):
     else:
         payload_validator = None
 
-    if query_schema:
-        parameter_query_validator = Draft4Validator(schema=query_schema, format_checker=FormatChecker())
+    if args_schema:
+        args_validator = Draft4Validator(schema=args_schema, format_checker=FormatChecker())
     else:
-        parameter_query_validator = None
-
-    if path_schema:
-        parameter_path_validator = Draft4Validator(schema=path_schema, format_checker=FormatChecker())
-    else:
-        parameter_path_validator = None
-
-    if header_schema:
-        parameter_header_validator = Draft4Validator(schema=header_schema, format_checker=FormatChecker())
-    else:
-        parameter_header_validator = None
-
-    if cookie_schema:
-        parameter_cookie_validator = Draft4Validator(schema=cookie_schema, format_checker=FormatChecker())
-    else:
-        parameter_cookie_validator = None
+        args_validator = None
 
     bag = {"connections": ["db"]}
     _build_branch(trunk, trunk_map["$"], content_reader, payload_schema, output_schema, trunk["model"], bag)
     trunk["connections"] = bag["connections"]
 
     validators = {
-        "query": parameter_query_validator,
-        "path": parameter_path_validator,
-        "header": parameter_header_validator,
-        "cookie": parameter_cookie_validator,
+        "args": args_validator,
         "payload": payload_validator
     }
     trunk["_validators"] = validators

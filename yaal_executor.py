@@ -2,7 +2,6 @@ import copy
 import datetime
 import json
 
-import yaal_const
 from collections import defaultdict
 
 from yaal_parser import compile_sql
@@ -62,7 +61,7 @@ def _execute_twigs(branch, data_providers, context, data_provider_helper):
 
     twigs = branch.get("twigs")
     action_str = "$action"
-    params_str, header_str, cookie_str, error_str, break_str = "params", "header", "cookie", "error", "break"
+    params_str, error_str, break_str = "params", "error", "break"
     json_str = "json"
 
     rs = []
@@ -79,8 +78,6 @@ def _execute_twigs(branch, data_providers, context, data_provider_helper):
                 if action_str in output0:
                     action_value = output0[action_str]
                     if action_value == error_str:
-                        if "$http_status_code" in output0:
-                            context.set_prop("$response.status_code", output0["$http_status_code"])
                         errors.extend(output)
                         return None, errors
                     elif action_value == json_str:
@@ -100,16 +97,6 @@ def _execute_twigs(branch, data_providers, context, data_provider_helper):
                         params = context.get_prop("$params")
                         for k, v in output0.items():
                             params.set_prop(k, v)
-                    elif action_value == cookie_str:
-                        cookie = context.get_prop("$response.$cookie")
-                        for c in output:
-                            if "name" in c and "value" in c:
-                                cookie.set_prop(c["name"], c)
-                    elif action_value == header_str:
-                        header = context.get_prop("$response.$header")
-                        for h in output:
-                            if "name" in h and "value" in h:
-                                header.set_prop(h["name"], h)
                 else:
                     rs = output
 
@@ -312,12 +299,13 @@ def _output_mapper(output_type, output_modal, branches, result):
 
 
 def _get_result(descriptor, get_data_provider, ctx, cache_provider):
-    errors = ctx.get_prop("$request").validate(True)
+    errors = []
+    args_shape = ctx.get_prop("$args")
+    if args_shape is not None:
+        errors.extend(args_shape.validate(True))
     errors.extend(ctx.validate(False))
 
-    status_code_str = "$response.status_code"
     if errors:
-        ctx.set_prop(status_code_str, 400)
         return {"errors": errors}
 
     data_providers = {}
@@ -327,13 +315,9 @@ def _get_result(descriptor, get_data_provider, ctx, cache_provider):
     rs, errors = _execute_branch(descriptor, True, data_providers, ctx, [], cache_provider)
 
     if errors:
-        status_code = ctx.get_prop(status_code_str)
-        if not status_code:
-            ctx.set_prop(status_code_str, 400)
         return {"errors": errors}
 
     rs = _output_mapper(descriptor["output_type"], descriptor["model"]["output"], descriptor.get("branches"), rs)
-    ctx.set_prop(status_code_str, 200)
 
     return rs
 

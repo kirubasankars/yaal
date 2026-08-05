@@ -1,4 +1,4 @@
-path:
+args:
   type: object
   properties:
     id:

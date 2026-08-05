@@ -71,15 +71,15 @@ select * from a where 1 = 1 OR ({{Param1}} is null or col1 = {{Param1}})
         self.assertEqual(_normalize_ws(compiled["content"]), "select * from a where 1 = 1")
         self.assertEqual(compiled["parameters"], [])
 
-    def test_path_id_style_filter_like_fixture(self):
-        sql = """--($path.id integer)--
+    def test_args_id_style_filter_like_fixture(self):
+        sql = """--($args.id integer)--
 select * from users u
 where u.active = 1
   and r.active = 1
-  and ({{$path.id}} is null or u.user_id = {{$path.id}})
+  and ({{$args.id}} is null or u.user_id = {{$args.id}})
 order by u.user_id
 """
-        compiled = _compile(sql, ["$path.id"])
+        compiled = _compile(sql, ["$args.id"])
         self.assertEqual(
             _normalize_ws(compiled["content"]),
             "select * from users u where u.active = 1 and r.active = 1 order by u.user_id",
@@ -114,15 +114,15 @@ select * from a where optional(col = {{p}})
         self.assertEqual(_normalize_ws(compiled["content"]), "select * from a where 1 = 1")
         self.assertEqual(compiled["parameters"], [])
 
-    def test_optional_sugar_path_id_fixture_style(self):
-        sql = """--($path.id integer)--
+    def test_optional_sugar_args_id_fixture_style(self):
+        sql = """--($args.id integer)--
 select * from users u
 where u.active = 1
   and r.active = 1
-  and optional(u.user_id = {{$path.id}})
+  and optional(u.user_id = {{$args.id}})
 order by u.user_id
 """
-        compiled = _compile(sql, ["$path.id"])
+        compiled = _compile(sql, ["$args.id"])
         self.assertEqual(
             _normalize_ws(compiled["content"]),
             "select * from users u where u.active = 1 and r.active = 1 order by u.user_id",

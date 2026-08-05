@@ -17,22 +17,22 @@ class TestLexer(unittest.TestCase):
         self.assertIsNone(lexer(None))
 
     def test_lexer_dash_and_parameter(self):
-        self.assertListEqual(lexer("--($query.id integer)--"),
-                             [{"type": "dash", "value": "--($query.id integer)--"}])
+        self.assertListEqual(lexer("--($args.id integer)--"),
+                             [{"type": "dash", "value": "--($args.id integer)--"}])
 
     def test_lexer_with_parameter(self):
         expected = [
-            {"type": "dash", "value": "--($query.id integer)--"},
+            {"type": "dash", "value": "--($args.id integer)--"},
             {"type": "space", "value": " "},
             {"type": "newline", "value": "\n"},
             {"type": "space", "value": " "},
             {"type": "word", "value": "select"},
             {"type": "space", "value": " "},
-            {"type": "parameter", "value": "{{$query.id}}"},
+            {"type": "parameter", "value": "{{$args.id}}"},
             {"type": "space", "value": " "}
         ]
 
-        self.assertListEqual(lexer("""--($query.id integer)-- \n select {{$query.id}} """),
+        self.assertListEqual(lexer("""--($args.id integer)-- \n select {{$args.id}} """),
                              expected)
 
     def test_lexer_string(self):

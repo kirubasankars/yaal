@@ -35,9 +35,6 @@ class ContentReader:
             return ["$"]
         return None
 
-    def get_routes_config(self, path):
-        return None
-
 
 class TestYaal(unittest.TestCase):
 
@@ -55,8 +52,7 @@ class TestYaal(unittest.TestCase):
         self.assertTrue(descriptor["name"] == "$")
         self.assertTrue(descriptor["method"] == "$")
 
-        descriptor_ctx = y.get_descriptor_path_by_route("name", "get")
         ctx = create_context(descriptor, payload={"Name": "First"})
-        r = y.get_result_json(descriptor, descriptor_ctx, ctx)
+        r = y.get_result_json(descriptor, ctx)
 
         self.assertListEqual([{"name": "First Last"}], json.loads(r))
