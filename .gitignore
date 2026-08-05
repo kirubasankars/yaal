@@ -10,3 +10,4 @@ csharp/**/obj/
 *.user
 *.suo
 .vs/
+experiment/

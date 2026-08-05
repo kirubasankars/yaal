@@ -9,9 +9,18 @@ make install
 make example                          # demo: user/get id=1
 make yaal ARGS='explain user/get --arg id=1'
 make yaal ARGS='list'
+
+# editable FS tree + persistent SQLite under experiment/
+make experiment-init
+make experiment                                 # query user/get against experiment/
+make experiment ARGS='explain user/get --arg id=1'
+# edit experiment/api/... then re-run
+make experiment-reset                           # reseed DB only
 ```
 
 `make example` (and `yaal_cli.py` when `--db` is omitted) builds a temp SQLite DB from `docker/sqlite/schema.sql`, runs the fixture `user/get` with `args={"id": 1}`, and prints nested JSON.
+
+`make experiment` uses a local sandbox at `experiment/` (gitignored): a copy of `tests/fixtures/api` plus `yaal.db` seeded from `docker/sqlite/schema.sql`. Edit descriptors under `experiment/api/` and re-run; use `make experiment-reset` to reseed the DB without wiping API edits.
 
 ### CLI
 
@@ -54,6 +63,8 @@ for twig in y.explain_sql("user/get", args={"id": 1}):
 | `make test-all` | Unit + integration |
 | `make example` | Demo via `yaal_cli.py query user/get --arg id=1` |
 | `make yaal ARGS='...'` | Pass-through to `yaal_cli.py` (`query` / `explain` / `list`) |
+| `make experiment` | FS+SQLite sandbox under `experiment/` (init if needed) |
+| `make experiment-init` / `experiment-reset` / `experiment-clean` | Create, reseed DB, or remove sandbox |
 | `make integration-up` / `integration-down` | Manage compose DBs |
 
 SQLite-only usage does **not** need Docker. Compose is only for Postgres/MySQL/ClickHouse integration tests.
