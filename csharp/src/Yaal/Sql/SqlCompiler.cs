@@ -22,10 +22,53 @@ public static class SqlCompiler
     private static readonly Regex OneEqualsOneCompact = new(
         @"^1\s*=\s*1$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
-    private static readonly HashSet<string> OrderByClauseEnd = new(StringComparer.OrdinalIgnoreCase)
+    /// <summary>
+    /// Compile the ORDER BY clause starting at stmt[orderIdx] ("order"). Renders each
+    /// comma-separated term: the dynamic term (containing sort()/optional dir()) is
+    /// replaced by its resolved combined "expr DIR, ..." string (dropped entirely if
+    /// that resolves to null); static terms are reproduced verbatim. If nothing
+    /// remains, the whole clause elides.
+    ///
+    /// fragments (when not eliding) reuses the original "order"/"by"/whitespace
+    /// tokens verbatim instead of merging them into one string, so downstream
+    /// WHERE/PREWHERE cleanup -- which detects clause boundaries by exact-matching
+    /// the word "order" -- still recognizes it.
+    /// </summary>
+    private static (bool IsOrderBy, List<string>? Fragments, int NextIdx) CompileOrderBy(
+        List<SqlToken> stmt, int orderIdx, Dictionary<string, string?> sortMap)
     {
-        "limit", "offset", "fetch", "for", "union", "except", "intersect", ")", ";",
-    };
+        var n = stmt.Count;
+        var j = SkipWsTokens(stmt, orderIdx + 1);
+        if (j >= n || stmt[j].Type != "word" || !stmt[j].Value.Equals("by", StringComparison.OrdinalIgnoreCase))
+            return (false, null, orderIdx);
+
+        var k = SkipWsTokens(stmt, j + 1);
+        var (terms, endIdx, trailingWs) = SortDirDesugar.SplitOrderByTerms(stmt, k);
+
+        var rendered = new List<string>();
+        foreach (var term in terms)
+        {
+            var sortToken = term.FirstOrDefault(tok => tok.Type == "sort");
+            if (sortToken == null)
+            {
+                rendered.Add(SortDirDesugar.TokensToSql(term).Trim());
+                continue;
+            }
+            if (sortMap.TryGetValue(sortToken.Param!, out var expr) && expr != null)
+                rendered.Add(expr);
+            // else: this dynamic term elides; drop it (and its comma) entirely.
+        }
+
+        if (rendered.Count == 0)
+            return (true, null, endIdx);
+
+        var fragments = stmt.GetRange(orderIdx, k - orderIdx).Select(t => t.Value ?? "").ToList();
+        // Re-append the whitespace trimmed off the end of the clause body so a
+        // following clause-end word/paren (e.g. "LIMIT") isn't glued onto it.
+        fragments.Add(string.Join(", ", rendered));
+        fragments.Add(trailingWs);
+        return (true, fragments, endIdx);
+    }
 
     private static int SkipWsTokens(List<SqlToken> stmt, int i)
     {
@@ -34,69 +77,11 @@ public static class SqlCompiler
         return i;
     }
 
-    private static bool IsClauseEndToken(SqlToken token)
-    {
-        if (token.Type == "brace" && token.Value == ")")
-            return true;
-        if (token.Type == "word")
-            return OrderByClauseEnd.Contains(token.Value.Trim());
-        return false;
-    }
-
-    private static bool OrderByShouldElide(
-        List<SqlToken> stmt, int orderIndex, Dictionary<string, string?> sortMap)
-    {
-        var j = SkipWsTokens(stmt, orderIndex + 1);
-        if (j >= stmt.Count || stmt[j].Type != "word" ||
-            !stmt[j].Value.Equals("by", StringComparison.OrdinalIgnoreCase))
-            return false;
-
-        var k = j + 1;
-        while (k < stmt.Count && !IsClauseEndToken(stmt[k]))
-        {
-            var t = stmt[k];
-            if (t.Type == "sort")
-            {
-                if (!sortMap.TryGetValue(t.Param!, out var expr) || expr == null)
-                    return true;
-            }
-            k += 1;
-        }
-        return false;
-    }
-
-    private static int SkipElidedOrderBy(List<SqlToken> stmt, int orderIndex)
-    {
-        var k = orderIndex + 1;
-        while (k < stmt.Count)
-        {
-            var t = stmt[k];
-            if (t.Type is "space" or "newline")
-            {
-                k += 1;
-                continue;
-            }
-            if (t.Type == "word" && t.Value.Equals("by", StringComparison.OrdinalIgnoreCase))
-            {
-                k += 1;
-                continue;
-            }
-            if (t.Type is "sort" or "dir")
-            {
-                k += 1;
-                continue;
-            }
-            break;
-        }
-        return k;
-    }
-
     public static CompiledSql Compile(
         Twig sqlStmt,
         IEnumerable<string> nulls,
         string placeholder,
-        Dictionary<string, string?>? sortMap = null,
-        Dictionary<string, string>? dirMap = null)
+        Dictionary<string, string?>? sortMap = null)
     {
         Dictionary<string, ParamDecl>? parametersMeta = null;
         if (sqlStmt.Parameters.Count > 0)
@@ -108,7 +93,6 @@ public static class SqlCompiler
         }
 
         sortMap ??= new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
-        dirMap ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var nullsSet = new HashSet<string>(nulls.Select(n => n.ToLowerInvariant()));
         var stmt = sqlStmt.Content;
         var tokens = new List<string>();
@@ -121,14 +105,24 @@ public static class SqlCompiler
         while (idx < stmt.Count)
         {
             var token = stmt[idx];
-            if (token.Type == "word" &&
-                token.Value.Equals("order", StringComparison.OrdinalIgnoreCase) &&
-                OrderByShouldElide(stmt, idx, sortMap))
+            if (token.Type == "word" && token.Value.Equals("order", StringComparison.OrdinalIgnoreCase))
             {
-                while (tokens.Count > 0 && IsWhitespaceSqlFragment(tokens[^1]))
-                    tokens.RemoveAt(tokens.Count - 1);
-                idx = SkipElidedOrderBy(stmt, idx);
-                continue;
+                var (isOrderBy, fragments, nextIdx) = CompileOrderBy(stmt, idx, sortMap);
+                if (isOrderBy)
+                {
+                    if (fragments == null)
+                    {
+                        // Drop preceding whitespace so we don't leave trailing spaces before LIMIT.
+                        while (tokens.Count > 0 && IsWhitespaceSqlFragment(tokens[^1]))
+                            tokens.RemoveAt(tokens.Count - 1);
+                    }
+                    else
+                    {
+                        tokens.AddRange(fragments);
+                    }
+                    idx = nextIdx;
+                    continue;
+                }
             }
 
             if (token.Type == "brace")
@@ -176,6 +170,9 @@ public static class SqlCompiler
 
             if (token.Type == "sort")
             {
+                // Normal usage is always consumed inside an ORDER BY clause above; a
+                // stray sort() outside ORDER BY (author's responsibility, unvalidated)
+                // splices its resolved value here, or nothing if null.
                 if (sortMap.TryGetValue(token.Param!, out var expr) && expr != null)
                     tokens.Add(expr);
                 idx += 1;
@@ -184,7 +181,9 @@ public static class SqlCompiler
 
             if (token.Type == "dir")
             {
-                tokens.Add(dirMap.TryGetValue(token.Param!, out var dir) ? dir : "ASC");
+                // Direction is always folded into the paired sort()'s resolved value;
+                // a stray dir() (no preceding sort() in the same ORDER BY term) renders
+                // nothing.
                 idx += 1;
                 continue;
             }

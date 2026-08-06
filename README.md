@@ -37,17 +37,19 @@ yaal explain user/list --arg active=1
 
 ### Dynamic ORDER BY
 
-Allowlisted `sort()` / `dir()` splice author expressions only — never client SQL. Null `sort` elides `ORDER BY` unless the header sets a default (`string = id`). [Details →](docs/descriptors.md#dynamic-order-by--sortdir)
+Allowlisted `sort()` / `dir()` splice author expressions only — never client SQL. Null `sort` elides `ORDER BY` unless the header sets a default (`string = id`). Supports multi-column sort (`sort=name,id` + `dir=desc,asc`), `NULLS FIRST/LAST` (`dir=desc_nulls_last`), and mixing with a static tiebreaker column. [Details →](docs/descriptors.md#dynamic-order-by--sortdir)
 
 ```sql
 --($args.sort string = id, $args.dir string = asc)--
 order by
   sort({{$args.sort}}, name = u.user_name, id = u.user_id)
-  dir({{$args.dir}})
+  dir({{$args.dir}}),
+  u.user_id asc
 ```
 
 ```bash
 yaal query user/list --arg sort=name --arg dir=desc
+yaal query user/list --arg sort=name,id --arg dir=desc,asc
 ```
 
 ### JSON out

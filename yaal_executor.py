@@ -29,17 +29,16 @@ class DataProviderHelper:
             for n in twig["nullable"]:
                 if input_shape.get_prop(n) is None:
                     nulls.append(n)
-        sort_map, dir_map = resolve_sort_dir_values(twig, input_shape)
+        sort_map = resolve_sort_dir_values(twig, input_shape)
         sort_key = tuple(sorted((p, v if v is not None else "") for p, v in sort_map.items()))
-        dir_key = tuple(sorted(dir_map.items()))
-        key = (id(twig), frozenset(nulls), char, sort_key, dir_key)
+        key = (id(twig), frozenset(nulls), char, sort_key)
         cached = self._compile_cache.get(key)
         if cached is not None:
             return {
                 "content": cached["content"],
                 "parameters": list(cached["parameters"]),
             }
-        compiled = compile_sql(twig, nulls, char, sort_map=sort_map, dir_map=dir_map)
+        compiled = compile_sql(twig, nulls, char, sort_map=sort_map)
         self._compile_cache[key] = {
             "content": compiled["content"],
             "parameters": list(compiled.get("parameters") or []),

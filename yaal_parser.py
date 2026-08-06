@@ -14,6 +14,19 @@ _ORDER_BY_CLAUSE_END = frozenset({
     "limit", "offset", "fetch", "for", "union", "except", "intersect", ")", ";",
 })
 
+# Allowlisted client-facing dir() values -> spliced SQL suffix. NULLS placement is
+# client-controlled here (not per-author-key) since these are fixed keywords, never
+# identifiers -- no injection risk. Note: MySQL has no NULLS FIRST/LAST syntax; a
+# *_nulls_first/*_nulls_last value will raise a real SQL error on that engine.
+_DIR_VOCAB = {
+    "asc": "ASC",
+    "desc": "DESC",
+    "asc_nulls_first": "ASC NULLS FIRST",
+    "asc_nulls_last": "ASC NULLS LAST",
+    "desc_nulls_first": "DESC NULLS FIRST",
+    "desc_nulls_last": "DESC NULLS LAST",
+}
+
 
 def lex_dash(current, content):
     """Lex `--...` as a Yaal directive, or skip a SQL line comment."""
@@ -484,17 +497,110 @@ def _desugar_sort_dir_tokens(tokens):
     return result
 
 
-def _is_clause_end_token(token):
-    if token["type"] == "brace" and token["value"] == ")":
-        return True
-    if token["type"] == "word":
-        w = token["value"].strip().lower()
-        return w in _ORDER_BY_CLAUSE_END
-    return False
+def _is_order_by_clause_end_word(token):
+    return token["type"] == "word" and token["value"].strip().lower() in _ORDER_BY_CLAUSE_END
+
+
+def _split_order_by_terms(content, start_idx):
+    """Split an ORDER BY body into comma-separated terms.
+
+    Depth-aware: commas inside parens (e.g. `COALESCE(a, b)`) do not split a term.
+    A comma glued onto the end of a word token (e.g. `u.user_id,`) is trimmed off
+    the term, mirroring the sort(...) key = expr glued-comma handling.
+
+    Returns (terms, clause_end_idx, trailing_ws) where each term is a list of
+    the original tokens (leading/trailing whitespace trimmed), clause_end_idx
+    is the index of the first token after the clause (its clause-end token, or
+    len(content)), and trailing_ws is the whitespace text trimmed off the end
+    of the last term (i.e. the gap between the clause body and clause_end_idx)
+    -- callers that splice replacement text must re-append it so a following
+    clause-end word/paren doesn't get glued onto the replacement.
+    """
+    n = len(content)
+    terms = []
+    current = []
+    depth = 0
+    i = start_idx
+    while i < n:
+        t = content[i]
+        if depth == 0 and (
+            (t["type"] == "brace" and t["value"] == ")") or _is_order_by_clause_end_word(t)
+        ):
+            break
+
+        if t["type"] == "brace":
+            if t["value"] == "(":
+                depth += 1
+            elif t["value"] == ")":
+                depth -= 1
+            current.append(t)
+            i += 1
+            continue
+
+        if depth == 0 and t["type"] == "word":
+            val = t["value"]
+            if val == ",":
+                terms.append(current)
+                current = []
+                i += 1
+                continue
+            if val.endswith(",") and "," not in val[:-1]:
+                trimmed = dict(t)
+                trimmed["value"] = val[:-1]
+                if trimmed["value"] != "":
+                    current.append(trimmed)
+                terms.append(current)
+                current = []
+                i += 1
+                continue
+
+        current.append(t)
+        i += 1
+
+    terms.append(current)
+
+    tail = current
+    trailing_ws_tokens = []
+    while tail and tail[-1]["type"] in _WS_TOKEN_TYPES:
+        trailing_ws_tokens.insert(0, tail[-1])
+        tail = tail[:-1]
+    trailing_ws = "".join(t.get("value", "") for t in trailing_ws_tokens)
+
+    def _trim(term):
+        while term and term[0]["type"] in _WS_TOKEN_TYPES:
+            term = term[1:]
+        while term and term[-1]["type"] in _WS_TOKEN_TYPES:
+            term = term[:-1]
+        return term
+
+    return [_trim(term) for term in terms], i, trailing_ws
 
 
 def _validate_dynamic_order_by(content, method):
-    """v1: when sort()/dir() appear in ORDER BY, they must be the only terms."""
+    """v2: at most one dynamic sort()/dir() term per ORDER BY; other comma-separated
+    terms (a static tiebreaker before or after it) are ordinary author SQL.
+
+    Multiple sort()/dir() pairs are allowed in one statement (e.g. a subquery's
+    ORDER BY plus the outer query's ORDER BY), but each must use a distinct
+    {{param}} -- resolution is keyed by param name for the whole statement, so
+    reusing one param across two sort() calls (each with its own choices) would
+    silently resolve to only one of them.
+    """
+    seen_sort_params = {}
+    for tok in content:
+        if tok["type"] != "sort":
+            continue
+        param = tok.get("param")
+        if param in seen_sort_params:
+            raise TypeError(
+                "{{"
+                + param
+                + "}} is used in more than one sort(...) in "
+                + method
+                + ".sql -- each sort() must use a distinct param"
+            )
+        seen_sort_params[param] = True
+
     n = len(content)
     i = 0
     while i < n:
@@ -503,73 +609,138 @@ def _validate_dynamic_order_by(content, method):
             j = _skip_ws_tokens(content, i + 1)
             if j < n and content[j]["type"] == "word" and content[j]["value"].lower() == "by":
                 k = _skip_ws_tokens(content, j + 1)
-                has_dynamic = False
-                has_static = False
-                while k < n and not _is_clause_end_token(content[k]):
-                    ct = content[k]
-                    if ct["type"] in _WS_TOKEN_TYPES:
-                        k += 1
-                        continue
-                    if ct["type"] in ("sort", "dir"):
-                        has_dynamic = True
-                        k += 1
-                        continue
-                    has_static = True
-                    k += 1
-                if has_dynamic and has_static:
+                terms, end_idx, _trailing_ws = _split_order_by_terms(content, k)
+
+                for term in terms:
+                    if not term:
+                        raise TypeError(
+                            "empty ORDER BY term in " + method + ".sql"
+                        )
+
+                dynamic_terms = [
+                    term for term in terms if any(tok["type"] in ("sort", "dir") for tok in term)
+                ]
+                if len(dynamic_terms) > 1:
                     raise TypeError(
-                        "ORDER BY with sort()/dir() must not include other terms in "
+                        "only one dynamic sort()/dir() term is allowed per ORDER BY in "
                         + method
                         + ".sql"
                     )
-                i = k
+                if len(dynamic_terms) == 1:
+                    dyn = dynamic_terms[0]
+                    sort_positions = [idx for idx, tok in enumerate(dyn) if tok["type"] == "sort"]
+                    dir_positions = [idx for idx, tok in enumerate(dyn) if tok["type"] == "dir"]
+                    if len(sort_positions) != 1:
+                        raise TypeError(
+                            "ORDER BY dynamic term must contain exactly one sort(...) in "
+                            + method
+                            + ".sql"
+                        )
+                    if len(dir_positions) > 1:
+                        raise TypeError(
+                            "ORDER BY dynamic term must contain at most one dir(...) in "
+                            + method
+                            + ".sql"
+                        )
+                    non_ws = [idx for idx, tok in enumerate(dyn) if tok["type"] not in _WS_TOKEN_TYPES]
+                    if dir_positions:
+                        s_pos = non_ws.index(sort_positions[0])
+                        d_pos = non_ws.index(dir_positions[0])
+                        if d_pos != s_pos + 1 or len(non_ws) != 2:
+                            raise TypeError(
+                                "ORDER BY with sort()/dir() must not include other terms in "
+                                + method
+                                + ".sql"
+                            )
+                    elif len(non_ws) != 1:
+                        raise TypeError(
+                            "ORDER BY with sort()/dir() must not include other terms in "
+                            + method
+                            + ".sql"
+                        )
+                i = end_idx
                 continue
         i += 1
+
+
+def _find_paired_dir_param(content, sort_index):
+    """If a dir(...) token immediately follows content[sort_index] (ws only
+    between), return its param name; else None."""
+    i = _skip_ws_tokens(content, sort_index + 1)
+    if i < len(content) and content[i]["type"] == "dir":
+        return content[i]["param"]
+    return None
 
 
 def resolve_sort_dir_values(sql_stmt, input_shape):
     """
     Resolve sort()/dir() runtime values from input_shape.
 
-    Returns (sort_map, dir_map) where:
-      sort_map[param] = SQL expr string, or None to elide ORDER BY
-      dir_map[param] = 'ASC' or 'DESC'
+    `$args.sort` may be a single key or a comma-separated list of keys
+    (multi-column dynamic sort). `$args.dir` is matched to those keys by
+    position (comma-separated); missing trailing entries default to "asc".
+    Allowed dir values: asc, desc, asc_nulls_first, asc_nulls_last,
+    desc_nulls_first, desc_nulls_last (case-insensitive).
+
+    Returns sort_map where sort_map[param] is either:
+      None                          -- elide this dynamic ORDER BY term
+      "<expr1> <DIR1>, <expr2> ..." -- ready-to-splice combined SQL (direction
+                                       already resolved; no separate dir_map)
     Raises SortDirError for unknown/invalid non-null values (soft error).
     """
     sort_map = {}
-    dir_map = {}
-    for token in sql_stmt.get("content") or []:
-        if token["type"] == "sort":
-            param = token["param"]
-            raw = input_shape.get_prop(param) if input_shape is not None else None
-            if raw is None:
-                sort_map[param] = None
-                continue
-            if not isinstance(raw, str):
-                raw = str(raw)
-            key = raw.strip().lower()
+    content = sql_stmt.get("content") or []
+    for idx, token in enumerate(content):
+        if token["type"] != "sort":
+            continue
+        param = token["param"]
+        raw_sort = input_shape.get_prop(param) if input_shape is not None else None
+        if raw_sort is None:
+            sort_map[param] = None
+            continue
+        if not isinstance(raw_sort, str):
+            raw_sort = str(raw_sort)
+
+        choices = token["choices"]
+        keys = [k.strip().lower() for k in raw_sort.split(",")]
+        seen = set()
+        for key in keys:
             if key == "":
-                raise SortDirError("unknown sort key: " + repr(raw))
-            choices = token["choices"]
+                raise SortDirError("unknown sort key: " + repr(raw_sort))
             if key not in choices:
-                raise SortDirError("unknown sort key: " + raw)
-            sort_map[param] = choices[key]
-        elif token["type"] == "dir":
-            param = token["param"]
-            raw = input_shape.get_prop(param) if input_shape is not None else None
-            if raw is None:
-                dir_map[param] = "ASC"
-                continue
-            if not isinstance(raw, str):
-                raw = str(raw)
-            direction = raw.strip().lower()
-            if direction == "asc":
-                dir_map[param] = "ASC"
-            elif direction == "desc":
-                dir_map[param] = "DESC"
-            else:
-                raise SortDirError("unknown sort direction: " + raw)
-    return sort_map, dir_map
+                raise SortDirError("unknown sort key: " + key)
+            if key in seen:
+                raise SortDirError("duplicate sort key: " + key)
+            seen.add(key)
+
+        dir_param = _find_paired_dir_param(content, idx)
+        raw_dir = input_shape.get_prop(dir_param) if dir_param and input_shape is not None else None
+        if raw_dir is None:
+            dirs = []
+        else:
+            if not isinstance(raw_dir, str):
+                raw_dir = str(raw_dir)
+            dirs = [d.strip().lower() for d in raw_dir.split(",")]
+        if len(dirs) > len(keys):
+            raise SortDirError(
+                "too many dir values for "
+                + str(len(keys))
+                + " sort key(s): "
+                + raw_dir
+            )
+        while len(dirs) < len(keys):
+            dirs.append("asc")
+
+        resolved = []
+        for d in dirs:
+            if d not in _DIR_VOCAB:
+                raise SortDirError("unknown sort direction: " + d)
+            resolved.append(_DIR_VOCAB[d])
+
+        sort_map[param] = ", ".join(
+            choices[k] + " " + d for k, d in zip(keys, resolved)
+        )
+    return sort_map
 
 
 def _split_parameter_header_segments(inner):
@@ -1058,50 +1229,60 @@ def _cleanup_compiled_sql(tokens):
     return tokens
 
 
-def _order_by_should_elide(stmt, order_index, sort_map):
-    """True if this ORDER BY contains a sort() whose value is null (elide whole clause)."""
-    j = _skip_ws_tokens(stmt, order_index + 1)
-    if j >= len(stmt) or stmt[j]["type"] != "word" or stmt[j]["value"].lower() != "by":
-        return False
-    k = j + 1
-    saw_sort = False
-    while k < len(stmt) and not _is_clause_end_token(stmt[k]):
-        t = stmt[k]
-        if t["type"] == "sort":
-            saw_sort = True
-            if sort_map.get(t["param"]) is None:
-                return True
-        k += 1
-    return False
+def _compile_order_by(stmt, order_idx, sort_map):
+    """Compile the ORDER BY clause starting at stmt[order_idx] ("order").
 
+    Renders each comma-separated term: the dynamic term (containing sort()/
+    optional dir()) is replaced by its resolved combined "expr DIR, ..."
+    string (dropped entirely if that resolves to None); static terms are
+    reproduced verbatim. If nothing remains, the whole clause elides.
 
-def _skip_elided_order_by(stmt, order_index):
-    """Skip from ORDER through dynamic ORDER BY terms (sort/dir/ws/by)."""
-    k = order_index + 1
-    # consume optional ws, by, ws, sort/dir/ws until clause end or static
-    while k < len(stmt):
-        t = stmt[k]
-        if t["type"] in _WS_TOKEN_TYPES:
-            k += 1
+    Returns (is_order_by, fragments, next_idx):
+      is_order_by: False if stmt[order_idx] is not actually "order by" (caller
+                   should fall back to ordinary per-token handling).
+      fragments: None to elide the entire clause (incl. keyword), or a list of
+                 string fragments to splice in -- the original "order"/"by"/
+                 whitespace tokens are reused verbatim (not merged into one
+                 string) so downstream WHERE/PREWHERE cleanup, which detects
+                 clause boundaries by exact-matching the word "order", still
+                 recognizes it.
+      next_idx: index in stmt right after the clause.
+    """
+    n = len(stmt)
+    j = _skip_ws_tokens(stmt, order_idx + 1)
+    if j >= n or stmt[j]["type"] != "word" or stmt[j]["value"].lower() != "by":
+        return False, None, order_idx
+
+    k = _skip_ws_tokens(stmt, j + 1)
+    terms, end_idx, trailing_ws = _split_order_by_terms(stmt, k)
+
+    rendered = []
+    for term in terms:
+        sort_tokens = [tok for tok in term if tok["type"] == "sort"]
+        if not sort_tokens:
+            rendered.append(_tokens_to_sql(term).strip())
             continue
-        if t["type"] == "word" and t["value"].lower() == "by":
-            k += 1
-            continue
-        if t["type"] in ("sort", "dir"):
-            k += 1
-            continue
-        break
-    return k
+        expr = sort_map.get(sort_tokens[0]["param"])
+        if expr is not None:
+            rendered.append(expr)
+        # else: this dynamic term elides; drop it (and its comma) entirely.
+
+    if not rendered:
+        return True, None, end_idx
+
+    prefix = [t.get("value", "") for t in stmt[order_idx:k]]
+    # Re-append the whitespace trimmed off the end of the clause body so a
+    # following clause-end word/paren (e.g. "LIMIT") isn't glued onto it.
+    return True, prefix + [", ".join(rendered), trailing_ws], end_idx
 
 
-def compile_sql(sql_stmt, nulls, char, sort_map=None, dir_map=None):
+def compile_sql(sql_stmt, nulls, char, sort_map=None):
     if "parameters" in sql_stmt:
         parameters_meta = {x["name"]: x for x in sql_stmt["parameters"]}
     else:
         parameters_meta = None
 
     sort_map = sort_map or {}
-    dir_map = dir_map or {}
     nulls_set = {n.lower() for n in nulls}
     stmt = sql_stmt["content"]
     tokens = []
@@ -1113,16 +1294,17 @@ def compile_sql(sql_stmt, nulls, char, sort_map=None, dir_map=None):
     n = len(stmt)
     while idx < n:
         token = stmt[idx]
-        if (
-            token["type"] == "word"
-            and token["value"].lower() == "order"
-            and _order_by_should_elide(stmt, idx, sort_map)
-        ):
-            # Drop preceding whitespace so we don't leave trailing spaces before LIMIT.
-            while tokens and _is_whitespace_sql_fragment(tokens[-1]):
-                tokens.pop()
-            idx = _skip_elided_order_by(stmt, idx)
-            continue
+        if token["type"] == "word" and token["value"].lower() == "order":
+            is_order_by, fragments, next_idx = _compile_order_by(stmt, idx, sort_map)
+            if is_order_by:
+                if fragments is None:
+                    # Drop preceding whitespace so we don't leave trailing spaces before LIMIT.
+                    while tokens and _is_whitespace_sql_fragment(tokens[-1]):
+                        tokens.pop()
+                else:
+                    tokens.extend(fragments)
+                idx = next_idx
+                continue
 
         if token["type"] == "brace":
             if group is not None:
@@ -1156,17 +1338,19 @@ def compile_sql(sql_stmt, nulls, char, sort_map=None, dir_map=None):
             skip_or_after_nullable = False
 
         if token["type"] == "sort":
+            # Normal usage is always consumed inside an ORDER BY clause above;
+            # a stray sort() outside ORDER BY (author's responsibility, unvalidated)
+            # splices its resolved value here, or nothing if null.
             expr = sort_map.get(token["param"])
-            if expr is None:
-                # Should have been elided with ORDER BY; skip stray sort.
-                idx += 1
-                continue
-            tokens.append(expr)
+            if expr is not None:
+                tokens.append(expr)
             idx += 1
             continue
 
         if token["type"] == "dir":
-            tokens.append(dir_map.get(token["param"], "ASC"))
+            # Direction is always folded into the paired sort()'s resolved value;
+            # a stray dir() (no preceding sort() in the same ORDER BY term) renders
+            # nothing.
             idx += 1
             continue
 

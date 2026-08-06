@@ -2,6 +2,7 @@
 // Use of this source code is governed by a MIT style
 // license that can be found in the LICENSE file.
 
+using System.Linq;
 using System.Text.RegularExpressions;
 
 namespace Yaal.Sql;
@@ -15,6 +16,20 @@ public static class SortDirDesugar
         "limit", "offset", "fetch", "for", "union", "except", "intersect", ")", ";",
     };
 
+    // Allowlisted client-facing dir() values -> spliced SQL suffix. NULLS placement is
+    // client-controlled here (not per-author-key) since these are fixed keywords, never
+    // identifiers -- no injection risk. Note: MySQL has no NULLS FIRST/LAST syntax; a
+    // *_nulls_first/*_nulls_last value will raise a real SQL error on that engine.
+    private static readonly Dictionary<string, string> DirVocab = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["asc"] = "ASC",
+        ["desc"] = "DESC",
+        ["asc_nulls_first"] = "ASC NULLS FIRST",
+        ["asc_nulls_last"] = "ASC NULLS LAST",
+        ["desc_nulls_first"] = "DESC NULLS FIRST",
+        ["desc_nulls_last"] = "DESC NULLS LAST",
+    };
+
     private static int SkipWs(List<SqlToken> tokens, int i)
     {
         while (i < tokens.Count && tokens[i].Type is "space" or "newline")
@@ -22,7 +37,7 @@ public static class SortDirDesugar
         return i;
     }
 
-    private static string TokensToSql(IEnumerable<SqlToken> tokens) =>
+    internal static string TokensToSql(IEnumerable<SqlToken> tokens) =>
         string.Concat(tokens.Select(t => t.Value ?? ""));
 
     private static bool BodyContainsSortOrDirCall(List<SqlToken> tokens)
@@ -230,17 +245,116 @@ public static class SortDirDesugar
         return result;
     }
 
-    private static bool IsClauseEndToken(SqlToken token)
+    private static bool IsOrderByClauseEndWord(SqlToken token) =>
+        token.Type == "word" && OrderByClauseEnd.Contains(token.Value.Trim());
+
+    /// <summary>
+    /// Split an ORDER BY body into comma-separated terms. Depth-aware: commas inside
+    /// parens (e.g. COALESCE(a, b)) do not split a term. A comma glued onto the end of
+    /// a word token (e.g. "u.user_id,") is trimmed off the term.
+    ///
+    /// TrailingWs is the whitespace text trimmed off the end of the last term (i.e.
+    /// the gap between the clause body and ClauseEndIdx) -- callers that splice
+    /// replacement text must re-append it so a following clause-end word/paren
+    /// (e.g. "LIMIT") doesn't get glued onto the replacement.
+    /// </summary>
+    internal static (List<List<SqlToken>> Terms, int ClauseEndIdx, string TrailingWs) SplitOrderByTerms(
+        List<SqlToken> content, int startIdx)
     {
-        if (token.Type == "brace" && token.Value == ")")
-            return true;
-        if (token.Type == "word")
-            return OrderByClauseEnd.Contains(token.Value.Trim());
-        return false;
+        var n = content.Count;
+        var terms = new List<List<SqlToken>>();
+        var current = new List<SqlToken>();
+        var depth = 0;
+        var i = startIdx;
+        while (i < n)
+        {
+            var t = content[i];
+            if (depth == 0 && ((t.Type == "brace" && t.Value == ")") || IsOrderByClauseEndWord(t)))
+                break;
+
+            if (t.Type == "brace")
+            {
+                if (t.Value == "(")
+                    depth += 1;
+                else if (t.Value == ")")
+                    depth -= 1;
+                current.Add(t);
+                i += 1;
+                continue;
+            }
+
+            if (depth == 0 && t.Type == "word")
+            {
+                var val = t.Value;
+                if (val == ",")
+                {
+                    terms.Add(current);
+                    current = new List<SqlToken>();
+                    i += 1;
+                    continue;
+                }
+                if (val.EndsWith(",", StringComparison.Ordinal) && !val[..^1].Contains(','))
+                {
+                    var trimmed = new SqlToken { Type = t.Type, Value = val[..^1], Group = t.Group };
+                    if (trimmed.Value != "")
+                        current.Add(trimmed);
+                    terms.Add(current);
+                    current = new List<SqlToken>();
+                    i += 1;
+                    continue;
+                }
+            }
+
+            current.Add(t);
+            i += 1;
+        }
+        terms.Add(current);
+
+        var tailEnd = current.Count;
+        while (tailEnd > 0 && current[tailEnd - 1].Type is "space" or "newline")
+            tailEnd -= 1;
+        var trailingWs = string.Concat(current.GetRange(tailEnd, current.Count - tailEnd).Select(t => t.Value ?? ""));
+
+        static List<SqlToken> Trim(List<SqlToken> term)
+        {
+            var start = 0;
+            var end = term.Count;
+            while (start < end && term[start].Type is "space" or "newline")
+                start += 1;
+            while (end > start && term[end - 1].Type is "space" or "newline")
+                end -= 1;
+            return term.GetRange(start, end - start);
+        }
+
+        return (terms.Select(Trim).ToList(), i, trailingWs);
     }
 
+    /// <summary>
+    /// v2: at most one dynamic sort()/dir() term per ORDER BY; other comma-separated
+    /// terms (a static tiebreaker before or after it) are ordinary author SQL.
+    ///
+    /// Multiple sort()/dir() pairs are allowed in one statement (e.g. a subquery's
+    /// ORDER BY plus the outer query's ORDER BY), but each must use a distinct
+    /// {{param}} -- resolution is keyed by param name for the whole statement, so
+    /// reusing one param across two sort() calls (each with its own choices) would
+    /// silently resolve to only one of them.
+    /// </summary>
     public static void ValidateDynamicOrderBy(List<SqlToken> content, string method)
     {
+        var seenSortParams = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var tok in content)
+        {
+            if (tok.Type != "sort")
+                continue;
+            var param = tok.Param!;
+            if (!seenSortParams.Add(param))
+            {
+                throw new InvalidOperationException(
+                    "{{" + param + "}} is used in more than one sort(...) in " + method +
+                    ".sql -- each sort() must use a distinct param");
+            }
+        }
+
         var n = content.Count;
         var i = 0;
         while (i < n)
@@ -253,32 +367,59 @@ public static class SortDirDesugar
                     content[j].Value.Equals("by", StringComparison.OrdinalIgnoreCase))
                 {
                     var k = SkipWs(content, j + 1);
-                    var hasDynamic = false;
-                    var hasStatic = false;
-                    while (k < n && !IsClauseEndToken(content[k]))
+                    var (terms, endIdx, _) = SplitOrderByTerms(content, k);
+
+                    foreach (var term in terms)
                     {
-                        var ct = content[k];
-                        if (ct.Type is "space" or "newline")
-                        {
-                            k += 1;
-                            continue;
-                        }
-                        if (ct.Type is "sort" or "dir")
-                        {
-                            hasDynamic = true;
-                            k += 1;
-                            continue;
-                        }
-                        hasStatic = true;
-                        k += 1;
+                        if (term.Count == 0)
+                            throw new InvalidOperationException("empty ORDER BY term in " + method + ".sql");
                     }
-                    if (hasDynamic && hasStatic)
+
+                    var dynamicTerms = terms.Where(term => term.Any(tok => tok.Type is "sort" or "dir")).ToList();
+                    if (dynamicTerms.Count > 1)
                     {
                         throw new InvalidOperationException(
-                            "ORDER BY with sort()/dir() must not include other terms in " +
+                            "only one dynamic sort()/dir() term is allowed per ORDER BY in " +
                             method + ".sql");
                     }
-                    i = k;
+                    if (dynamicTerms.Count == 1)
+                    {
+                        var dyn = dynamicTerms[0];
+                        var sortPositions = Enumerable.Range(0, dyn.Count).Where(p => dyn[p].Type == "sort").ToList();
+                        var dirPositions = Enumerable.Range(0, dyn.Count).Where(p => dyn[p].Type == "dir").ToList();
+                        if (sortPositions.Count != 1)
+                        {
+                            throw new InvalidOperationException(
+                                "ORDER BY dynamic term must contain exactly one sort(...) in " +
+                                method + ".sql");
+                        }
+                        if (dirPositions.Count > 1)
+                        {
+                            throw new InvalidOperationException(
+                                "ORDER BY dynamic term must contain at most one dir(...) in " +
+                                method + ".sql");
+                        }
+                        var nonWs = Enumerable.Range(0, dyn.Count)
+                            .Where(p => dyn[p].Type is not ("space" or "newline")).ToList();
+                        if (dirPositions.Count == 1)
+                        {
+                            var sPos = nonWs.IndexOf(sortPositions[0]);
+                            var dPos = nonWs.IndexOf(dirPositions[0]);
+                            if (dPos != sPos + 1 || nonWs.Count != 2)
+                            {
+                                throw new InvalidOperationException(
+                                    "ORDER BY with sort()/dir() must not include other terms in " +
+                                    method + ".sql");
+                            }
+                        }
+                        else if (nonWs.Count != 1)
+                        {
+                            throw new InvalidOperationException(
+                                "ORDER BY with sort()/dir() must not include other terms in " +
+                                method + ".sql");
+                        }
+                    }
+                    i = endIdx;
                     continue;
                 }
             }
@@ -286,52 +427,87 @@ public static class SortDirDesugar
         }
     }
 
-    public static (Dictionary<string, string?> SortMap, Dictionary<string, string> DirMap)
-        ResolveValues(Twig sqlStmt, Shape? inputShape)
+    /// <summary>
+    /// If a dir(...) token immediately follows content[sortIndex] (ws only between),
+    /// return its param name; else null.
+    /// </summary>
+    private static string? FindPairedDirParam(List<SqlToken> content, int sortIndex)
     {
-        var sortMap = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
-        var dirMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var token in sqlStmt.Content)
-        {
-            if (token.Type == "sort")
-            {
-                var param = token.Param!;
-                var raw = inputShape?.GetProp(param);
-                if (raw == null)
-                {
-                    sortMap[param] = null;
-                    continue;
-                }
-                var key = (raw as string ?? raw.ToString() ?? "").Trim().ToLowerInvariant();
-                if (key == "")
-                    throw new SortDirException("unknown sort key: " + FormatRaw(raw));
-                if (token.Choices == null || !token.Choices.TryGetValue(key, out var expr))
-                    throw new SortDirException("unknown sort key: " + (raw as string ?? raw.ToString()));
-                sortMap[param] = expr;
-            }
-            else if (token.Type == "dir")
-            {
-                var param = token.Param!;
-                var raw = inputShape?.GetProp(param);
-                if (raw == null)
-                {
-                    dirMap[param] = "ASC";
-                    continue;
-                }
-                var direction = (raw as string ?? raw.ToString() ?? "").Trim().ToLowerInvariant();
-                if (direction == "asc")
-                    dirMap[param] = "ASC";
-                else if (direction == "desc")
-                    dirMap[param] = "DESC";
-                else
-                    throw new SortDirException("unknown sort direction: " + (raw as string ?? raw.ToString()));
-            }
-        }
-
-        return (sortMap, dirMap);
+        var i = SkipWs(content, sortIndex + 1);
+        return i < content.Count && content[i].Type == "dir" ? content[i].Param : null;
     }
 
-    private static string FormatRaw(object raw) =>
-        raw is string s ? "'" + s + "'" : (raw.ToString() ?? "");
+    private static string AsRawString(object raw) => raw as string ?? raw.ToString() ?? "";
+
+    /// <summary>
+    /// Resolve sort()/dir() runtime values from inputShape.
+    ///
+    /// The sort param may be a single key or a comma-separated list of keys
+    /// (multi-column dynamic sort). The paired dir param is matched to those keys by
+    /// position (comma-separated); missing trailing entries default to "asc". Allowed
+    /// dir values: asc, desc, asc_nulls_first, asc_nulls_last, desc_nulls_first,
+    /// desc_nulls_last (case-insensitive).
+    ///
+    /// Returns sortMap where sortMap[param] is either null (elide this dynamic ORDER BY
+    /// term) or a ready-to-splice "expr1 DIR1, expr2 DIR2, ..." string (direction
+    /// already resolved; no separate dir map).
+    /// </summary>
+    public static Dictionary<string, string?> ResolveValues(Twig sqlStmt, Shape? inputShape)
+    {
+        var sortMap = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        var content = sqlStmt.Content;
+
+        for (var idx = 0; idx < content.Count; idx++)
+        {
+            var token = content[idx];
+            if (token.Type != "sort")
+                continue;
+
+            var param = token.Param!;
+            var rawSort = inputShape?.GetProp(param);
+            if (rawSort == null)
+            {
+                sortMap[param] = null;
+                continue;
+            }
+
+            var choices = token.Choices ?? new Dictionary<string, string>();
+            var keys = AsRawString(rawSort).Split(',').Select(k => k.Trim().ToLowerInvariant()).ToList();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var key in keys)
+            {
+                if (key == "")
+                    throw new SortDirException("unknown sort key: '" + AsRawString(rawSort) + "'");
+                if (!choices.ContainsKey(key))
+                    throw new SortDirException("unknown sort key: " + key);
+                if (!seen.Add(key))
+                    throw new SortDirException("duplicate sort key: " + key);
+            }
+
+            var dirParam = FindPairedDirParam(content, idx);
+            var rawDir = dirParam != null ? inputShape?.GetProp(dirParam) : null;
+            var dirs = rawDir != null
+                ? AsRawString(rawDir).Split(',').Select(d => d.Trim().ToLowerInvariant()).ToList()
+                : new List<string>();
+            if (dirs.Count > keys.Count)
+            {
+                throw new SortDirException(
+                    "too many dir values for " + keys.Count + " sort key(s): " + AsRawString(rawDir!));
+            }
+            while (dirs.Count < keys.Count)
+                dirs.Add("asc");
+
+            var resolvedDirs = new List<string>();
+            foreach (var d in dirs)
+            {
+                if (!DirVocab.TryGetValue(d, out var sqlDir))
+                    throw new SortDirException("unknown sort direction: " + d);
+                resolvedDirs.Add(sqlDir);
+            }
+
+            sortMap[param] = string.Join(", ", keys.Zip(resolvedDirs, (k, d) => choices[k] + " " + d));
+        }
+
+        return sortMap;
+    }
 }

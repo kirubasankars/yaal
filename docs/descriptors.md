@@ -135,14 +135,60 @@ order by
 
 | Construct | Behavior |
 |---|---|
-| `sort({{param}}, key = expr, …)` | Resolve `param` to a declared key (case-insensitive). Splice the matching **author** `expr`. Unknown non-null key → soft `{"errors":[…]}` (no execute). |
-| `dir({{param}})` | Allow only `asc` / `desc` (case-insensitive). Null/omitted → `ASC`. Unknown → soft error. |
-| Null / omitted `sort` (no header default) | **Elide** the entire `ORDER BY` (dir is ignored). |
+| `sort({{param}}, key = expr, …)` | Resolve `param` to one or more declared keys (case-insensitive, comma-separated — see multi-column below). Splice the matching **author** `expr`(s). Unknown non-null key → soft `{"errors":[…]}` (no execute). |
+| `dir({{param}})` | Positional list matched to `sort`'s keys (comma-separated). Allowed values: `asc`, `desc`, `asc_nulls_first`, `asc_nulls_last`, `desc_nulls_first`, `desc_nulls_last` (case-insensitive). Missing trailing entries default to `asc`. Too many entries or an unknown value → soft error. |
+| Null / omitted `sort` (no header default) | **Elide** the dynamic `sort()`/`dir()` term (see mixing below; dir is ignored). |
 | Header default on `sort` / `dir` | Omitted args use that default (e.g. `string = id`) instead of eliding. |
 
-**v1 rules:** the `ORDER BY` clause must be exactly `sort(...)` and optional `dir(...)` — no extra comma terms. Keys must match `\w+`. `sort`/`dir` outside `ORDER BY` parse but are the author's responsibility. Empty-string / whitespace-only sort keys are soft errors (not treated as null).
+#### Multi-column dynamic sort
 
-Security: only expressions written in the descriptor are ever spliced; client keys never become SQL.
+`sort` and `dir` are each a comma-separated list, matched **by position**. A single key/value (`sort=name`, `dir=desc`) is just the length-1 case:
+
+```bash
+yaal query user/list --arg sort=name,id --arg dir=desc,asc
+```
+
+resolves to `ORDER BY u.user_name DESC, u.user_id ASC`. Rules: keys must be declared in `sort(...)`'s choices and not repeated; `dir` may have fewer entries than `sort` (missing ones default to `asc`) but not more (soft error).
+
+#### NULLS FIRST/LAST
+
+Client-controlled via the `dir` vocabulary above, one entry per sort key:
+
+```bash
+yaal query user/list --arg sort=name --arg dir=desc_nulls_last
+```
+
+resolves to `ORDER BY u.user_name DESC NULLS LAST`. **MySQL has no `NULLS FIRST/LAST` syntax** — a `*_nulls_first`/`*_nulls_last` value against a MySQL connection raises a real SQL error from the engine, not a Yaal soft error.
+
+#### Mixing with a static tiebreaker
+
+At most one dynamic term (`sort()` plus its immediately-adjacent optional `dir()`) is allowed per `ORDER BY`, but ordinary static terms may sit before and/or after it, comma-separated:
+
+```sql
+order by
+  sort({{$args.sort}}, name = u.user_name, id = u.user_id)
+  dir({{$args.dir}}),
+  u.user_id asc
+```
+
+When `sort` is null (no header default), only the dynamic term elides — the static tiebreaker(s) remain (`ORDER BY u.user_id asc`). The whole `ORDER BY` only elides when the dynamic term is the sole term.
+
+#### Multiple `sort()`/`dir()` pairs in one statement
+
+A statement may contain more than one `ORDER BY` — e.g. a subquery's `ORDER BY` plus the outer query's — and each may have its own dynamic `sort()`/`dir()` pair (still at most one dynamic term per individual `ORDER BY`). Each pair **must use a distinct `{{param}}`**: resolution is keyed by param name for the whole statement, so reusing the same param across two `sort()` calls (each with its own `key = expr` choices) is rejected at parse time, since only one of the two would ever get spliced.
+
+```sql
+--($args.s1 string, $args.d1 string, $args.s2 string, $args.d2 string)--
+select * from (
+  select * from t1
+  order by sort({{$args.s1}}, a = x, b = y) dir({{$args.d1}})
+) sub
+order by sort({{$args.s2}}, c = z, d = w) dir({{$args.d2}})
+```
+
+**v2 rules:** the dynamic term is `sort(...)` and optional immediately-following `dir(...)` — nothing else in that same comma-separated term. Keys must match `\w+`. Each `sort()` in a statement must use a distinct param. `sort`/`dir` outside `ORDER BY` parse but are the author's responsibility. Empty-string / whitespace-only sort keys are soft errors (not treated as null).
+
+Security: only expressions written in the descriptor are ever spliced; client keys never become SQL — the NULLS vocabulary above is a fixed keyword allowlist, not client-supplied SQL.
 
 ```bash
 yaal explain user/list --arg sort=name --arg dir=desc

@@ -239,8 +239,11 @@ where 1 = 1
   and optional(u.active = {{$args.active}})
 order by
   sort({{$args.sort}}, name = u.user_name, id = u.user_id)
-  dir({{$args.dir}})
+  dir({{$args.dir}}),
+  u.user_id asc
 ```
+
+The trailing `u.user_id asc` is a static tiebreaker — it stays even when `sort`/`dir` are omitted (only the dynamic term elides). `sort`/`dir` also each accept a comma-separated list for multi-column sort (`sort=name,id` + `dir=desc,asc`), and `dir` accepts `*_nulls_first`/`*_nulls_last` suffixes.
 
 **`$.output.yaml`**
 
@@ -262,13 +265,14 @@ properties:
 yaal query user/list
 yaal query user/list --arg active=1
 yaal query user/list --arg sort=name --arg dir=desc
+yaal query user/list --arg sort=name,id --arg dir=desc,asc
 yaal explain user/list
 yaal explain user/list --arg active=1 --arg sort=id
 ```
 
 ### Explain (elision + defaults)
 
-**active omitted** — filter removed; header defaults keep `ORDER BY u.user_id ASC`:
+**active omitted** — filter removed; header defaults keep the dynamic term (`u.user_id ASC`) plus the static tiebreaker:
 
 ```sql
 select
@@ -277,8 +281,7 @@ select
     u.active
 from users u
 order by
-  u.user_id
-  ASC
+  u.user_id ASC, u.user_id asc
 -- binds: []
 ```
 
@@ -290,12 +293,17 @@ select
     u.user_name,
     u.active
 from users u
-where 1 = 1
-  and (u.active = ?)
+where (u.active = ?)
 order by
-  u.user_name
-  DESC
+  u.user_name DESC, u.user_id asc
 -- binds: [1]
+```
+
+**sort=name,id, dir=desc,asc** (multi-column):
+
+```sql
+order by
+  u.user_name DESC, u.user_id ASC, u.user_id asc
 ```
 
 ### Sample JSON (`active=1`, `sort=name`)

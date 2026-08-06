@@ -22,6 +22,28 @@ public class SortDirTests
           dir({{$args.dir}})
         """;
 
+    // Same as ListSql, plus a static tiebreaker after the dynamic term.
+    private const string ListSqlTiebreaker = """
+        --($args.sort string, $args.dir string, $args.active integer)--
+        select u.user_id, u.user_name from users u
+        where 1 = 1
+          and optional(u.active = {{$args.active}})
+        order by
+          sort({{$args.sort}}, name = u.user_name, id = u.user_id)
+          dir({{$args.dir}}),
+          u.user_id asc
+        """;
+
+    // Same choices, static tiebreaker leads instead of trailing.
+    private const string ListSqlLeadingStatic = """
+        --($args.sort string, $args.dir string)--
+        select u.user_id, u.user_name from users u
+        order by
+          u.is_pinned desc,
+          sort({{$args.sort}}, name = u.user_name, id = u.user_id)
+          dir({{$args.dir}})
+        """;
+
     private static string Normalize(string sql) =>
         Regex.Replace(sql, @"\s+", " ").Trim();
 
@@ -82,11 +104,67 @@ public class SortDirTests
     public void Parse_key_illegal_chars() => ExpectParseError("sort({{a}}, bad-key = x)", "word characters");
 
     [Fact]
-    public void Parse_mixed_static_order_by_rejected()
+    public void Parse_static_tiebreaker_after_allowed()
+    {
+        var ast = SqlParser.Parse(
+            Lexer.Lex("--(s string)--\nselect 1 order by sort({{s}}, a = x), y\n"), "$");
+        ast.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void Parse_static_tiebreaker_before_allowed()
+    {
+        var ast = SqlParser.Parse(
+            Lexer.Lex("--(s string)--\nselect 1 order by y, sort({{s}}, a = x)\n"), "$");
+        ast.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void Parse_two_dynamic_terms_rejected()
     {
         Action act = () => SqlParser.Parse(
-            Lexer.Lex("--(s string)--\nselect 1 order by sort({{s}}, a = x), y\n"), "$");
+            Lexer.Lex("--(a string, b string)--\nselect 1 order by sort({{a}}, x = y), sort({{b}}, p = q)\n"), "$");
+        act.Should().Throw<Exception>().WithMessage("*only one dynamic sort()/dir() term*");
+    }
+
+    [Fact]
+    public void Parse_dir_split_from_sort_by_comma_rejected()
+    {
+        Action act = () => SqlParser.Parse(
+            Lexer.Lex("--(a string, b string)--\nselect 1 order by sort({{a}}, x = y), foo, dir({{b}})\n"), "$");
+        act.Should().Throw<Exception>().WithMessage("*only one dynamic sort()/dir() term*");
+    }
+
+    [Fact]
+    public void Parse_dir_not_immediately_after_sort_same_term_rejected()
+    {
+        Action act = () => SqlParser.Parse(
+            Lexer.Lex("--(a string, b string)--\nselect 1 order by sort({{a}}, x = y) foo dir({{b}})\n"), "$");
         act.Should().Throw<Exception>().WithMessage("*must not include other terms*");
+    }
+
+    [Fact]
+    public void Parse_dynamic_term_mixed_with_static_no_comma_rejected()
+    {
+        Action act = () => SqlParser.Parse(
+            Lexer.Lex("--(s string)--\nselect 1 order by sort({{s}}, a = x) foo\n"), "$");
+        act.Should().Throw<Exception>().WithMessage("*must not include other terms*");
+    }
+
+    [Fact]
+    public void Parse_empty_order_by_term_rejected()
+    {
+        Action act = () => SqlParser.Parse(
+            Lexer.Lex("--(s string)--\nselect 1 order by sort({{s}}, a = x), ,\n"), "$");
+        act.Should().Throw<Exception>().WithMessage("*empty ORDER BY term*");
+    }
+
+    [Fact]
+    public void Parse_static_term_with_internal_paren_comma_allowed()
+    {
+        var ast = SqlParser.Parse(
+            Lexer.Lex("--(s string)--\nselect 1 order by coalesce(a, b) desc, sort({{s}}, x = y)\n"), "$");
+        ast.Should().NotBeNull();
     }
 
     [Fact]
@@ -94,6 +172,36 @@ public class SortDirTests
     {
         var ast = SqlParser.Parse(Lexer.Lex("--(s string)--\nselect sort({{s}}, a = x) from t\n"), "$")!;
         ast.SqlStmts![0].Content.Should().Contain(t => t.Type == "sort");
+    }
+
+    // -- multiple sort()/dir() pairs in one statement --------------------------
+
+    [Fact]
+    public void Parse_multiple_sort_dir_pairs_distinct_params_allowed()
+    {
+        var sql = """
+            --(s1 string, d1 string, s2 string, d2 string)--
+            select * from (
+              select * from t1 order by sort({{s1}}, a = x, b = y) dir({{d1}})
+            ) sub
+            order by sort({{s2}}, c = z, d = w) dir({{d2}})
+            """;
+        var ast = SqlParser.Parse(Lexer.Lex(sql), "$");
+        ast.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void Parse_reused_param_across_two_sort_calls_rejected()
+    {
+        var sql = """
+            --(s string, d string)--
+            select * from (
+              select * from t1 order by sort({{s}}, a = x, b = y) dir({{d}})
+            ) sub
+            order by sort({{s}}, a = p, b = q) dir({{d}})
+            """;
+        Action act = () => SqlParser.Parse(Lexer.Lex(sql), "$");
+        act.Should().Throw<Exception>().WithMessage("*more than one sort(...)*");
     }
 
     [Fact]
@@ -110,8 +218,15 @@ public class SortDirTests
     [Fact]
     public void Resolve_sort_case_insensitive()
     {
-        var (sortMap, _) = SortDirDesugar.ResolveValues(Twig(), ArgsShape(sort: "NAME"));
-        sortMap["$args.sort"].Should().Be("u.user_name");
+        var sortMap = SortDirDesugar.ResolveValues(Twig(), ArgsShape(sort: "NAME"));
+        sortMap["$args.sort"].Should().Be("u.user_name ASC");
+    }
+
+    [Fact]
+    public void Resolve_dir_default_asc()
+    {
+        var sortMap = SortDirDesugar.ResolveValues(Twig(), ArgsShape(sort: "id"));
+        sortMap["$args.sort"].Should().Be("u.user_id ASC");
     }
 
     [Fact]
@@ -162,7 +277,7 @@ public class SortDirTests
     public void Resolve_bad_dir_soft_error(string dir)
     {
         Action act = () => SortDirDesugar.ResolveValues(Twig(), ArgsShape(sort: "id", dir: dir));
-        act.Should().Throw<SortDirException>().WithMessage("*unknown sort direction*");
+        act.Should().Throw<SortDirException>();
     }
 
     [Fact]
@@ -176,8 +291,8 @@ public class SortDirTests
             """;
         var twig = Twig(sql);
         var shape = new Shape(data: new Dictionary<string, object?> { ["s"] = "name", ["d"] = "asc" });
-        var (sortMap, dirMap) = SortDirDesugar.ResolveValues(twig, shape);
-        var compiled = SqlCompiler.Compile(twig, Array.Empty<string>(), "?", sortMap, dirMap);
+        var sortMap = SortDirDesugar.ResolveValues(twig, shape);
+        var compiled = SqlCompiler.Compile(twig, Array.Empty<string>(), "?", sortMap);
         compiled.Content.Should().Contain("lower(u.user_name)");
     }
 
@@ -189,6 +304,198 @@ public class SortDirTests
     {
         Action act = () => SortDirDesugar.ResolveValues(Twig(), ArgsShape(sort: key));
         act.Should().Throw<SortDirException>();
+    }
+
+    // -- multi-column sort ---------------------------------------------------
+
+    [Fact]
+    public void Resolve_multi_column()
+    {
+        var sortMap = SortDirDesugar.ResolveValues(Twig(), ArgsShape(sort: "name,id", dir: "desc,asc"));
+        sortMap["$args.sort"].Should().Be("u.user_name DESC, u.user_id ASC");
+    }
+
+    [Fact]
+    public void Resolve_multi_column_dir_shorter_pads_asc()
+    {
+        var sortMap = SortDirDesugar.ResolveValues(Twig(), ArgsShape(sort: "name,id", dir: "desc"));
+        sortMap["$args.sort"].Should().Be("u.user_name DESC, u.user_id ASC");
+    }
+
+    [Fact]
+    public void Resolve_multi_column_dir_missing_defaults_all_asc()
+    {
+        var sortMap = SortDirDesugar.ResolveValues(Twig(), ArgsShape(sort: "name,id"));
+        sortMap["$args.sort"].Should().Be("u.user_name ASC, u.user_id ASC");
+    }
+
+    [Fact]
+    public void Resolve_multi_column_dir_longer_soft_error()
+    {
+        Action act = () => SortDirDesugar.ResolveValues(Twig(), ArgsShape(sort: "name", dir: "desc,asc"));
+        act.Should().Throw<SortDirException>().WithMessage("*too many dir values*");
+    }
+
+    [Fact]
+    public void Resolve_multi_column_duplicate_key_soft_error()
+    {
+        Action act = () => SortDirDesugar.ResolveValues(Twig(), ArgsShape(sort: "name,name"));
+        act.Should().Throw<SortDirException>().WithMessage("*duplicate sort key*");
+    }
+
+    [Fact]
+    public void Resolve_multi_column_unknown_key_among_valid_soft_error()
+    {
+        Action act = () => SortDirDesugar.ResolveValues(Twig(), ArgsShape(sort: "name,nope"));
+        act.Should().Throw<SortDirException>().WithMessage("*unknown sort key*");
+    }
+
+    [Fact]
+    public void Resolve_multi_column_whitespace_around_commas()
+    {
+        var sortMap = SortDirDesugar.ResolveValues(Twig(), ArgsShape(sort: " name , id ", dir: " desc , asc "));
+        sortMap["$args.sort"].Should().Be("u.user_name DESC, u.user_id ASC");
+    }
+
+    [Fact]
+    public void Resolve_multi_column_compiles_comma_joined()
+    {
+        var twig = Twig();
+        var sortMap = SortDirDesugar.ResolveValues(twig, ArgsShape(sort: "name,id", dir: "desc,asc"));
+        var compiled = SqlCompiler.Compile(twig, new[] { "$args.active" }, "?", sortMap);
+        compiled.Content.Should().Contain("order by\n  u.user_name DESC, u.user_id ASC");
+    }
+
+    // -- NULLS FIRST/LAST ------------------------------------------------------
+
+    [Theory]
+    [InlineData("asc", "ASC")]
+    [InlineData("desc", "DESC")]
+    [InlineData("asc_nulls_first", "ASC NULLS FIRST")]
+    [InlineData("asc_nulls_last", "ASC NULLS LAST")]
+    [InlineData("desc_nulls_first", "DESC NULLS FIRST")]
+    [InlineData("desc_nulls_last", "DESC NULLS LAST")]
+    public void Resolve_nulls_vocabulary(string raw, string sqlDir)
+    {
+        var sortMap = SortDirDesugar.ResolveValues(Twig(), ArgsShape(sort: "id", dir: raw));
+        sortMap["$args.sort"].Should().Be("u.user_id " + sqlDir);
+    }
+
+    [Fact]
+    public void Resolve_nulls_vocabulary_case_insensitive()
+    {
+        var sortMap = SortDirDesugar.ResolveValues(Twig(), ArgsShape(sort: "id", dir: "DESC_NULLS_LAST"));
+        sortMap["$args.sort"].Should().Be("u.user_id DESC NULLS LAST");
+    }
+
+    [Fact]
+    public void Resolve_nulls_vocabulary_unknown_value_soft_error()
+    {
+        Action act = () => SortDirDesugar.ResolveValues(Twig(), ArgsShape(sort: "id", dir: "desc_nulls_middle"));
+        act.Should().Throw<SortDirException>();
+    }
+
+    [Fact]
+    public void Resolve_nulls_mixed_in_multi_column_list()
+    {
+        var sortMap = SortDirDesugar.ResolveValues(Twig(), ArgsShape(sort: "name,id", dir: "desc,asc_nulls_last"));
+        sortMap["$args.sort"].Should().Be("u.user_name DESC, u.user_id ASC NULLS LAST");
+    }
+
+    // -- static tiebreaker mixing ----------------------------------------------
+
+    [Fact]
+    public void Resolve_trailing_static_tiebreaker_kept_when_sort_present()
+    {
+        var twig = Twig(ListSqlTiebreaker);
+        var sortMap = SortDirDesugar.ResolveValues(twig, ArgsShape(sort: "name", dir: "desc"));
+        var compiled = SqlCompiler.Compile(twig, new[] { "$args.active" }, "?", sortMap);
+        var n = Normalize(compiled.Content);
+        n.Should().Contain("order by u.user_name DESC, u.user_id asc");
+    }
+
+    [Fact]
+    public void Resolve_trailing_static_tiebreaker_kept_when_sort_null()
+    {
+        var twig = Twig(ListSqlTiebreaker);
+        var sortMap = SortDirDesugar.ResolveValues(twig, ArgsShape());
+        var compiled = SqlCompiler.Compile(twig, new[] { "$args.active" }, "?", sortMap);
+        var n = Normalize(compiled.Content);
+        n.Should().Contain("order by u.user_id asc");
+        n.Should().NotContain("ASC,");
+    }
+
+    [Fact]
+    public void Resolve_leading_static_term_kept_with_sort()
+    {
+        var twig = Twig(ListSqlLeadingStatic);
+        var sortMap = SortDirDesugar.ResolveValues(twig, ArgsShape(sort: "name", dir: "desc"));
+        var compiled = SqlCompiler.Compile(twig, Array.Empty<string>(), "?", sortMap);
+        var n = Normalize(compiled.Content);
+        n.Should().Contain("order by u.is_pinned desc, u.user_name DESC");
+    }
+
+    [Fact]
+    public void Resolve_leading_static_term_kept_when_sort_null()
+    {
+        var twig = Twig(ListSqlLeadingStatic);
+        var sortMap = SortDirDesugar.ResolveValues(twig, ArgsShape());
+        var compiled = SqlCompiler.Compile(twig, Array.Empty<string>(), "?", sortMap);
+        var n = Normalize(compiled.Content);
+        n.Should().Contain("order by u.is_pinned desc");
+        n.Split("order by", 2)[1].Should().NotContain(",");
+    }
+
+    [Fact]
+    public void Resolve_whole_clause_elides_when_only_dynamic_term_and_sort_null()
+    {
+        var helper = new DataProviderHelper();
+        var compiled = helper.GetExecutableContent("?", Twig(ListSql), ArgsShape());
+        compiled.Content.ToLowerInvariant().Should().NotContain("order by");
+    }
+
+    // -- multiple sort()/dir() pairs in one statement --------------------------
+
+    private const string MultiOrderBySql = """
+        --(s1 string, d1 string, s2 string, d2 string)--
+        select * from (
+          select * from t1 order by sort({{s1}}, a = x, b = y) dir({{d1}})
+        ) sub
+        order by sort({{s2}}, c = z, d = w) dir({{d2}})
+        """;
+
+    private static Shape MultiSortShape(Dictionary<string, object?> data) => new(data: data);
+
+    [Fact]
+    public void Resolve_multiple_sort_dir_pairs_resolve_independently()
+    {
+        var twig = Twig(MultiOrderBySql);
+        var shape = MultiSortShape(new()
+        {
+            ["s1"] = "a", ["d1"] = "desc", ["s2"] = "d", ["d2"] = "asc",
+        });
+        var sortMap = SortDirDesugar.ResolveValues(twig, shape);
+        sortMap["s1"].Should().Be("x DESC");
+        sortMap["s2"].Should().Be("w ASC");
+        var compiled = SqlCompiler.Compile(twig, Array.Empty<string>(), "?", sortMap);
+        var n = Normalize(compiled.Content);
+        n.Should().Contain("order by x DESC");
+        n.Should().Contain("order by w ASC");
+    }
+
+    [Fact]
+    public void Resolve_multiple_sort_dir_pairs_one_null_one_set()
+    {
+        var twig = Twig(MultiOrderBySql);
+        var shape = MultiSortShape(new() { ["s2"] = "c" });
+        var sortMap = SortDirDesugar.ResolveValues(twig, shape);
+        sortMap["s1"].Should().BeNull();
+        sortMap["s2"].Should().Be("z ASC");
+        var compiled = SqlCompiler.Compile(twig, Array.Empty<string>(), "?", sortMap);
+        var n = Normalize(compiled.Content);
+        n.Should().NotContain("order by x");
+        n.Should().NotContain("order by y");
+        n.Should().Contain("order by z ASC");
     }
 
     [Fact]
@@ -209,6 +516,18 @@ public class SortDirTests
         var a = helper.GetExecutableContent("?", twig, ArgsShape(sort: "name", dir: "desc"));
         var b = helper.GetExecutableContent("?", twig, ArgsShape(sort: "name", dir: "desc"));
         a.Content.Should().Be(b.Content);
+    }
+
+    [Fact]
+    public void Cache_only_dir_change_busts_cache()
+    {
+        // Direction is folded into the sort map string; changing only dir must still
+        // produce distinct content (regression guard for dropping the separate dir map).
+        var helper = new DataProviderHelper();
+        var twig = Twig();
+        var a = helper.GetExecutableContent("?", twig, ArgsShape(sort: "id", dir: "asc"));
+        var b = helper.GetExecutableContent("?", twig, ArgsShape(sort: "id", dir: "desc"));
+        a.Content.Should().NotBe(b.Content);
     }
 }
 
@@ -249,9 +568,35 @@ public class SortDirIntegrationTests : IDisposable
     }
 
     [Fact]
+    public void List_multi_column_sort()
+    {
+        var result = _yaal.Query("user/list", args: new { sort = "name,id", dir = "desc,asc" });
+        var rows = ((System.Collections.IEnumerable)result!).Cast<Dictionary<string, object?>>().ToList();
+        rows.Select(r => (string)r["name"]!).Should().Equal("guest", "admin");
+    }
+
+    [Fact]
+    public void List_nulls_last_dir()
+    {
+        // Only exercises that the *_nulls_last vocabulary round-trips through a real
+        // SQLite query without erroring (SQLite supports NULLS LAST).
+        var result = _yaal.Query("user/list", args: new { sort = "name", dir = "desc_nulls_last" });
+        var rows = ((System.Collections.IEnumerable)result!).Cast<Dictionary<string, object?>>().ToList();
+        rows.Should().HaveCount(2);
+    }
+
+    [Fact]
     public void Unknown_sort_soft_errors()
     {
         var result = _yaal.Query("user/list", args: new { sort = "nope" });
+        var dict = (Dictionary<string, object?>)result!;
+        dict.Should().ContainKey("errors");
+    }
+
+    [Fact]
+    public void Too_many_dir_values_soft_errors()
+    {
+        var result = _yaal.Query("user/list", args: new { sort = "name", dir = "desc,asc" });
         var dict = (Dictionary<string, object?>)result!;
         dict.Should().ContainKey("errors");
     }
@@ -263,5 +608,14 @@ public class SortDirIntegrationTests : IDisposable
         var sql = explained[0]["sql"]!.ToString()!;
         sql.Should().Contain("u.user_name");
         sql.Should().Contain("DESC");
+    }
+
+    [Fact]
+    public void Explain_keeps_static_tiebreaker_when_sort_omitted()
+    {
+        var explained = _yaal.ExplainSql("user/list");
+        var sql = explained[0]["sql"]!.ToString()!;
+        sql.ToLowerInvariant().Should().Contain("order by");
+        sql.Should().Contain("u.user_id");
     }
 }

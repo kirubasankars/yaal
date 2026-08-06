@@ -51,6 +51,10 @@ def main() -> int:
             y.query("user/list", args={"sort": "name", "dir": "desc"}),
         )
         _print(
+            "user/list sort=name,id dir=desc,asc (multi-column)",
+            y.query("user/list", args={"sort": "name,id", "dir": "desc,asc"}),
+        )
+        _print(
             "user/page page=1 page_size=1",
             y.query("user/page", args={"page": 1, "page_size": 1}),
         )

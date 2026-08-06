@@ -49,6 +49,9 @@ try
     Print("user/list active=1", y.Query("user/list", args: new { active = 1 }));
     Print("user/list sort=name dir=desc", y.Query("user/list", args: new { sort = "name", dir = "desc" }));
     Print(
+        "user/list sort=name,id dir=desc,asc (multi-column)",
+        y.Query("user/list", args: new { sort = "name,id", dir = "desc,asc" }));
+    Print(
         "user/page page=1 page_size=1",
         y.Query("user/page", args: new { page = 1, page_size = 1 }));
     Print("report/summary", y.Query("report/summary"));
