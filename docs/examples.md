@@ -118,14 +118,14 @@ How shaping works on the flat result set:
 
 ## Nested child SQL — `user/nested`
 
-Same JSON shape as `user/get`, but roles come from a **child SQL file** instead of a join + `parent_rows`.
+Same JSON shape as `user/get`, but roles come from a **child SQL file** (`$.roles.sql`) instead of a join + `parent_rows`. Files are discovered on disk; the `roles` property in `$.output.yaml` supplies that branch’s output schema (not the other way around). See [descriptors](descriptors.md#how-sql-files-and-outputyaml-relate).
 
 ### Descriptor
 
 ```text
 user/nested/
   $.sql
-  $.roles.sql
+  $.roles.sql             # → branch $.roles → JSON property "roles"
   $.output.yaml
 ```
 
@@ -301,13 +301,13 @@ order by u.user_id
 
 ## Paginated nest — `user/page`
 
-No trunk `$.sql`. Two branch files become `paging` and `data` on the result object.
+No trunk `$.sql` (allowed: at least one `*.sql` is enough). Sibling files `$.paging.sql` and `$.data.sql` become branches `paging` and `data`; `$.output.yaml` shapes those properties (and nested `data.roles` via `parent_rows`).
 
 ### Layout
 
 ```text
 user/page/
-  $.paging.sql
+  $.paging.sql            # sibling branch (no $.sql)
   $.data.sql
   $.output.yaml
 ```

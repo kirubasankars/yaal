@@ -6,13 +6,14 @@ Worked fixtures with sample JSON: [examples.md](examples.md).
 
 ```mermaid
 flowchart TD
-  op["api/user/get/"] --> trunk["trunk $.sql"]
+  op["operation folder"] --> sqlFiles["list *.sql on disk"]
   op --> output["$.output.yaml"]
-  op --> branches["$.paging.sql / $.data.sql"]
-  trunk --> header["--(name type)-- input"]
-  trunk --> twigs["--sql-- twigs"]
-  twigs --> exec["providers execute + bind"]
-  exec --> shape["partition_by / mapped / parent_rows"]
+  sqlFiles --> tree["branch tree under dollar"]
+  output --> shapeSlots["object/array property slots"]
+  tree --> load["load each method.sql if present"]
+  shapeSlots --> load
+  load --> exec["providers execute + bind"]
+  exec --> shape["mapped / partition_by / parent_rows"]
   shape --> json["nested JSON"]
 ```
 
@@ -21,9 +22,27 @@ flowchart TD
 | Concept | Meaning |
 |---|---|
 | **Operation** | Folder under the API root, e.g. `user/get/` |
-| **Trunk** | Root SQL `$` → `$.sql`, or a trunk that only has child SQL files |
-| **Branch** | Nested SQL `$.paging.sql`, `$.data.sql` → methods `$.paging`, `$.data` |
+| **Trunk** | Root method `$` — file `$.sql` when present; may be empty if only sibling/child SQL files exist |
+| **Branch** | Nested method under `$`, e.g. `$.paging` / `$.roles` → files `$.paging.sql` / `$.roles.sql` |
 | **Twig** | One statement inside a SQL file, split by `--sql--` or `--sql(connection)--` |
+
+### How SQL files and `$.output.yaml` relate
+
+Discovery is **filesystem-first**, then shaped by output YAML:
+
+1. **List** every `*.sql` in the operation folder. At least one is required or the descriptor is not found.
+2. **Strip** `.sql` → names like `$`, `$.paging`, `$.roles` (deeper dots allowed: `$.data.items`).
+3. **Build** a branch tree under `$`. `$.sql` is the trunk file when present; it is **not** required — sibling-only ops use only `$.paging.sql`, `$.data.sql`, etc.
+4. **Load** `$.output.yaml` (or `$.output.<mapper>.yaml`). For each branch, the matching nested object/array property is that branch’s output model (`mapped`, `partition_by`, `parent_rows`, …).
+5. **Object/array properties** in output also open child branch slots (needed for `parent_rows` with no child SQL file). File-derived children that are missing from that map are merged in.
+6. Nested child SQL is looked up as `$.{property}.sql` for property `property`. Output does **not** invent SQL filenames; it shapes whatever SQL (or parent rows) that branch has.
+
+| Pattern | Files | Output role |
+|---|---|---|
+| Trunk + shape | `$.sql` + `$.output.yaml` | Root `type` / `properties` shape the trunk result |
+| Nested child SQL | `$.sql` + `$.roles.sql` + `$.output.yaml` | Property `roles` must match the file suffix; its schema shapes the child |
+| `parent_rows` only | `$.sql` + `$.output.yaml` (no `$.roles.sql`) | Property `roles` with `parent_rows: true` nests from parent rows |
+| Sibling branches | `$.paging.sql` + `$.data.sql` + `$.output.yaml` (no `$.sql`) | Properties `paging` / `data` match suffixes |
 
 ```text
 api/user/get/
@@ -37,7 +56,7 @@ api/user/nested/
   $.output.yaml
 
 api/user/page/
-  $.paging.sql
+  $.paging.sql              # sibling branch (no trunk $.sql)
   $.data.sql
   $.output.yaml
 ```
@@ -154,7 +173,10 @@ Fixture: [`user/create`](../tests/fixtures/api/user/create/).
 
 ## Multi-file branches
 
-SQL file suffixes become branch names. Branch names in `$.output.yaml` must match those suffixes.
+Branch map seed = **SQL files on disk** + **object/array properties in `$.output.yaml`** (see [How SQL files and `$.output.yaml` relate](#how-sql-files-and-outputyaml-relate)).
+
+- File `$.{name}.sql` → branch method `$.{name}` → JSON property `name` (must appear under `properties` in the parent output model when you want it shaped).
+- Output property with `type: object|array` and no matching SQL file → branch slot for `parent_rows` (or an empty child until a file is added).
 
 **Sibling branches** (no trunk `$.sql`): `$.paging.sql` + `$.data.sql` → properties `paging` and `data`. See [`user/page`](../tests/fixtures/api/user/page/).
 

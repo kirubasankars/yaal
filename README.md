@@ -229,6 +229,8 @@ SQLite-only usage does **not** need Docker. Compose is only for Postgres/MySQL/C
 
 ## Descriptor layout
 
+SQL discovery is **filesystem-first**: list `*.sql` in the operation folder (at least one required). `$.sql` is the trunk when present but is not required — sibling files like `$.paging.sql` work alone. `$.output.yaml` shapes each branch (and can open `parent_rows` slots without a child SQL file). Nested child SQL is `$.{property}.sql` for property `property`. Details: [`docs/descriptors.md`](docs/descriptors.md#how-sql-files-and-outputyaml-relate).
+
 ```text
 api/
   user/
@@ -309,8 +311,8 @@ properties:
 
 - `mapped` — column → JSON field  
 - `partition_by` — collapse join fan-out into nested objects/arrays  
-- `parent_rows: true` — nest from parent rows without a child SQL file  
-- Child SQL file (`$.roles.sql`) — nest via `partition_by` join key; see [`user/nested`](tests/fixtures/api/user/nested/)
+- `parent_rows: true` — nest from parent rows without a child SQL file (output object/array slot only)  
+- Child SQL file (`$.roles.sql`) — file suffix must match the `roles` property; that property’s schema shapes the child; see [`user/nested`](tests/fixtures/api/user/nested/)
 
 ### Multi-query and data passing
 
