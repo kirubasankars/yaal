@@ -33,6 +33,22 @@ class TestParseHarden(unittest.TestCase):
         ast = parser(lexer("\n\n--(id integer)--\nselect {{id}}"), "$")
         self.assertIn("id", ast["parameters"])
         self.assertEqual(ast["parameters"]["id"]["type"], "integer")
+        self.assertFalse(ast["parameters"]["id"]["required"])
+
+    def test_required_bang_on_name(self):
+        ast = parser(lexer("--(id! integer, name! string)--\nselect {{id}}"), "$")
+        self.assertTrue(ast["parameters"]["id"]["required"])
+        self.assertTrue(ast["parameters"]["name"]["required"])
+        self.assertEqual(ast["parameters"]["id"]["name"], "id")
+
+    def test_required_bang_on_args(self):
+        ast = parser(lexer("--($args.id! integer)--\nselect {{$args.id}}"), "$")
+        self.assertTrue(ast["parameters"]["$args.id"]["required"])
+        self.assertEqual(ast["parameters"]["$args.id"]["name"], "$args.id")
+
+    def test_invalid_bang_placement(self):
+        with self.assertRaises(TypeError):
+            parser(lexer("--(!id integer)--\nselect 1"), "$")
 
 
 if __name__ == "__main__":

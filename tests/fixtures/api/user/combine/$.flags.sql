@@ -1,4 +1,4 @@
---($args.id integer)--
+--($args.id! integer)--
 
 --sql(flags)--
 

@@ -172,6 +172,7 @@ public static class Precompiled
         {
             Name = Str(el, "name") ?? fallbackName ?? "",
             Type = Str(el, "type") ?? "",
+            Required = Bool(el, "required"),
         };
     }
 

@@ -1,4 +1,4 @@
---($args.id integer)--
+--($args.id! integer)--
 
 SELECT
     u.user_id,

@@ -21,18 +21,7 @@ class ContentReader:
         return None
 
     def get_config(self, path, mapper):
-        return {
-            "input.model": {
-                "payload": {
-                    "type": "object",
-                    "properties": {
-                        "name": {
-                            "type": "string"
-                        }
-                    }
-                }
-            }
-        }
+        return {"output.model": None}
 
     def list_sql(self, path):
         if path == "name/get":

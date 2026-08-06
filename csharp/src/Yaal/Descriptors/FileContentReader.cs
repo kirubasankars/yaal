@@ -33,16 +33,12 @@ public sealed class FileContentReader : IContentReader
 
     public Dictionary<string, object?> GetConfig(string path, string? outputMapper)
     {
-        var inputPath = Resolve(path, "$.input");
-        var inputConfig = GetConfigFile(inputPath);
-
         var outputSuffix = string.IsNullOrEmpty(outputMapper) ? "" : "." + outputMapper;
         var outputPath = Resolve(path, "$.output" + outputSuffix);
         var outputConfig = GetConfigFile(outputPath);
 
         return new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
         {
-            ["input.model"] = inputConfig,
             ["output.model"] = outputConfig,
         };
     }

@@ -88,6 +88,7 @@ public class PrecompiledTests
                 {
                     ["name"] = kv.Value.Name,
                     ["type"] = kv.Value.Type,
+                    ["required"] = kv.Value.Required,
                 });
         }
         if (b.Twigs != null)
@@ -115,6 +116,7 @@ public class PrecompiledTests
                     {
                         ["name"] = p.Name,
                         ["type"] = p.Type,
+                        ["required"] = p.Required,
                     }).ToList(),
                 };
                 if (t.Nullable != null)

@@ -1,4 +1,4 @@
---(id integer, name string)--
+--(id! integer, name! string)--
 
 INSERT INTO users (user_id, user_name, active) VALUES ({{id}}, {{name}}, 1)
 

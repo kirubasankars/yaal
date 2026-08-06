@@ -188,14 +188,11 @@ class FileContentReader:
         return self._get(file_path)
 
     def get_config(self, path, output_mapper):
-        input_path = self._resolve(path, "$.input")
-        input_config = self._get_config(input_path)
-
         output_name = "$.output" + ("." + output_mapper if output_mapper else "")
         output_path = self._resolve(path, output_name)
         output_config = self._get_config(output_path)
 
-        return {"input.model": input_config, "output.model": output_config}
+        return {"output.model": output_config}
 
     def list_sql(self, path):
         try:

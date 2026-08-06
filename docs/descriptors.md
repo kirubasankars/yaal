@@ -7,9 +7,9 @@ Worked fixtures with sample JSON: [examples.md](examples.md).
 ```mermaid
 flowchart TD
   op["api/user/get/"] --> trunk["trunk $.sql"]
-  op --> input["$.input.yaml"]
   op --> output["$.output.yaml"]
   op --> branches["$.paging.sql / $.data.sql"]
+  trunk --> header["--(name type)-- input"]
   trunk --> twigs["--sql-- twigs"]
   twigs --> exec["providers execute + bind"]
   exec --> shape["partition_by / mapped / parent_rows"]
@@ -28,20 +28,17 @@ flowchart TD
 ```text
 api/user/get/
   $.sql
-  $.input.yaml
   $.output.yaml
   $.output.summary.yaml     # optional alternate shape (output_mapper="summary")
 
 api/user/nested/
   $.sql                     # parent rows
   $.roles.sql               # child SQL → output property "roles"
-  $.input.yaml
   $.output.yaml
 
 api/user/page/
   $.paging.sql
   $.data.sql
-  $.input.yaml
   $.output.yaml
 ```
 
@@ -49,10 +46,10 @@ Call path = folder path: `y.query("user/page", args={"page": 1, "page_size": 10}
 
 ## Parameters
 
-Declare types at the top of a SQL file (first significant token; leading blank lines/spaces are fine); bind with `{{...}}`:
+The SQL parameter header is the **sole input model**. Declare types at the top of a SQL file (first significant token; leading blank lines/spaces are fine); bind with `{{...}}`. Yaal derives args/payload JSON Schema from these headers (union across files in the operation).
 
 ```sql
---($args.id integer, name string)--
+--($args.id integer, name! string)--
 
 select *
 from users u
@@ -60,7 +57,7 @@ where optional(u.user_id = {{$args.id}})
   and u.user_name = {{name}}
 ```
 
-Allowed types: `integer`, `string`, `float`, `bool`, `blob`. Each name needs a type; duplicates and unknown types are errors.
+Allowed types: `integer`, `string`, `float`, `bool`, `blob`. Each name needs a type; duplicates and unknown types are errors. Trailing `!` on a name marks it **required** (`--($args.id! integer)--`). Conflicting type/required declarations across files raise at descriptor build time.
 
 Plain SQL `--` line comments are allowed in query text. Yaal directives are only `--(name type, ...)--` and `--sql--` / `--sql(connection)--`.
 
@@ -136,7 +133,7 @@ Invalid: bare `type: object` / `type: array` under `properties` (including a nes
 ## Multi-twig writes
 
 ```sql
---(id integer, name string)--
+--(id! integer, name! string)--
 
 INSERT INTO users (user_id, user_name, active) VALUES ({{id}}, {{name}}, 1)
 
@@ -235,14 +232,9 @@ y.query("user/get", args={"id": 1})
 
 **Soft** (not raised): invalid args/payload → `{"errors": [{"message": "..."}]}`. Also used for `$action=error`. Check for an `errors` key.
 
-## Dual-port JSON Schema subset
+## Input validation
 
-Python: Draft-4. C#: Json.Schema 2020-12. Keep models on the common subset:
-
-- `type`, `properties`, `required`
-- Scalars: `string`, `integer`, `number`, `boolean`, `object`, `array`
-
-Avoid dialect-only keywords if both ports must accept the same fixtures.
+Args/payload schemas are derived from SQL headers (`float`→`number`, `bool`→`boolean`). Soft validation uses JSON Schema Draft-4 (Python) / 2020-12 (C#) on that derived model. Invalid args/payload return `{"errors": [...]}`.
 
 ## Public API
 

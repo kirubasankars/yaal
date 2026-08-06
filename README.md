@@ -234,27 +234,22 @@ api/
   user/
     get/                 # operation folder (name is yours; not an HTTP verb)
       $.sql              # trunk query (may contain --sql-- twigs)
-      $.input.yaml       # input model (args / payload)
       $.output.yaml      # output shape (mapped / partition_by)
     nested/
       $.sql              # parent rows
       $.roles.sql        # child SQL → output property "roles"
-      $.input.yaml
       $.output.yaml
     page/                # sibling branches (no trunk $.sql)
       $.paging.sql
       $.data.sql
-      $.input.yaml
       $.output.yaml
     combine/             # multi-DB sibling branches
       $.app.sql          # connection "db"
       $.flags.sql        # --sql(flags)--
-      $.input.yaml
       $.output.yaml
   report/
     summary/             # WITH + aggregations
       $.sql
-      $.input.yaml
       $.output.yaml
 ```
 
@@ -262,7 +257,7 @@ Call by descriptor path: `y.query("user/get", args={"id": 1})`.
 
 ### Parameters
 
-Declare types at the top of the SQL file, then bind with `{{...}}`. Use `$args` for operation keys and the payload root for body fields:
+Declare types at the top of the SQL file (the sole input model), then bind with `{{...}}`. Use `$args` for operation keys and bare names for payload fields. Trailing `!` marks required:
 
 ```sql
 --($args.id integer)--
@@ -271,6 +266,10 @@ select *
 from users u
 where 1 = 1
   and optional(u.user_id = {{$args.id}})
+```
+
+```sql
+--(id! integer, name! string)--
 ```
 
 When a parameter is null, Yaal **subtracts** the optional group (that is the subtractive core). Long form still works:
@@ -318,7 +317,7 @@ properties:
 Split one SQL file into ordered twigs with `--sql--` (or `--sql(name)--` for another connection). Args/payload binds are shared across twigs. Cross-twig values also flow through the `$params` bag.
 
 ```sql
---(id integer, name string)--
+--(id! integer, name! string)--
 
 INSERT INTO users (user_id, user_name, active) VALUES ({{id}}, {{name}}, 1)
 
@@ -392,11 +391,9 @@ y.setup_data_provider("analytics", "postgresql://user:pass@127.0.0.1:5432/yaal")
 
 See twigs / named connections in [`docs/descriptors.md`](docs/descriptors.md).
 
-### Input validation dialect
+### Input validation
 
-Python validates `$.input.yaml` with **JSON Schema Draft-4** (`jsonschema.Draft4Validator`). C# uses Json.Schema’s default **2020-12** dialect. Keep models to the common subset (`type` / `properties` / `required`) so both ports accept the same fixtures. See [`docs/descriptors.md`](docs/descriptors.md).
-
-Invalid args/payload return `{"errors": [...]}` (soft); missing descriptors and bad URLs raise typed exceptions.
+Args/payload schemas are **derived** from SQL parameter headers. Soft validation uses JSON Schema Draft-4 (Python) / 2020-12 (C#) on that derived model. Invalid args/payload return `{"errors": [...]}`; missing descriptors and bad URLs raise typed exceptions. See [`docs/descriptors.md`](docs/descriptors.md).
 
 ## Tests
 

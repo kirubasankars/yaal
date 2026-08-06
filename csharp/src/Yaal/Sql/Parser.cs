@@ -14,7 +14,7 @@ public static class SqlParser
     };
 
     private static readonly Regex ParameterRx = new(
-        @"\s*(?<name>[$_.A-Za-z0-9\[\]]+)\s+(?<type>\w+)\s*",
+        @"\s*(?<name>[$_.A-Za-z0-9\[\]]+)(?<required>!)?\s+(?<type>\w+)\s*",
         RegexOptions.Compiled);
 
     private static readonly Regex SqlRx = new(
@@ -74,6 +74,7 @@ public static class SqlParser
 
             var paramName = m.Groups["name"].Value.Trim().ToLowerInvariant();
             var paramType = m.Groups["type"].Value.ToLowerInvariant();
+            var paramRequired = m.Groups["required"].Success;
             if (!KnownParamTypes.Contains(paramType))
             {
                 throw new InvalidOperationException(
@@ -85,7 +86,12 @@ public static class SqlParser
                 throw new InvalidOperationException(
                     "duplicate parameter {{" + paramName + "}} in " + method + ".sql");
             }
-            paramsList.Add(new ParamDecl { Name = paramName, Type = paramType });
+            paramsList.Add(new ParamDecl
+            {
+                Name = paramName,
+                Type = paramType,
+                Required = paramRequired,
+            });
         }
         return paramsList;
     }

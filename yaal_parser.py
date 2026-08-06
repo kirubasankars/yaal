@@ -306,7 +306,7 @@ def _parse_parameter_header(token_value, method):
         raise TypeError("empty parameter header in " + method + ".sql")
 
     parameter_rx = re.compile(
-        r"\s*(?P<name>[\$\_\.A-Za-z0-9\[\]]+)\s+(?P<type>\w+)\s*"
+        r"\s*(?P<name>[\$\_\.A-Za-z0-9\[\]]+)(?P<required>!)?\s+(?P<type>\w+)\s*"
     )
     params = []
     seen = set()
@@ -325,6 +325,7 @@ def _parse_parameter_header(token_value, method):
         d = m.groupdict()
         param_name = d["name"].lstrip().rstrip().lower()
         param_type = d["type"].lower()
+        param_required = bool(d.get("required"))
         if param_type not in KNOWN_PARAM_TYPES:
             raise TypeError(
                 "unknown parameter type '"
@@ -342,7 +343,11 @@ def _parse_parameter_header(token_value, method):
                 "duplicate parameter {{" + param_name + "}} in " + method + ".sql"
             )
         seen.add(param_name)
-        params.append({"name": param_name, "type": param_type})
+        params.append({
+            "name": param_name,
+            "type": param_type,
+            "required": param_required,
+        })
     return params
 
 

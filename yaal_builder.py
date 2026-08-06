@@ -12,6 +12,14 @@ from yaal_shape import _to_lower_keys_deep, _to_lower_keys
 
 path_join = os.path.join
 
+_SQL_TO_JSON_TYPE = {
+    "integer": "integer",
+    "string": "string",
+    "float": "number",
+    "bool": "boolean",
+    "blob": "string",
+}
+
 
 def _order_list_by_dots(names):
     if not names:
@@ -173,6 +181,14 @@ def _build_branch(branch, map_by_files, content_reader, payload_model, output_mo
 array_rx = re.compile(r"^(?P<path>\w+)\[\d+\]$")
 
 
+def _json_type_for_param(param):
+    sql_type = param["type"]
+    json_type = _SQL_TO_JSON_TYPE.get(sql_type)
+    if not json_type:
+        raise TypeError("unknown parameter type '" + sql_type + "'")
+    return json_type
+
+
 def _expand_parameter(model, prop, value):
     dot = prop.find(".")
     if dot > -1:
@@ -207,16 +223,43 @@ def _expand_parameter(model, prop, value):
 
             model = model["properties"][path]
 
-            if "required" in model:
-                for f in model["required"]:
-                    if f in model["properties"]:
-                        model["properties"][f]["required"] = True
-
         _expand_parameter(model, prop[dot + 1:], value)
     else:
-        if model and "properties" in model:
-            if model and prop not in model["properties"]:
-                model["properties"][prop] = value
+        if not model or "properties" not in model:
+            return
+
+        json_type = _json_type_for_param(value)
+        new_required = bool(value.get("required"))
+        props = model["properties"]
+        required_list = model.get("required")
+        if required_list is None:
+            required_list = []
+        existing_required = prop in required_list
+
+        if prop in props:
+            existing = props[prop]
+            existing_type = existing.get("type") if isinstance(existing, dict) else None
+            if existing_type != json_type or existing_required != new_required:
+                raise TypeError(
+                    "conflicting parameter declaration for '"
+                    + prop
+                    + "': existing type="
+                    + str(existing_type)
+                    + " required="
+                    + str(existing_required)
+                    + ", new type="
+                    + json_type
+                    + " required="
+                    + str(new_required)
+                )
+            return
+
+        props[prop] = {"type": json_type}
+        if new_required:
+            if "required" not in model:
+                model["required"] = []
+            if prop not in model["required"]:
+                model["required"].append(prop)
 
 
 def create_trunk(path, output_mapper, content_reader):
@@ -227,28 +270,22 @@ def create_trunk(path, output_mapper, content_reader):
     trunk_map = _build_trunk_map_by_files(ordered_files)
     config = content_reader.get_config(path, output_mapper)
 
-    input_model_str, output_model_str = "input.model", "output.model"
-    args_str, payload_str = "args", "payload"
-    payload_schema, args_schema, output_schema = None, None, None
+    output_model_str = "output.model"
+    output_schema = None
 
     if config:
-        input_model = config.get(input_model_str)
-        if input_model:
-            payload_schema = _to_lower_keys_deep(input_model.get(payload_str))
-            args_schema = _to_lower_keys_deep(input_model.get(args_str))
-
         output_schema = config.get(output_model_str)
+        if output_schema:
+            output_schema = _to_lower_keys_deep(output_schema)
 
-    if not args_schema:
-        args_schema = {
-            "type": "object",
-            "properties": {}
-        }
-    if not payload_schema:
-        payload_schema = {
-            "type": "object",
-            "properties": {}
-        }
+    args_schema = {
+        "type": "object",
+        "properties": {}
+    }
+    payload_schema = {
+        "type": "object",
+        "properties": {}
+    }
     if not output_schema:
         output_schema = {
             "type": "array",
@@ -266,24 +303,16 @@ def create_trunk(path, output_mapper, content_reader):
         }
     }
 
-    if payload_schema:
-        payload_validator = Draft4Validator(schema=payload_schema, format_checker=FormatChecker())
-    else:
-        payload_validator = None
-
-    if args_schema:
-        args_validator = Draft4Validator(schema=args_schema, format_checker=FormatChecker())
-    else:
-        args_validator = None
-
     bag = {"connections": ["db"]}
     _build_branch(trunk, trunk_map["$"], content_reader, payload_schema, output_schema, trunk["model"], bag)
     trunk["connections"] = bag["connections"]
 
-    validators = {
+    payload_validator = Draft4Validator(schema=payload_schema, format_checker=FormatChecker())
+    args_validator = Draft4Validator(schema=args_schema, format_checker=FormatChecker())
+
+    trunk["_validators"] = {
         "args": args_validator,
         "payload": payload_validator
     }
-    trunk["_validators"] = validators
 
     return trunk

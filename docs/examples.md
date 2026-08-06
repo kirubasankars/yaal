@@ -33,7 +33,6 @@ Join rows become one user object with a nested `roles` array.
 ```text
 user/get/
   $.sql
-  $.input.yaml
   $.output.yaml
 ```
 
@@ -54,16 +53,6 @@ where u.active = 1
   and r.active = 1
   and optional(u.user_id = {{$args.id}})
 order by u.user_id, r.role_id
-```
-
-**`$.input.yaml`**
-
-```yaml
-args:
-  type: object
-  properties:
-    id:
-      type: integer
 ```
 
 **`$.output.yaml`**
@@ -137,7 +126,6 @@ Same JSON shape as `user/get`, but roles come from a **child SQL file** instead 
 user/nested/
   $.sql
   $.roles.sql
-  $.input.yaml
   $.output.yaml
 ```
 
@@ -321,7 +309,6 @@ No trunk `$.sql`. Two branch files become `paging` and `data` on the result obje
 user/page/
   $.paging.sql
   $.data.sql
-  $.input.yaml
   $.output.yaml
 ```
 
@@ -445,25 +432,10 @@ One file, three twigs: insert user → assign role → select shaped result. Use
 
 ### Descriptor
 
-**`$.input.yaml`**
-
-```yaml
-payload:
-  type: object
-  properties:
-    id:
-      type: integer
-    name:
-      type: string
-  required:
-    - id
-    - name
-```
-
-**`$.sql`**
+**`$.sql`** — payload fields; `!` marks required:
 
 ```sql
---(id integer, name string)--
+--(id! integer, name! string)--
 
 INSERT INTO users (user_id, user_name, active) VALUES ({{id}}, {{name}}, 1)
 
@@ -532,7 +504,6 @@ Aggregations and `WITH` / CTEs are ordinary SQL in the descriptor—no query-bui
 ```text
 report/summary/
   $.sql
-  $.input.yaml
   $.output.yaml
 ```
 
@@ -603,14 +574,13 @@ One operation, two named providers. Sibling branches: `app` reads the default `"
 user/combine/
   $.app.sql
   $.flags.sql
-  $.input.yaml
   $.output.yaml
 ```
 
 **`$.app.sql`** (connection `"db"`)
 
 ```sql
---($args.id integer)--
+--($args.id! integer)--
 
 SELECT
     u.user_id,
@@ -622,7 +592,7 @@ WHERE u.user_id = {{$args.id}}
 **`$.flags.sql`** (connection `"flags"`)
 
 ```sql
---($args.id integer)--
+--($args.id! integer)--
 
 --sql(flags)--
 
@@ -754,7 +724,6 @@ my-api/
   orders/
     list/
       $.sql
-      $.input.yaml
       $.output.yaml
 ```
 

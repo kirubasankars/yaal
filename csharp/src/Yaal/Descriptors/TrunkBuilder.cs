@@ -2,7 +2,6 @@
 // Use of this source code is governed by a MIT style
 // license that can be found in the LICENSE file.
 
-using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Json.Schema;
 using Yaal.Sql;
@@ -13,6 +12,15 @@ public static class TrunkBuilder
 {
     private static readonly Regex ArrayRx = new(@"^(?<path>\w+)\[\d+\]$", RegexOptions.Compiled);
 
+    private static readonly Dictionary<string, string> SqlToJsonType = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["integer"] = "integer",
+        ["string"] = "string",
+        ["float"] = "number",
+        ["bool"] = "boolean",
+        ["blob"] = "string",
+    };
+
     public static Branch? CreateTrunk(string path, string? outputMapper, IContentReader contentReader)
     {
         var orderedFiles = OrderListByDots(contentReader.ListSql(path));
@@ -22,28 +30,17 @@ public static class TrunkBuilder
         var trunkMap = BuildTrunkMapByFiles(orderedFiles);
         var config = contentReader.GetConfig(path, outputMapper);
 
-        Dictionary<string, object?>? payloadSchema = null;
-        Dictionary<string, object?>? argsSchema = null;
         Dictionary<string, object?>? outputSchema = null;
-
-        if (config.TryGetValue("input.model", out var inputModelObj) &&
-            inputModelObj is Dictionary<string, object?> inputModel)
-        {
-            if (inputModel.TryGetValue("payload", out var payload))
-                payloadSchema = (Dictionary<string, object?>?)JsonUtil.ToLowerKeysDeep(payload);
-            if (inputModel.TryGetValue("args", out var args))
-                argsSchema = (Dictionary<string, object?>?)JsonUtil.ToLowerKeysDeep(args);
-        }
 
         if (config.TryGetValue("output.model", out var outputModelObj) && outputModelObj != null)
             outputSchema = (Dictionary<string, object?>?)JsonUtil.ToLowerKeysDeep(outputModelObj);
 
-        argsSchema ??= new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        var argsSchema = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
         {
             ["type"] = "object",
             ["properties"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase),
         };
-        payloadSchema ??= new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        var payloadSchema = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
         {
             ["type"] = "object",
             ["properties"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase),
@@ -67,9 +64,6 @@ public static class TrunkBuilder
             },
         };
 
-        var payloadValidator = CreateValidator(payloadSchema);
-        var argsValidator = CreateValidator(argsSchema);
-
         var bag = new Dictionary<string, object?>
         {
             ["connections"] = new List<string> { "db" },
@@ -84,8 +78,8 @@ public static class TrunkBuilder
         trunk.Connections = (List<string>)bag["connections"]!;
         trunk.Validators = new Dictionary<string, JsonSchema?>
         {
-            ["args"] = argsValidator,
-            ["payload"] = payloadValidator,
+            ["args"] = CreateValidator(argsSchema),
+            ["payload"] = CreateValidator(payloadSchema),
         };
 
         return trunk;
@@ -95,8 +89,8 @@ public static class TrunkBuilder
     {
         if (schema == null)
             return null;
-        // Json.Schema defaults to 2020-12. Python uses Draft4Validator. Keep input models to the
-        // common subset (type/properties/required) so both dialects accept the same fixtures.
+        // Json.Schema defaults to 2020-12. Python uses Draft4Validator. Keep derived input
+        // models on the common subset (type/properties/required).
         var copy = (Dictionary<string, object?>)JsonUtil.DeepCopy(schema)!;
         copy.Remove("$schema");
         var node = JsonUtil.ToJsonNode(copy);
@@ -230,15 +224,10 @@ public static class TrunkBuilder
 
             foreach (var (k, v) in branch.Parameters)
             {
-                var paramDict = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
-                {
-                    ["name"] = v.Name,
-                    ["type"] = v.Type,
-                };
                 if (k.StartsWith('$') && !k.Contains("$parent"))
-                    ExpandParameter(AsModelDict(model), k, paramDict);
+                    ExpandParameter(AsModelDict(model), k, v);
                 else
-                    ExpandParameter(payloadModel, k, paramDict);
+                    ExpandParameter(payloadModel, k, v);
             }
 
             branch.Twigs = ast.SqlStmts;
@@ -313,7 +302,14 @@ public static class TrunkBuilder
         };
     }
 
-    private static void ExpandParameter(Dictionary<string, object?>? model, string prop, Dictionary<string, object?> value)
+    private static string JsonTypeForParam(ParamDecl param)
+    {
+        if (!SqlToJsonType.TryGetValue(param.Type, out var jsonType))
+            throw new InvalidOperationException("unknown parameter type '" + param.Type + "'");
+        return jsonType;
+    }
+
+    private static void ExpandParameter(Dictionary<string, object?>? model, string prop, ParamDecl value)
     {
         if (model == null)
             return;
@@ -366,25 +362,62 @@ public static class TrunkBuilder
                 }
 
                 model = (Dictionary<string, object?>)properties[path]!;
-
-                if (model.TryGetValue("required", out var requiredObj) && requiredObj is IList<object?> required)
-                {
-                    var props = (Dictionary<string, object?>)model["properties"]!;
-                    foreach (var f in required)
-                    {
-                        if (f is string fs && props.TryGetValue(fs, out var fp) && fp is Dictionary<string, object?> fpDict)
-                            fpDict["required"] = true;
-                    }
-                }
             }
 
             ExpandParameter(model, prop[(dot + 1)..], value);
+            return;
         }
-        else if (model.TryGetValue("properties", out var propsObj) &&
-                 propsObj is Dictionary<string, object?> props &&
-                 !props.ContainsKey(prop))
+
+        if (model == null ||
+            !model.TryGetValue("properties", out var propsObj) ||
+            propsObj is not Dictionary<string, object?> props)
         {
-            props[prop] = value;
+            return;
         }
+
+        var jsonType = JsonTypeForParam(value);
+        var newRequired = value.Required;
+        var requiredList = GetRequiredList(model);
+        var existingRequired = requiredList.Contains(prop, StringComparer.OrdinalIgnoreCase);
+
+        if (props.TryGetValue(prop, out var existingObj) && existingObj is Dictionary<string, object?> existing)
+        {
+            var existingType = existing.TryGetValue("type", out var t) ? t?.ToString() : null;
+            if (!string.Equals(existingType, jsonType, StringComparison.OrdinalIgnoreCase) ||
+                existingRequired != newRequired)
+            {
+                throw new InvalidOperationException(
+                    "conflicting parameter declaration for '" + prop +
+                    "': existing type=" + existingType + " required=" + existingRequired +
+                    ", new type=" + jsonType + " required=" + newRequired);
+            }
+            return;
+        }
+
+        props[prop] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["type"] = jsonType,
+        };
+        if (newRequired)
+        {
+            if (!model.TryGetValue("required", out var reqObj) || reqObj is not List<object?> reqList)
+            {
+                reqList = new List<object?>();
+                model["required"] = reqList;
+            }
+            if (!reqList.Any(x => x is string s && s.Equals(prop, StringComparison.OrdinalIgnoreCase)))
+                reqList.Add(prop);
+        }
+    }
+
+    private static List<string> GetRequiredList(Dictionary<string, object?> model)
+    {
+        if (!model.TryGetValue("required", out var reqObj) || reqObj == null)
+            return new List<string>();
+        if (reqObj is List<object?> list)
+            return list.OfType<string>().ToList();
+        if (reqObj is IList<object?> ilist)
+            return ilist.OfType<string>().ToList();
+        return new List<string>();
     }
 }
