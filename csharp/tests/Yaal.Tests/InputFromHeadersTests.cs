@@ -65,7 +65,7 @@ public class InputFromHeadersTests
     [Fact]
     public void Required_missing_soft_error()
     {
-        var y = new Yaal.Yaal("", new HeaderContentReader(new Dictionary<string, string>
+        var y = new Yaal("", new HeaderContentReader(new Dictionary<string, string>
         {
             ["$"] = "--(id! integer, name! string)--\nselect {{id}} as id, {{name}} as name\n",
         }), debug: true);
@@ -77,7 +77,7 @@ public class InputFromHeadersTests
     [Fact]
     public void Type_mismatch_soft_error()
     {
-        var y = new Yaal.Yaal("", new HeaderContentReader(new Dictionary<string, string>
+        var y = new Yaal("", new HeaderContentReader(new Dictionary<string, string>
         {
             ["$"] = "--(id integer)--\nselect {{id}} as id\n",
         }), debug: true);
@@ -122,7 +122,7 @@ public class InputFromHeadersTests
             AppContext.BaseDirectory, "..", "..", "..", "..", "..", "..",
             "tests", "fixtures", "api"));
 
-        var y = new Yaal.Yaal(fixtureApi, debug: true);
+        var y = new Yaal(fixtureApi, debug: true);
         var d = y.CreateDescriptor("user/get");
         var argsProps = (Dictionary<string, object?>)d.Model!.Args!["properties"]!;
         ((Dictionary<string, object?>)argsProps["id"]!)["type"].Should().Be("integer");
