@@ -7,6 +7,7 @@ Yaal turns SQL + YAML descriptors into nested JSON. These docs use the shared fi
 | [learn.md](learn.md) | Step-by-step learning path (install → fixtures → your own API) |
 | [examples.md](examples.md) | End-to-end examples: files, commands, sample JSON |
 | [descriptors.md](descriptors.md) | Reference: trunk/branch/twig, parameters, shaping, [`$mode`](descriptors.md#mode-rows), precompile, database URLs, errors, public API |
+| [why-sql-first.md](why-sql-first.md) | Why SQL-first fits ClickHouse-like engines and complex reporting apps |
 | [`../csharp/README.md`](../csharp/README.md) | .NET 8 port — same descriptors, Docker-based test/example tooling |
 
 ## Try it

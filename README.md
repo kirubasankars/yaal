@@ -225,6 +225,7 @@ Operations are folders of `*.sql` (+ `$.output.yaml`), discovered filesystem-fir
 - [`docs/learn.md`](docs/learn.md) — step-by-step learning guide
 - [`docs/examples.md`](docs/examples.md) — end-to-end walkthroughs (SQL, YAML, sample JSON, CLI/Python/C#)
 - [`docs/descriptors.md`](docs/descriptors.md) — the full reference above
+- [`docs/why-sql-first.md`](docs/why-sql-first.md) — why SQL-first fits ClickHouse-like engines and complex reporting apps
 - [`docs/README.md`](docs/README.md) — full docs index (also covers the .NET port and runnable demos)
 
 ## Make targets
