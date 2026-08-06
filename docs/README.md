@@ -4,6 +4,7 @@ Yaal turns SQL + YAML descriptors into nested JSON. These docs use the shared fi
 
 | Doc | Purpose |
 |---|---|
+| [learn.md](learn.md) | Step-by-step learning path (install → fixtures → your own API) |
 | [examples.md](examples.md) | End-to-end examples: files, commands, sample JSON |
 | [descriptors.md](descriptors.md) | Reference: trunk/branch/twig, shaping, [`$mode`](descriptors.md#mode-rows), errors |
 

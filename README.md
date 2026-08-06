@@ -12,7 +12,7 @@ License: [MIT](LICENSE). Version: `0.1.0` (Python package + NuGet metadata). Pyt
 
 ## Features
 
-Full walkthroughs: [`docs/examples.md`](docs/examples.md) (feature index at the top).
+Learning path: [`docs/learn.md`](docs/learn.md). Full walkthroughs: [`docs/examples.md`](docs/examples.md) (feature index at the top).
 
 ### Subtractive filters
 
@@ -203,6 +203,7 @@ for twig in y.explain_sql("user/get", args={"id": 1}):
 
 | Resource | Purpose |
 |---|---|
+| [`docs/learn.md`](docs/learn.md) | Step-by-step learning guide |
 | [`docs/examples.md`](docs/examples.md) | End-to-end walkthroughs (SQL, YAML, sample JSON, CLI/Python/C#) |
 | [`docs/descriptors.md`](docs/descriptors.md) | Trunk/branch/twig reference, shaping, `$mode`, precompile, errors |
 | [`docs/README.md`](docs/README.md) | Docs index |
