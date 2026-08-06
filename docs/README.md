@@ -29,8 +29,7 @@ Fixture operations:
 |---|---|
 | `user/get` | Nested object + `parent_rows` (one join SQL) |
 | `user/nested` | Nested child SQL file (`$.roles.sql`) + `partition_by` |
-| `user/list` | Root array + `optional()` filter |
-| `user/page` | Sibling branches + `$mode=params` |
-| `user/create` | Multi-twig INSERT → SELECT |
+| `user/list` | Root array + `optional()` filter + `sort()` / `dir()` |
+| `user/page` | Sibling branches + `$mode=params` (multi-twig read) |
 | `report/summary` | `WITH` + aggregations → JSON |
 | `user/combine` | Multi-database (`--sql(flags)--`) |

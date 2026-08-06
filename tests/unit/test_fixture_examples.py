@@ -43,6 +43,14 @@ class TestFixtureExamples(unittest.TestCase):
         self.assertEqual(result["name"], "admin")
         self.assertEqual(len(result["roles"]), 2)
 
+    def test_user_list_sort_dir(self):
+        rows = self._yaal.query("user/list", args={"sort": "id", "dir": "desc"})
+        self.assertEqual([r["id"] for r in rows], [2, 1])
+        explained = self._yaal.explain_sql(
+            "user/list", args={"sort": "name", "dir": "asc"}
+        )
+        self.assertIn("u.user_name", explained[0]["sql"])
+
     def test_user_nested_child_sql(self):
         result = self._yaal.query("user/nested", args={"id": 1})
         self.assertEqual(result["id"], 1)

@@ -16,3 +16,11 @@ class UnsupportedDatabaseUrlError(YaalError):
 
 class PathEscapeError(YaalError):
     """Raised when a descriptor path resolves outside the API root."""
+
+
+class SortDirError(YaalError):
+    """Soft error: unknown or invalid sort()/dir() runtime value (no SQL execute)."""
+
+    def __init__(self, message):
+        super().__init__(message)
+        self.message = message

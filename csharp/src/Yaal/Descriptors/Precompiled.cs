@@ -158,22 +158,44 @@ public static class Precompiled
             Name = Str(el, "name"),
             Nullable = Bool(el, "nullable"),
             NullableParameter = Str(el, "nullable_parameter"),
+            Param = Str(el, "param"),
         };
 
         if (el.TryGetProperty("group", out var groupEl) && groupEl.ValueKind == JsonValueKind.Number)
             token.Group = groupEl.GetInt32();
+
+        if (el.TryGetProperty("choices", out var choicesEl) && choicesEl.ValueKind == JsonValueKind.Object)
+        {
+            token.Choices = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var prop in choicesEl.EnumerateObject())
+                token.Choices[prop.Name.ToLowerInvariant()] = prop.Value.GetString() ?? prop.Value.ToString();
+        }
 
         return token;
     }
 
     private static ParamDecl ReadParamDecl(JsonElement el, string? fallbackName = null)
     {
-        return new ParamDecl
+        var decl = new ParamDecl
         {
             Name = Str(el, "name") ?? fallbackName ?? "",
             Type = Str(el, "type") ?? "",
             Required = Bool(el, "required"),
         };
+        if (el.TryGetProperty("default", out var defEl) && defEl.ValueKind != JsonValueKind.Null)
+        {
+            decl.HasDefault = true;
+            decl.Default = defEl.ValueKind switch
+            {
+                JsonValueKind.String => defEl.GetString(),
+                JsonValueKind.Number when defEl.TryGetInt64(out var l) => l,
+                JsonValueKind.Number => defEl.GetDouble(),
+                JsonValueKind.True => true,
+                JsonValueKind.False => false,
+                _ => defEl.ToString(),
+            };
+        }
+        return decl;
     }
 
     private static Dictionary<string, object?>? DictOrNull(JsonElement parent, string name)

@@ -47,15 +47,15 @@ def main() -> int:
         _print("user/nested id=1", y.query("user/nested", args={"id": 1}))
         _print("user/list active=1", y.query("user/list", args={"active": 1}))
         _print(
+            "user/list sort=name dir=desc",
+            y.query("user/list", args={"sort": "name", "dir": "desc"}),
+        )
+        _print(
             "user/page page=1 page_size=1",
             y.query("user/page", args={"page": 1, "page_size": 1}),
         )
         _print("report/summary", y.query("report/summary"))
         _print("user/combine id=1", y.query("user/combine", args={"id": 1}))
-        _print(
-            "user/create payload id=3 name=newbie",
-            y.query("user/create", payload={"id": 3, "name": "newbie"}),
-        )
 
         print("-- explain user/list (active omitted → optional elided) --")
         for twig in y.explain_sql("user/list"):

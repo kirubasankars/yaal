@@ -14,8 +14,17 @@ public static class SqlParser
     };
 
     private static readonly Regex ParameterRx = new(
-        @"\s*(?<name>[$_.A-Za-z0-9\[\]]+)(?<required>!)?\s+(?<type>\w+)\s*",
+        @"\s*(?<name>[$_.A-Za-z0-9\[\]]+)(?<required>!)?\s+(?<type>\w+)(?:\s*=\s*(?<default>.+))?\s*",
         RegexOptions.Compiled);
+
+    private static readonly Regex IntegerDefaultRx = new(
+        @"^-?\d+$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    private static readonly Regex FloatDefaultRx = new(
+        @"^-?\d+(\.\d+)?$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    private static readonly Regex BareStringDefaultRx = new(
+        @"^\w+$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     private static readonly Regex SqlRx = new(
         @"--sql\(\s*(?<name>\w+)?\s*\)--",
@@ -52,6 +61,119 @@ public static class SqlParser
         return i;
     }
 
+    private static List<string> SplitParameterHeaderSegments(string inner)
+    {
+        var segments = new List<string>();
+        var buf = new System.Text.StringBuilder();
+        var inQuote = false;
+        for (var i = 0; i < inner.Length; i++)
+        {
+            var ch = inner[i];
+            if (inQuote)
+            {
+                buf.Append(ch);
+                if (ch == '\\' && i + 1 < inner.Length)
+                {
+                    buf.Append(inner[i + 1]);
+                    i += 1;
+                    continue;
+                }
+                if (ch == '\'')
+                    inQuote = false;
+                continue;
+            }
+            if (ch == '\'')
+            {
+                inQuote = true;
+                buf.Append(ch);
+                continue;
+            }
+            if (ch == ',')
+            {
+                segments.Add(buf.ToString());
+                buf.Clear();
+                continue;
+            }
+            buf.Append(ch);
+        }
+        if (inQuote)
+            throw new InvalidOperationException("unclosed string literal in parameter header default");
+        segments.Add(buf.ToString());
+        return segments;
+    }
+
+    private static object ParseHeaderDefaultLiteral(string raw, string paramType, string paramName, string method)
+    {
+        var text = raw.Trim();
+        if (paramType == "blob")
+        {
+            throw new InvalidOperationException(
+                "default values are not supported for blob parameter {{" + paramName + "}} in " +
+                method + ".sql");
+        }
+        if (paramType == "integer")
+        {
+            if (!IntegerDefaultRx.IsMatch(text))
+            {
+                throw new InvalidOperationException(
+                    "invalid integer default '" + text + "' for {{" + paramName + "}} in " +
+                    method + ".sql");
+            }
+            return long.Parse(text, System.Globalization.CultureInfo.InvariantCulture);
+        }
+        if (paramType == "float")
+        {
+            if (!FloatDefaultRx.IsMatch(text))
+            {
+                throw new InvalidOperationException(
+                    "invalid float default '" + text + "' for {{" + paramName + "}} in " +
+                    method + ".sql");
+            }
+            return double.Parse(text, System.Globalization.CultureInfo.InvariantCulture);
+        }
+        if (paramType == "bool")
+        {
+            if (text.Equals("true", StringComparison.OrdinalIgnoreCase))
+                return true;
+            if (text.Equals("false", StringComparison.OrdinalIgnoreCase))
+                return false;
+            throw new InvalidOperationException(
+                "invalid bool default '" + text + "' for {{" + paramName + "}} in " +
+                method + ".sql");
+        }
+
+        if (text.StartsWith('\''))
+        {
+            if (text.Length < 2 || !text.EndsWith('\''))
+            {
+                throw new InvalidOperationException(
+                    "unclosed string literal in default for {{" + paramName + "}} in " +
+                    method + ".sql");
+            }
+            var outBuf = new System.Text.StringBuilder();
+            for (var j = 1; j < text.Length - 1; j++)
+            {
+                if (text[j] == '\\' && j + 1 < text.Length - 1)
+                {
+                    outBuf.Append(text[j + 1]);
+                    j += 1;
+                    continue;
+                }
+                if (text[j] == '\'')
+                {
+                    throw new InvalidOperationException(
+                        "invalid string default for {{" + paramName + "}} in " + method + ".sql");
+                }
+                outBuf.Append(text[j]);
+            }
+            return outBuf.ToString();
+        }
+        if (BareStringDefaultRx.IsMatch(text))
+            return text;
+        throw new InvalidOperationException(
+            "invalid string default '" + text + "' for {{" + paramName + "}} in " + method + ".sql");
+    }
+
     private static List<ParamDecl> ParseParameterHeader(string tokenValue, string method)
     {
         var inner = tokenValue[3..^3];
@@ -60,7 +182,7 @@ public static class SqlParser
 
         var paramsList = new List<ParamDecl>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var segment in inner.Split(','))
+        foreach (var segment in SplitParameterHeaderSegments(inner))
         {
             if (string.IsNullOrWhiteSpace(segment))
                 throw new InvalidOperationException("invalid parameter declaration in " + method + ".sql");
@@ -75,23 +197,37 @@ public static class SqlParser
             var paramName = m.Groups["name"].Value.Trim().ToLowerInvariant();
             var paramType = m.Groups["type"].Value.ToLowerInvariant();
             var paramRequired = m.Groups["required"].Success;
+            var hasDefault = m.Groups["default"].Success;
             if (!KnownParamTypes.Contains(paramType))
             {
                 throw new InvalidOperationException(
                     "unknown parameter type '" + paramType + "' for {{" + paramName + "}} in " +
                     method + ".sql (expected bool, blob, float, integer, string)");
             }
+            if (paramRequired && hasDefault)
+            {
+                throw new InvalidOperationException(
+                    "required parameter {{" + paramName + "}} cannot have a default in " +
+                    method + ".sql");
+            }
             if (!seen.Add(paramName))
             {
                 throw new InvalidOperationException(
                     "duplicate parameter {{" + paramName + "}} in " + method + ".sql");
             }
-            paramsList.Add(new ParamDecl
+            var decl = new ParamDecl
             {
                 Name = paramName,
                 Type = paramType,
                 Required = paramRequired,
-            });
+            };
+            if (hasDefault)
+            {
+                decl.Default = ParseHeaderDefaultLiteral(
+                    m.Groups["default"].Value, paramType, paramName, method);
+                decl.HasDefault = true;
+            }
+            paramsList.Add(decl);
         }
         return paramsList;
     }
@@ -112,6 +248,7 @@ public static class SqlParser
             return null;
 
         tokens = OptionalDesugar.Desugar(tokens);
+        tokens = SortDirDesugar.Desugar(tokens);
 
         var ast = new SqlAst();
         var sqlStmts = new List<Twig>();
@@ -132,6 +269,9 @@ public static class SqlParser
                 tc += 1;
                 continue;
             }
+
+            if (tokenType is "sort" or "dir")
+                sqlStmt.Parameters.Add(new ParamDecl { Name = token.Param! });
 
             if (tokenType == "parameter")
             {
@@ -254,6 +394,8 @@ public static class SqlParser
 
             if (stmt.Nullable.Count == 0)
                 stmt.Nullable = null;
+
+            SortDirDesugar.ValidateDynamicOrderBy(stmt.Content, method);
         }
 
         if (sqlStmts.Count > 0)

@@ -377,27 +377,38 @@ public static class TrunkBuilder
 
         var jsonType = JsonTypeForParam(value);
         var newRequired = value.Required;
+        var newHasDefault = value.HasDefault;
+        var newDefault = value.Default;
         var requiredList = GetRequiredList(model);
         var existingRequired = requiredList.Contains(prop, StringComparer.OrdinalIgnoreCase);
 
         if (props.TryGetValue(prop, out var existingObj) && existingObj is Dictionary<string, object?> existing)
         {
             var existingType = existing.TryGetValue("type", out var t) ? t?.ToString() : null;
+            var existingHasDefault = existing.ContainsKey("default");
+            var existingDefault = existingHasDefault ? existing["default"] : null;
             if (!string.Equals(existingType, jsonType, StringComparison.OrdinalIgnoreCase) ||
-                existingRequired != newRequired)
+                existingRequired != newRequired ||
+                existingHasDefault != newHasDefault ||
+                !DefaultsEqual(existingDefault, newDefault))
             {
                 throw new InvalidOperationException(
                     "conflicting parameter declaration for '" + prop +
                     "': existing type=" + existingType + " required=" + existingRequired +
-                    ", new type=" + jsonType + " required=" + newRequired);
+                    " default=" + existingDefault +
+                    ", new type=" + jsonType + " required=" + newRequired +
+                    " default=" + newDefault);
             }
             return;
         }
 
-        props[prop] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        var propSchema = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
         {
             ["type"] = jsonType,
         };
+        if (newHasDefault)
+            propSchema["default"] = newDefault;
+        props[prop] = propSchema;
         if (newRequired)
         {
             if (!model.TryGetValue("required", out var reqObj) || reqObj is not List<object?> reqList)
@@ -408,6 +419,37 @@ public static class TrunkBuilder
             if (!reqList.Any(x => x is string s && s.Equals(prop, StringComparison.OrdinalIgnoreCase)))
                 reqList.Add(prop);
         }
+    }
+
+    private static bool DefaultsEqual(object? a, object? b)
+    {
+        if (a == null && b == null)
+            return true;
+        if (a == null || b == null)
+            return false;
+        if (a is long or int or short or byte || b is long or int or short or byte)
+        {
+            try
+            {
+                return Convert.ToInt64(a) == Convert.ToInt64(b);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+        if (a is double or float or decimal || b is double or float or decimal)
+        {
+            try
+            {
+                return Math.Abs(Convert.ToDouble(a) - Convert.ToDouble(b)) < 1e-9;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+        return Equals(a, b);
     }
 
     private static List<string> GetRequiredList(Dictionary<string, object?> model)

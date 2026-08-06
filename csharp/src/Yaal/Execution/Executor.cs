@@ -72,7 +72,19 @@ public static class Executor
         foreach (var twig in twigs)
         {
             var connection = twig.Connection;
-            var (output, outputLastInsertedId) = dataProviders[connection].Execute(twig, context, dataProviderHelper);
+            IReadOnlyList<IDictionary<string, object?>> output;
+            object? outputLastInsertedId;
+            try
+            {
+                (output, outputLastInsertedId) = dataProviders[connection].Execute(twig, context, dataProviderHelper);
+            }
+            catch (SortDirException ex)
+            {
+                return (null, new List<IDictionary<string, object?>>
+                {
+                    new Dictionary<string, object?> { ["message"] = ex.Message },
+                });
+            }
 
             ((Shape)context.GetProp("$params")!).SetProp("$last_inserted_id", outputLastInsertedId);
 

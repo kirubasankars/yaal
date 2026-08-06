@@ -11,7 +11,8 @@ public delegate object? ValueConverter(string paramType, object? value);
 public sealed class DataProviderHelper
 {
     private readonly Dictionary<string, object?> _paramCache = new(StringComparer.Ordinal);
-    private readonly Dictionary<(Twig Twig, string NullsKey, string Placeholder), CompiledSql> _compileCache = new();
+    private readonly Dictionary<(Twig Twig, string NullsKey, string Placeholder, string SortKey, string DirKey), CompiledSql>
+        _compileCache = new();
 
     /// <summary>Clear bind-parameter cache (compile cache kept for the helper lifetime).</summary>
     public void ClearCache() => _paramCache.Clear();
@@ -28,8 +29,13 @@ public sealed class DataProviderHelper
             }
         }
 
+        var (sortMap, dirMap) = SortDirDesugar.ResolveValues(twig, inputShape);
         var nullsKey = string.Join("\0", nulls.Select(n => n.ToLowerInvariant()).OrderBy(n => n, StringComparer.Ordinal));
-        var key = (twig, nullsKey, placeholder);
+        var sortKey = string.Join("\0", sortMap.OrderBy(kv => kv.Key, StringComparer.Ordinal)
+            .Select(kv => kv.Key + "=" + (kv.Value ?? "")));
+        var dirKey = string.Join("\0", dirMap.OrderBy(kv => kv.Key, StringComparer.Ordinal)
+            .Select(kv => kv.Key + "=" + kv.Value));
+        var key = (twig, nullsKey, placeholder, sortKey, dirKey);
         if (_compileCache.TryGetValue(key, out var cached))
         {
             return new CompiledSql
@@ -39,7 +45,7 @@ public sealed class DataProviderHelper
             };
         }
 
-        var compiled = SqlCompiler.Compile(twig, nulls, placeholder);
+        var compiled = SqlCompiler.Compile(twig, nulls, placeholder, sortMap, dirMap);
         _compileCache[key] = new CompiledSql
         {
             Content = compiled.Content,

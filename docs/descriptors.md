@@ -76,7 +76,21 @@ where optional(u.user_id = {{$args.id}})
   and u.user_name = {{name}}
 ```
 
-Allowed types: `integer`, `string`, `float`, `bool`, `blob`. Each name needs a type; duplicates and unknown types are errors. Trailing `!` on a name marks it **required** (`--($args.id! integer)--`). Conflicting type/required declarations across files raise at descriptor build time.
+Allowed types: `integer`, `string`, `float`, `bool`, `blob`. Each name needs a type; duplicates and unknown types are errors. Trailing `!` on a name marks it **required** (`--($args.id! integer)--`). Optional `= <literal>` sets a JSON Schema **default** used when the caller omits the value:
+
+```sql
+--($args.sort string = id, $args.dir string = asc, $args.page integer = 1)--
+```
+
+| Type | Literal |
+|---|---|
+| `integer` | `-?\d+` |
+| `float` | `-?\d+` or `-?\d+.\d+` |
+| `bool` | `true` / `false` |
+| `string` | `'...'` or bare `\w+` (e.g. `= id`) |
+| `blob` | not allowed |
+
+`!` and `=` cannot be combined. Conflicting type/required/default declarations across files raise at descriptor build time. A defaulted param is **not** null: `optional(...)` keeps the filter, and `sort()`/`dir()` resolve using the default (they do not elide).
 
 Plain SQL `--` line comments are allowed in query text. Yaal directives are only `--(name type, ...)--` and `--sql--` / `--sql(connection)--`.
 
@@ -105,6 +119,34 @@ Long form still works and must be parenthesized: `({{param}} is null or col = {{
 ```bash
 yaal explain user/list --arg active=1
 yaal explain user/list
+```
+
+### Dynamic ORDER BY — `sort()` / `dir()`
+
+Identifiers cannot be bound as values. Use allowlisted sugar so only author-written expressions are spliced:
+
+```sql
+--($args.sort string, $args.dir string)--
+
+order by
+  sort({{$args.sort}}, name = u.user_name, id = u.user_id)
+  dir({{$args.dir}})
+```
+
+| Construct | Behavior |
+|---|---|
+| `sort({{param}}, key = expr, …)` | Resolve `param` to a declared key (case-insensitive). Splice the matching **author** `expr`. Unknown non-null key → soft `{"errors":[…]}` (no execute). |
+| `dir({{param}})` | Allow only `asc` / `desc` (case-insensitive). Null/omitted → `ASC`. Unknown → soft error. |
+| Null / omitted `sort` (no header default) | **Elide** the entire `ORDER BY` (dir is ignored). |
+| Header default on `sort` / `dir` | Omitted args use that default (e.g. `string = id`) instead of eliding. |
+
+**v1 rules:** the `ORDER BY` clause must be exactly `sort(...)` and optional `dir(...)` — no extra comma terms. Keys must match `\w+`. `sort`/`dir` outside `ORDER BY` parse but are the author's responsibility. Empty-string / whitespace-only sort keys are soft errors (not treated as null).
+
+Security: only expressions written in the descriptor are ever spliced; client keys never become SQL.
+
+```bash
+yaal explain user/list --arg sort=name --arg dir=desc
+yaal query user/list --arg sort=id --arg dir=asc
 ```
 
 ## Output shaping
@@ -149,27 +191,32 @@ Invalid: bare `type: object` / `type: array` under `properties` (including a nes
 | `parent_rows` | Nest from parent rows (parent must set `partition_by`) |
 | root / branch `type` | `object` → one object; `array` → list |
 
-## Multi-twig writes
+## Multi-twig queries
+
+Split one SQL file into ordered twigs with `--sql--`. Args/payload binds are shared; cross-twig values flow through `$params`.
 
 ```sql
---(id! integer, name! string)--
+--($args.page integer, $args.page_size integer, $params.total_count integer)--
 
-INSERT INTO users (user_id, user_name, active) VALUES ({{id}}, {{name}}, 1)
+SELECT
+    'params' AS "$mode",
+    COUNT(*) AS total_count
+FROM users
+WHERE active = 1
 
 --sql--
 
-INSERT INTO user_roles (user_id, role_id) VALUES ({{id}}, 2)
-
---sql--
-
-SELECT ... WHERE u.user_id = {{id}}
+SELECT
+    {{$args.page}} AS page,
+    {{$args.page_size}} AS page_size,
+    {{$params.total_count}} AS total_count
 ```
 
-After each twig, providers set `$params.$last_inserted_id` (engine-specific). Prefer an explicit payload/args id when you need a stable key across twigs.
+`$mode=params` copies columns onto `$params` for later twigs. After each twig, providers also set `$params.$last_inserted_id` (engine-specific; useful when a twig writes). Prefer an explicit args/payload id when you need a stable key.
 
 Named connection: `--sql(other)--` uses provider `"other"` (default `"db"`).
 
-Fixture: [`user/create`](../tests/fixtures/api/user/create/).
+Readonly fixture: [`user/page`](../tests/fixtures/api/user/page/) (`$.paging.sql`).
 
 ## Multi-file branches
 

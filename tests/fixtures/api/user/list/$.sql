@@ -1,4 +1,4 @@
---($args.active integer)--
+--($args.active integer, $args.sort string = id, $args.dir string = asc)--
 
 select
     u.user_id,
@@ -7,4 +7,6 @@ select
 from users u
 where 1 = 1
   and optional(u.active = {{$args.active}})
-order by u.user_id
+order by
+  sort({{$args.sort}}, name = u.user_name, id = u.user_id)
+  dir({{$args.dir}})

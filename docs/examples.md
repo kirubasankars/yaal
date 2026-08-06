@@ -15,13 +15,16 @@ make yaal ARGS='list'
 | JSON out / nested shape | [Nested get](#nested-get--userget) | `user/get` |
 | Output shaping (child SQL) | [Nested child SQL](#nested-child-sql--usernested) | `user/nested` |
 | Subtractive filters | [Optional list](#optional-list--userlist) | `user/list` |
+| Dynamic ORDER BY (`sort`/`dir`) | [Optional list](#optional-list--userlist) | `user/list` |
 | API pagination / `$mode=params` | [Paginated nest](#paginated-nest--userpage) | `user/page` |
-| Multi-query + data passing | [Multi-twig write](#multi-twig-write--usercreate) | `user/create` |
+| Multi-query + data passing | [Paginated nest](#paginated-nest--userpage) | `user/page` (`--sql--` + `$params`) |
 | `$mode` (`params` / `error` / `break` / `json`) | [descriptors — `$mode` rows](descriptors.md#mode-rows) | `user/page` (+ unit tests) |
 | Real SQL (`WITH` / agg) | [Report summary](#real-sql--reportsummary) | `report/summary` |
 | Multi-database | [Multi-database](#multi-database--usercombine) | `user/combine` |
 | Ahead-of-time compile | [Precompiled descriptors](#precompiled-descriptors) | *(any)* |
 | Dual runtime | [Dual runtime](#dual-runtime-python--c) | shared fixtures |
+
+Examples are **read-only** (SELECT / shape). They do not insert or update seed data.
 
 ---
 
@@ -218,14 +221,14 @@ y.Query("user/nested", args: new { id = 1 });
 
 ## Optional list — `user/list`
 
-Root `type: array`. Omit `active` to return everyone; pass it to filter.
+Root `type: array`. Omit `active` to return everyone; pass it to filter. Optional `sort` / `dir` use allowlisted `sort()` / `dir()` sugar (see [descriptors](descriptors.md#dynamic-order-by--sortdir)).
 
 ### Descriptor
 
 **`$.sql`**
 
 ```sql
---($args.active integer)--
+--($args.active integer, $args.sort string = id, $args.dir string = asc)--
 
 select
     u.user_id,
@@ -234,7 +237,9 @@ select
 from users u
 where 1 = 1
   and optional(u.active = {{$args.active}})
-order by u.user_id
+order by
+  sort({{$args.sort}}, name = u.user_name, id = u.user_id)
+  dir({{$args.dir}})
 ```
 
 **`$.output.yaml`**
@@ -256,13 +261,14 @@ properties:
 ```bash
 yaal query user/list
 yaal query user/list --arg active=1
+yaal query user/list --arg sort=name --arg dir=desc
 yaal explain user/list
-yaal explain user/list --arg active=1
+yaal explain user/list --arg active=1 --arg sort=id
 ```
 
-### Explain (elision)
+### Explain (elision + defaults)
 
-**active omitted**
+**active omitted** — filter removed; header defaults keep `ORDER BY u.user_id ASC`:
 
 ```sql
 select
@@ -270,12 +276,13 @@ select
     u.user_name,
     u.active
 from users u
-where 1 = 1
-order by u.user_id
+order by
+  u.user_id
+  ASC
 -- binds: []
 ```
 
-**active=1**
+**active=1, sort=name, dir=desc**
 
 ```sql
 select
@@ -285,11 +292,13 @@ select
 from users u
 where 1 = 1
   and (u.active = ?)
-order by u.user_id
+order by
+  u.user_name
+  DESC
 -- binds: [1]
 ```
 
-### Sample JSON (`active=1`)
+### Sample JSON (`active=1`, `sort=name`)
 
 ```json
 [
@@ -423,75 +432,6 @@ y.Query("user/page", args: new { page = 1, page_size = 1 });
     }
   ]
 }
-```
-
----
-
-## Multi-twig write — `user/create`
-
-One file, three twigs: insert user → assign role → select shaped result. Uses **payload** (not args).
-
-### Descriptor
-
-**`$.sql`** — payload fields; `!` marks required:
-
-```sql
---(id! integer, name! string)--
-
-INSERT INTO users (user_id, user_name, active) VALUES ({{id}}, {{name}}, 1)
-
---sql--
-
-INSERT INTO user_roles (user_id, role_id) VALUES ({{id}}, 2)
-
---sql--
-
-SELECT
-    u.user_id,
-    u.user_name,
-    r.role_id,
-    r.role_name
-FROM users u
-INNER JOIN user_roles ur ON ur.user_id = u.user_id
-INNER JOIN roles r ON r.role_id = ur.role_id
-WHERE u.user_id = {{id}}
-ORDER BY r.role_id
-```
-
-Output shape matches `user/get` (object + nested roles).
-
-### Commands
-
-```bash
-yaal query user/create --payload '{"id":3,"name":"newbie"}'
-```
-
-```python
-y.query("user/create", payload={"id": 3, "name": "newbie"})
-y.query("user/get", args={"id": 3})
-```
-
-```csharp
-y.Query("user/create", payload: new { id = 3, name = "newbie" });
-```
-
-### Sample JSON
-
-```json
-{
-  "id": 3,
-  "name": "newbie",
-  "roles": [
-    { "id": 2, "name": "User" }
-  ]
-}
-```
-
-Invalid payload returns soft errors (not raised):
-
-```bash
-yaal query user/create --payload '{"name":"x"}'
-# {"errors":[...]}
 ```
 
 ---
@@ -714,6 +654,12 @@ make experiment ARGS='query user/page --arg page=1 --arg page_size=10'
 # edit experiment/api/... then re-run
 make experiment-reset
 make experiment-clean
+
+# same experiment/api against Docker Compose ClickHouse
+make experiment-clickhouse-init
+make experiment-clickhouse
+make experiment-clickhouse ARGS='query user/list --arg sort=name'
+make experiment-clickhouse-reset
 ```
 
 ---
@@ -758,6 +704,6 @@ y.Query("orders/list", args: new { status = "open" });
 | Python | [`examples/demo.py`](../examples/demo.py) · `make example` |
 | C# | [`csharp/examples/Yaal.Example`](../csharp/examples/Yaal.Example/) · `make example-csharp` |
 
-Both print get / nested / list / page / create / `report/summary` / `user/combine` and show `explain` elision for `user/list`.
+Both print get / nested / list / page / `report/summary` / `user/combine` and show `explain` elision for `user/list`.
 
 See also: [descriptors.md](descriptors.md) · [README.md](README.md)

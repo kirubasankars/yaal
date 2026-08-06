@@ -9,7 +9,8 @@ import json
 from collections import defaultdict
 
 from yaal_const import MODE
-from yaal_parser import compile_sql
+from yaal_errors import SortDirError
+from yaal_parser import compile_sql, resolve_sort_dir_values
 
 
 class DataProviderHelper:
@@ -28,14 +29,17 @@ class DataProviderHelper:
             for n in twig["nullable"]:
                 if input_shape.get_prop(n) is None:
                     nulls.append(n)
-        key = (id(twig), frozenset(nulls), char)
+        sort_map, dir_map = resolve_sort_dir_values(twig, input_shape)
+        sort_key = tuple(sorted((p, v if v is not None else "") for p, v in sort_map.items()))
+        dir_key = tuple(sorted(dir_map.items()))
+        key = (id(twig), frozenset(nulls), char, sort_key, dir_key)
         cached = self._compile_cache.get(key)
         if cached is not None:
             return {
                 "content": cached["content"],
                 "parameters": list(cached["parameters"]),
             }
-        compiled = compile_sql(twig, nulls, char)
+        compiled = compile_sql(twig, nulls, char, sort_map=sort_map, dir_map=dir_map)
         self._compile_cache[key] = {
             "content": compiled["content"],
             "parameters": list(compiled.get("parameters") or []),
@@ -90,7 +94,12 @@ def _execute_twigs(branch, data_providers, context, data_provider_helper):
         for twig in twigs:
 
             connection = twig["connection"]
-            output, output_last_inserted_id = data_providers[connection].execute(twig, context, data_provider_helper)
+            try:
+                output, output_last_inserted_id = data_providers[connection].execute(
+                    twig, context, data_provider_helper
+                )
+            except SortDirError as e:
+                return None, [{"message": e.message}]
 
             context.get_prop("$params").set_prop("$last_inserted_id", output_last_inserted_id)
 

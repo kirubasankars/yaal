@@ -47,14 +47,12 @@ try
     Print("user/get id=1", y.Query("user/get", args: new { id = 1 }));
     Print("user/nested id=1", y.Query("user/nested", args: new { id = 1 }));
     Print("user/list active=1", y.Query("user/list", args: new { active = 1 }));
+    Print("user/list sort=name dir=desc", y.Query("user/list", args: new { sort = "name", dir = "desc" }));
     Print(
         "user/page page=1 page_size=1",
         y.Query("user/page", args: new { page = 1, page_size = 1 }));
     Print("report/summary", y.Query("report/summary"));
     Print("user/combine id=1", y.Query("user/combine", args: new { id = 1 }));
-    Print(
-        "user/create payload id=3 name=newbie",
-        y.Query("user/create", payload: new { id = 3, name = "newbie" }));
 
     Console.WriteLine("-- explain user/list (active omitted) --");
     foreach (var twig in y.ExplainSql("user/list"))

@@ -230,6 +230,8 @@ def _expand_parameter(model, prop, value):
 
         json_type = _json_type_for_param(value)
         new_required = bool(value.get("required"))
+        new_has_default = "default" in value
+        new_default = value.get("default") if new_has_default else None
         props = model["properties"]
         required_list = model.get("required")
         if required_list is None:
@@ -239,7 +241,14 @@ def _expand_parameter(model, prop, value):
         if prop in props:
             existing = props[prop]
             existing_type = existing.get("type") if isinstance(existing, dict) else None
-            if existing_type != json_type or existing_required != new_required:
+            existing_has_default = isinstance(existing, dict) and "default" in existing
+            existing_default = existing.get("default") if existing_has_default else None
+            if (
+                existing_type != json_type
+                or existing_required != new_required
+                or existing_has_default != new_has_default
+                or existing_default != new_default
+            ):
                 raise TypeError(
                     "conflicting parameter declaration for '"
                     + prop
@@ -247,14 +256,21 @@ def _expand_parameter(model, prop, value):
                     + str(existing_type)
                     + " required="
                     + str(existing_required)
+                    + " default="
+                    + str(existing_default)
                     + ", new type="
                     + json_type
                     + " required="
                     + str(new_required)
+                    + " default="
+                    + str(new_default)
                 )
             return
 
-        props[prop] = {"type": json_type}
+        prop_schema = {"type": json_type}
+        if new_has_default:
+            prop_schema["default"] = new_default
+        props[prop] = prop_schema
         if new_required:
             if "required" not in model:
                 model["required"] = []

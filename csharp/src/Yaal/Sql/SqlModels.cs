@@ -14,6 +14,10 @@ public sealed class SqlToken
     public string? NullableParameter { get; set; }
     public List<ParamDecl>? Parameters { get; set; }
     public object? Content { get; set; }
+    /// <summary>sort()/dir() parameter name (e.g. $args.sort).</summary>
+    public string? Param { get; set; }
+    /// <summary>Allowlisted key → SQL expression for sort().</summary>
+    public Dictionary<string, string>? Choices { get; set; }
 }
 
 public sealed class ParamDecl
@@ -21,6 +25,8 @@ public sealed class ParamDecl
     public string Name { get; set; } = "";
     public string Type { get; set; } = "";
     public bool Required { get; set; }
+    public object? Default { get; set; }
+    public bool HasDefault { get; set; }
 }
 
 public sealed class Twig

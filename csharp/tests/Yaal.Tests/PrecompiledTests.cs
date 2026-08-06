@@ -84,11 +84,17 @@ public class PrecompiledTests
         {
             d["parameters"] = b.Parameters.ToDictionary(
                 kv => kv.Key,
-                kv => (object?)new Dictionary<string, object?>
+                kv =>
                 {
-                    ["name"] = kv.Value.Name,
-                    ["type"] = kv.Value.Type,
-                    ["required"] = kv.Value.Required,
+                    var pd = new Dictionary<string, object?>
+                    {
+                        ["name"] = kv.Value.Name,
+                        ["type"] = kv.Value.Type,
+                        ["required"] = kv.Value.Required,
+                    };
+                    if (kv.Value.HasDefault)
+                        pd["default"] = kv.Value.Default;
+                    return (object?)pd;
                 });
         }
         if (b.Twigs != null)
@@ -110,13 +116,23 @@ public class PrecompiledTests
                         if (tok.Nullable) tokd["nullable"] = true;
                         if (tok.NullableParameter != null)
                             tokd["nullable_parameter"] = tok.NullableParameter;
+                        if (tok.Param != null)
+                            tokd["param"] = tok.Param;
+                        if (tok.Choices != null)
+                            tokd["choices"] = tok.Choices;
                         return tokd;
                     }).ToList(),
-                    ["parameters"] = t.Parameters.Select(p => new Dictionary<string, object?>
+                    ["parameters"] = t.Parameters.Select(p =>
                     {
-                        ["name"] = p.Name,
-                        ["type"] = p.Type,
-                        ["required"] = p.Required,
+                        var pd = new Dictionary<string, object?>
+                        {
+                            ["name"] = p.Name,
+                            ["type"] = p.Type,
+                            ["required"] = p.Required,
+                        };
+                        if (p.HasDefault)
+                            pd["default"] = p.Default;
+                        return pd;
                     }).ToList(),
                 };
                 if (t.Nullable != null)

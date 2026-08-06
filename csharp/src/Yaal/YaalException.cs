@@ -24,3 +24,8 @@ public class PathEscapeException : YaalException
 {
     public PathEscapeException(string message) : base(message) { }
 }
+
+public class SortDirException : YaalException
+{
+    public SortDirException(string message) : base(message) { }
+}

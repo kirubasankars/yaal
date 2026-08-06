@@ -35,6 +35,21 @@ yaal explain user/list
 yaal explain user/list --arg active=1
 ```
 
+### Dynamic ORDER BY
+
+Allowlisted `sort()` / `dir()` splice author expressions only — never client SQL. Null `sort` elides `ORDER BY` unless the header sets a default (`string = id`). [Details →](docs/descriptors.md#dynamic-order-by--sortdir)
+
+```sql
+--($args.sort string = id, $args.dir string = asc)--
+order by
+  sort({{$args.sort}}, name = u.user_name, id = u.user_id)
+  dir({{$args.dir}})
+```
+
+```bash
+yaal query user/list --arg sort=name --arg dir=desc
+```
+
 ### JSON out
 
 Every `query` returns nested JSON. [Full example →](docs/examples.md#nested-get--userget)
@@ -60,18 +75,13 @@ roles:
 
 ### Multi-query + data passing
 
-`--sql--` twigs share binds; `$mode=params` / `$params` / `$last_inserted_id` pass data between them. [Full example →](docs/examples.md#multi-twig-write--usercreate)
+`--sql--` twigs share binds; `$mode=params` copies columns onto `$params` for later twigs. [Full example →](docs/examples.md#paginated-nest--userpage)
 
 ```sql
-INSERT INTO users (...) VALUES ({{id}}, {{name}}, 1)
+SELECT 'params' AS "$mode", COUNT(*) AS total_count FROM users WHERE active = 1
 --sql--
-INSERT INTO user_roles (...) VALUES ({{id}}, 2)
---sql--
-SELECT ... WHERE u.user_id = {{id}}
-```
-
-```bash
-yaal query user/create --payload '{"id":3,"name":"newbie"}'
+SELECT {{$args.page}} AS page, {{$args.page_size}} AS page_size,
+       {{$params.total_count}} AS total_count
 ```
 
 ### API pagination
@@ -162,11 +172,18 @@ make experiment-init
 make experiment
 make experiment ARGS='query user/page --arg page=1 --arg page_size=10'
 make experiment-reset                 # reseed DB only
+
+# same API sandbox against Compose ClickHouse
+make experiment-clickhouse-init
+make experiment-clickhouse
+make experiment-clickhouse-reset      # truncate+reseed CH (keep API edits)
 ```
 
-`make example` runs [`examples/demo.py`](examples/demo.py): temp SQLite from `docker/sqlite/schema.sql` (+ flags DB), then get / nested / list / page / create / `report/summary` / `user/combine` plus `explain` elision. CLI commands with `--db` omitted also seed a temp SQLite DB.
+`make example` runs [`examples/demo.py`](examples/demo.py): temp SQLite from `docker/sqlite/schema.sql` (+ flags DB), then get / nested / list / page / `report/summary` / `user/combine` plus `explain` elision (read-only). CLI commands with `--db` omitted also seed a temp SQLite DB.
 
 `make experiment` uses a local sandbox at `experiment/` (gitignored): a copy of `tests/fixtures/api` plus `yaal.db`. Edit `experiment/api/` and re-run; `make experiment-reset` reseeds the DB without wiping API edits.
+
+`make experiment-clickhouse` shares `experiment/api/` and points `--db` at Compose ClickHouse (`clickhouse://yaal:yaal@127.0.0.1:9000/yaal`). It starts the `clickhouse` service if needed; `experiment-clickhouse-reset` reloads rows via [`docker/clickhouse/experiment_seed.sql`](docker/clickhouse/experiment_seed.sql). (`user/combine` still needs a second SQLite flags DB — use the SQLite experiment for that.)
 
 ### CLI
 
@@ -209,7 +226,7 @@ for twig in y.explain_sql("user/get", args={"id": 1}):
 | [`docs/README.md`](docs/README.md) | Docs index |
 | [`examples/demo.py`](examples/demo.py) | Runnable Python tour (`make example`) |
 | [`csharp/examples/Yaal.Example`](csharp/examples/Yaal.Example/) | Runnable .NET tour (`make example-csharp`) |
-| [`tests/fixtures/api/`](tests/fixtures/api/) | Shared descriptors: get, nested, list, page, create, summary, combine |
+| [`tests/fixtures/api/`](tests/fixtures/api/) | Shared descriptors: get, nested, list, page, summary, combine |
 
 ## Make targets
 
@@ -223,7 +240,9 @@ for twig in y.explain_sql("user/get", args={"id": 1}):
 | `make example-csharp` | Same tour in .NET SDK container |
 | `make yaal ARGS='...'` | Pass-through to CLI (`query` / `explain` / `list` / `compile`) |
 | `make experiment` | FS+SQLite sandbox under `experiment/` (init if needed) |
-| `make experiment-init` / `experiment-reset` / `experiment-clean` | Create, reseed DB, or remove sandbox |
+| `make experiment-clickhouse` | Same API sandbox against Compose ClickHouse |
+| `make experiment-init` / `experiment-reset` / `experiment-clean` | Create, reseed SQLite, or remove sandbox |
+| `make experiment-clickhouse-init` / `experiment-clickhouse-reset` | Start/seed or reseed ClickHouse (keep API edits) |
 | `make integration-up` / `integration-down` | Manage compose DBs |
 
 SQLite-only usage does **not** need Docker. Compose is only for Postgres/MySQL/ClickHouse integration tests.
@@ -320,25 +339,28 @@ properties:
 Split one SQL file into ordered twigs with `--sql--` (or `--sql(name)--` for another connection). Args/payload binds are shared across twigs. Cross-twig values also flow through the `$params` bag.
 
 ```sql
---(id! integer, name! string)--
+--($args.page integer, $args.page_size integer, $params.total_count integer)--
 
-INSERT INTO users (user_id, user_name, active) VALUES ({{id}}, {{name}}, 1)
+SELECT
+    'params' AS "$mode",
+    COUNT(*) AS total_count
+FROM users
+WHERE active = 1
 
 --sql--
 
-INSERT INTO user_roles (user_id, role_id) VALUES ({{id}}, 2)
-
---sql--
-
-SELECT ... WHERE u.user_id = {{id}}   -- shaped to nested JSON
+SELECT
+    {{$args.page}} AS page,
+    {{$args.page_size}} AS page_size,
+    {{$params.total_count}} AS total_count
 ```
 
 - `$mode=params` — a result row with `'$mode' = 'params'` copies its columns onto `$params` for later twigs (e.g. `total_count` in pagination)
-- `$params.$last_inserted_id` — set after each twig (engine-specific); prefer an explicit args/payload id when you need a stable key
+- `$params.$last_inserted_id` — set after each twig (engine-specific)
 - `$run_id` — also on `$params`
 - Other `$mode` values: `error` (soft `{"errors":[...]}`), `break` (early rows), `json` (engine JSON) — full reference: [`docs/descriptors.md`](docs/descriptors.md#mode-rows)
 
-Try: `yaal query user/create --payload '{"id":3,"name":"newbie"}'`. Full walkthrough: [`docs/examples.md`](docs/examples.md).
+Try: `yaal query user/page --arg page=1 --arg page_size=10`. Full walkthrough: [`docs/examples.md`](docs/examples.md#paginated-nest--userpage).
 
 ### Pagination (API list + meta)
 

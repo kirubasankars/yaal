@@ -22,7 +22,81 @@ public static class SqlCompiler
     private static readonly Regex OneEqualsOneCompact = new(
         @"^1\s*=\s*1$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
-    public static CompiledSql Compile(Twig sqlStmt, IEnumerable<string> nulls, string placeholder)
+    private static readonly HashSet<string> OrderByClauseEnd = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "limit", "offset", "fetch", "for", "union", "except", "intersect", ")", ";",
+    };
+
+    private static int SkipWsTokens(List<SqlToken> stmt, int i)
+    {
+        while (i < stmt.Count && stmt[i].Type is "space" or "newline")
+            i += 1;
+        return i;
+    }
+
+    private static bool IsClauseEndToken(SqlToken token)
+    {
+        if (token.Type == "brace" && token.Value == ")")
+            return true;
+        if (token.Type == "word")
+            return OrderByClauseEnd.Contains(token.Value.Trim());
+        return false;
+    }
+
+    private static bool OrderByShouldElide(
+        List<SqlToken> stmt, int orderIndex, Dictionary<string, string?> sortMap)
+    {
+        var j = SkipWsTokens(stmt, orderIndex + 1);
+        if (j >= stmt.Count || stmt[j].Type != "word" ||
+            !stmt[j].Value.Equals("by", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var k = j + 1;
+        while (k < stmt.Count && !IsClauseEndToken(stmt[k]))
+        {
+            var t = stmt[k];
+            if (t.Type == "sort")
+            {
+                if (!sortMap.TryGetValue(t.Param!, out var expr) || expr == null)
+                    return true;
+            }
+            k += 1;
+        }
+        return false;
+    }
+
+    private static int SkipElidedOrderBy(List<SqlToken> stmt, int orderIndex)
+    {
+        var k = orderIndex + 1;
+        while (k < stmt.Count)
+        {
+            var t = stmt[k];
+            if (t.Type is "space" or "newline")
+            {
+                k += 1;
+                continue;
+            }
+            if (t.Type == "word" && t.Value.Equals("by", StringComparison.OrdinalIgnoreCase))
+            {
+                k += 1;
+                continue;
+            }
+            if (t.Type is "sort" or "dir")
+            {
+                k += 1;
+                continue;
+            }
+            break;
+        }
+        return k;
+    }
+
+    public static CompiledSql Compile(
+        Twig sqlStmt,
+        IEnumerable<string> nulls,
+        string placeholder,
+        Dictionary<string, string?>? sortMap = null,
+        Dictionary<string, string>? dirMap = null)
     {
         Dictionary<string, ParamDecl>? parametersMeta = null;
         if (sqlStmt.Parameters.Count > 0)
@@ -33,6 +107,8 @@ public static class SqlCompiler
                 parametersMeta[p.Name] = p;
         }
 
+        sortMap ??= new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        dirMap ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var nullsSet = new HashSet<string>(nulls.Select(n => n.ToLowerInvariant()));
         var stmt = sqlStmt.Content;
         var tokens = new List<string>();
@@ -41,14 +117,27 @@ public static class SqlCompiler
         // After skipping a non-null "{{p}} is null" marker, drop the following " or ".
         var skipOrAfterNullable = false;
 
-        foreach (var token in stmt)
+        var idx = 0;
+        while (idx < stmt.Count)
         {
+            var token = stmt[idx];
+            if (token.Type == "word" &&
+                token.Value.Equals("order", StringComparison.OrdinalIgnoreCase) &&
+                OrderByShouldElide(stmt, idx, sortMap))
+            {
+                while (tokens.Count > 0 && IsWhitespaceSqlFragment(tokens[^1]))
+                    tokens.RemoveAt(tokens.Count - 1);
+                idx = SkipElidedOrderBy(stmt, idx);
+                continue;
+            }
+
             if (token.Type == "brace")
             {
                 if (group != null)
                 {
                     if (group == token.Group)
                         group = null;
+                    idx += 1;
                     continue;
                 }
 
@@ -58,23 +147,46 @@ public static class SqlCompiler
                     StripPrecedingConnector(tokens);
                     group = token.Group;
                     skipOrAfterNullable = false;
+                    idx += 1;
                     continue;
                 }
             }
 
             if (group != null)
+            {
+                idx += 1;
                 continue;
+            }
 
             if (skipOrAfterNullable)
             {
                 if (IsWhitespaceSqlFragment(token.Value))
+                {
+                    idx += 1;
                     continue;
+                }
                 if (token.Type == "word" && token.Value.Trim().Equals("or", StringComparison.OrdinalIgnoreCase))
                 {
                     // Stay in skip mode to also drop whitespace after "or".
+                    idx += 1;
                     continue;
                 }
                 skipOrAfterNullable = false;
+            }
+
+            if (token.Type == "sort")
+            {
+                if (sortMap.TryGetValue(token.Param!, out var expr) && expr != null)
+                    tokens.Add(expr);
+                idx += 1;
+                continue;
+            }
+
+            if (token.Type == "dir")
+            {
+                tokens.Add(dirMap.TryGetValue(token.Param!, out var dir) ? dir : "ASC");
+                idx += 1;
+                continue;
             }
 
             if (token.Type == "parameter")
@@ -83,6 +195,7 @@ public static class SqlCompiler
                 {
                     // Param is known non-null: drop "{{p}} is null or", keep the predicate.
                     skipOrAfterNullable = true;
+                    idx += 1;
                     continue;
                 }
 
@@ -93,6 +206,8 @@ public static class SqlCompiler
             {
                 tokens.Add(token.Value);
             }
+
+            idx += 1;
         }
 
         CleanupCompiledSql(tokens);

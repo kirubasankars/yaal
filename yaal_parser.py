@@ -4,9 +4,15 @@
 
 import re
 
+from yaal_errors import SortDirError
+
 KNOWN_PARAM_TYPES = frozenset({"integer", "string", "float", "bool", "blob"})
 
 _WS_TOKEN_TYPES = frozenset({"space", "newline"})
+_SORT_KEY_RX = re.compile(r"^\w+$")
+_ORDER_BY_CLAUSE_END = frozenset({
+    "limit", "offset", "fetch", "for", "union", "except", "intersect", ")", ";",
+})
 
 
 def lex_dash(current, content):
@@ -294,6 +300,406 @@ def _desugar_optional_tokens(tokens):
     return result
 
 
+def _tokens_to_sql(tokens):
+    return "".join(t.get("value", "") for t in tokens)
+
+
+def _body_contains_sort_or_dir_call(tokens):
+    n = len(tokens)
+    i = 0
+    while i < n:
+        t = tokens[i]
+        if t["type"] == "word" and t["value"].lower() in ("sort", "dir"):
+            j = _skip_ws_tokens(tokens, i + 1)
+            if j < n and tokens[j]["type"] == "brace" and tokens[j]["value"] == "(":
+                return True
+        i += 1
+    return False
+
+
+def _parse_sort_body(body):
+    """Parse sort({{param}}, key = expr, ...) → (param_name, choices_dict)."""
+    if _body_contains_sort_or_dir_call(body):
+        raise TypeError("nested sort(...)/dir(...) is not allowed")
+
+    i = _skip_ws_tokens(body, 0)
+    n = len(body)
+    if i >= n or body[i]["type"] != "parameter":
+        raise TypeError("sort(...) requires {{param}} as the first argument")
+
+    param_name = _parameter_name_from_token(body[i])
+    param_count = sum(1 for t in body if t["type"] == "parameter")
+    if param_count != 1:
+        raise TypeError("sort(...) requires exactly one {{param}}")
+
+    i = _skip_ws_tokens(body, i + 1)
+    if i >= n:
+        raise TypeError("sort(...) requires at least one key = expr pair")
+
+    # Leading comma after param (usual style: sort({{p}}, key = expr))
+    if body[i]["type"] == "word" and body[i]["value"] == ",":
+        i = _skip_ws_tokens(body, i + 1)
+    elif body[i]["type"] == "word" and body[i]["value"].startswith(","):
+        # Rare: ",key" glued — not supported; keys must be separate words.
+        raise TypeError("invalid sort(...) argument list")
+
+    if i >= n:
+        raise TypeError("sort(...) requires at least one key = expr pair")
+
+    choices = {}
+    while i < n:
+        if body[i]["type"] != "word" or not _SORT_KEY_RX.match(body[i]["value"]):
+            raise TypeError(
+                "sort(...) keys must be word characters (\\w+), got "
+                + repr(body[i].get("value"))
+            )
+        key = body[i]["value"].lower()
+        if key in choices:
+            raise TypeError("duplicate sort(...) key: " + key)
+
+        i = _skip_ws_tokens(body, i + 1)
+        if i >= n or body[i]["type"] != "word" or body[i]["value"] != "=":
+            raise TypeError("sort(...) expected key = expr")
+
+        i = _skip_ws_tokens(body, i + 1)
+        if i >= n:
+            raise TypeError("sort(...) expected expression after =")
+
+        expr_tokens = []
+        depth = 0
+        while i < n:
+            t = body[i]
+            if t["type"] == "brace":
+                if t["value"] == "(":
+                    depth += 1
+                elif t["value"] == ")":
+                    depth -= 1
+                expr_tokens.append(t)
+                i += 1
+                continue
+
+            if depth == 0 and t["type"] == "word":
+                val = t["value"]
+                if val == ",":
+                    i += 1
+                    break
+                if val.endswith(",") and "," not in val[:-1]:
+                    # Trailing comma glued to last expr token: u.user_name,
+                    trimmed = dict(t)
+                    trimmed["value"] = val[:-1]
+                    if trimmed["value"] != "":
+                        expr_tokens.append(trimmed)
+                    i += 1
+                    break
+
+            expr_tokens.append(t)
+            i += 1
+
+        # Trim trailing whitespace from expr
+        while expr_tokens and expr_tokens[-1]["type"] in _WS_TOKEN_TYPES:
+            expr_tokens.pop()
+        while expr_tokens and expr_tokens[0]["type"] in _WS_TOKEN_TYPES:
+            expr_tokens.pop(0)
+        expr_sql = _tokens_to_sql(expr_tokens).strip()
+        if not expr_sql:
+            raise TypeError("sort(...) empty expression for key " + key)
+        choices[key] = expr_sql
+        i = _skip_ws_tokens(body, i)
+
+    if not choices:
+        raise TypeError("sort(...) requires at least one key = expr pair")
+    return param_name, choices
+
+
+def _parse_dir_body(body):
+    """Parse dir({{param}}) → param_name."""
+    if _body_contains_sort_or_dir_call(body):
+        raise TypeError("nested sort(...)/dir(...) is not allowed")
+
+    i = _skip_ws_tokens(body, 0)
+    n = len(body)
+    if i >= n or body[i]["type"] != "parameter":
+        raise TypeError("dir(...) requires exactly one {{param}}")
+
+    param_name = _parameter_name_from_token(body[i])
+    param_count = sum(1 for t in body if t["type"] == "parameter")
+    if param_count != 1:
+        raise TypeError("dir(...) requires exactly one {{param}}")
+
+    i = _skip_ws_tokens(body, i + 1)
+    if i < n:
+        raise TypeError("dir(...) does not accept key = expr pairs")
+    return param_name
+
+
+def _desugar_sort_dir_tokens(tokens):
+    """Replace sort(...)/dir(...) with structured tokens."""
+    if not tokens:
+        return tokens
+
+    result = []
+    i = 0
+    n = len(tokens)
+    while i < n:
+        tok = tokens[i]
+        if tok["type"] == "word" and tok["value"].lower() in ("sort", "dir"):
+            kind = tok["value"].lower()
+            j = _skip_ws_tokens(tokens, i + 1)
+            if j < n and tokens[j]["type"] == "brace" and tokens[j]["value"] == "(":
+                group = tokens[j]["group"]
+                k = j + 1
+                while k < n:
+                    t = tokens[k]
+                    if t["type"] == "brace" and t["value"] == ")" and t.get("group") == group:
+                        break
+                    k += 1
+                else:
+                    raise TypeError("unclosed " + kind + "(...)")
+
+                body = tokens[j + 1:k]
+                if kind == "sort":
+                    if not body or all(t["type"] in _WS_TOKEN_TYPES for t in body):
+                        raise TypeError("sort() empty / no param")
+                    param_name, choices = _parse_sort_body(body)
+                    result.append({
+                        "type": "sort",
+                        "value": "",
+                        "param": param_name,
+                        "choices": choices,
+                    })
+                else:
+                    if not body or all(t["type"] in _WS_TOKEN_TYPES for t in body):
+                        raise TypeError("dir() empty / no param")
+                    param_name = _parse_dir_body(body)
+                    result.append({
+                        "type": "dir",
+                        "value": "",
+                        "param": param_name,
+                    })
+                i = k + 1
+                continue
+
+        result.append(tok)
+        i += 1
+    return result
+
+
+def _is_clause_end_token(token):
+    if token["type"] == "brace" and token["value"] == ")":
+        return True
+    if token["type"] == "word":
+        w = token["value"].strip().lower()
+        return w in _ORDER_BY_CLAUSE_END
+    return False
+
+
+def _validate_dynamic_order_by(content, method):
+    """v1: when sort()/dir() appear in ORDER BY, they must be the only terms."""
+    n = len(content)
+    i = 0
+    while i < n:
+        t = content[i]
+        if t["type"] == "word" and t["value"].lower() == "order":
+            j = _skip_ws_tokens(content, i + 1)
+            if j < n and content[j]["type"] == "word" and content[j]["value"].lower() == "by":
+                k = _skip_ws_tokens(content, j + 1)
+                has_dynamic = False
+                has_static = False
+                while k < n and not _is_clause_end_token(content[k]):
+                    ct = content[k]
+                    if ct["type"] in _WS_TOKEN_TYPES:
+                        k += 1
+                        continue
+                    if ct["type"] in ("sort", "dir"):
+                        has_dynamic = True
+                        k += 1
+                        continue
+                    has_static = True
+                    k += 1
+                if has_dynamic and has_static:
+                    raise TypeError(
+                        "ORDER BY with sort()/dir() must not include other terms in "
+                        + method
+                        + ".sql"
+                    )
+                i = k
+                continue
+        i += 1
+
+
+def resolve_sort_dir_values(sql_stmt, input_shape):
+    """
+    Resolve sort()/dir() runtime values from input_shape.
+
+    Returns (sort_map, dir_map) where:
+      sort_map[param] = SQL expr string, or None to elide ORDER BY
+      dir_map[param] = 'ASC' or 'DESC'
+    Raises SortDirError for unknown/invalid non-null values (soft error).
+    """
+    sort_map = {}
+    dir_map = {}
+    for token in sql_stmt.get("content") or []:
+        if token["type"] == "sort":
+            param = token["param"]
+            raw = input_shape.get_prop(param) if input_shape is not None else None
+            if raw is None:
+                sort_map[param] = None
+                continue
+            if not isinstance(raw, str):
+                raw = str(raw)
+            key = raw.strip().lower()
+            if key == "":
+                raise SortDirError("unknown sort key: " + repr(raw))
+            choices = token["choices"]
+            if key not in choices:
+                raise SortDirError("unknown sort key: " + raw)
+            sort_map[param] = choices[key]
+        elif token["type"] == "dir":
+            param = token["param"]
+            raw = input_shape.get_prop(param) if input_shape is not None else None
+            if raw is None:
+                dir_map[param] = "ASC"
+                continue
+            if not isinstance(raw, str):
+                raw = str(raw)
+            direction = raw.strip().lower()
+            if direction == "asc":
+                dir_map[param] = "ASC"
+            elif direction == "desc":
+                dir_map[param] = "DESC"
+            else:
+                raise SortDirError("unknown sort direction: " + raw)
+    return sort_map, dir_map
+
+
+def _split_parameter_header_segments(inner):
+    """Split header body on commas, respecting single-quoted string literals."""
+    segments = []
+    buf = []
+    i = 0
+    n = len(inner)
+    in_quote = False
+    while i < n:
+        ch = inner[i]
+        if in_quote:
+            buf.append(ch)
+            if ch == "\\" and i + 1 < n:
+                buf.append(inner[i + 1])
+                i += 2
+                continue
+            if ch == "'":
+                in_quote = False
+            i += 1
+            continue
+        if ch == "'":
+            in_quote = True
+            buf.append(ch)
+            i += 1
+            continue
+        if ch == ",":
+            segments.append("".join(buf))
+            buf = []
+            i += 1
+            continue
+        buf.append(ch)
+        i += 1
+    if in_quote:
+        raise TypeError("unclosed string literal in parameter header default")
+    segments.append("".join(buf))
+    return segments
+
+
+def _parse_header_default_literal(raw, param_type, param_name, method):
+    """Parse `= <literal>` value for a typed parameter header default."""
+    text = raw.strip()
+    if param_type == "blob":
+        raise TypeError(
+            "default values are not supported for blob parameter {{"
+            + param_name
+            + "}} in "
+            + method
+            + ".sql"
+        )
+    if param_type == "integer":
+        if not re.fullmatch(r"-?\d+", text):
+            raise TypeError(
+                "invalid integer default '"
+                + text
+                + "' for {{"
+                + param_name
+                + "}} in "
+                + method
+                + ".sql"
+            )
+        return int(text)
+    if param_type == "float":
+        if not re.fullmatch(r"-?\d+(\.\d+)?", text):
+            raise TypeError(
+                "invalid float default '"
+                + text
+                + "' for {{"
+                + param_name
+                + "}} in "
+                + method
+                + ".sql"
+            )
+        return float(text)
+    if param_type == "bool":
+        low = text.lower()
+        if low == "true":
+            return True
+        if low == "false":
+            return False
+        raise TypeError(
+            "invalid bool default '"
+            + text
+            + "' for {{"
+            + param_name
+            + "}} in "
+            + method
+            + ".sql"
+        )
+    # string: '...' or bare \w+
+    if text.startswith("'"):
+        if len(text) < 2 or not text.endswith("'"):
+            raise TypeError(
+                "unclosed string literal in default for {{"
+                + param_name
+                + "}} in "
+                + method
+                + ".sql"
+            )
+        out = []
+        j = 1
+        while j < len(text) - 1:
+            if text[j] == "\\" and j + 1 < len(text) - 1:
+                out.append(text[j + 1])
+                j += 2
+                continue
+            if text[j] == "'":
+                raise TypeError(
+                    "invalid string default for {{"
+                    + param_name
+                    + "}} in "
+                    + method
+                    + ".sql"
+                )
+            out.append(text[j])
+            j += 1
+        return "".join(out)
+    if re.fullmatch(r"\w+", text):
+        return text
+    raise TypeError(
+        "invalid string default '"
+        + text
+        + "' for {{"
+        + param_name
+        + "}} in "
+        + method
+        + ".sql"
+    )
+
+
 def _parse_parameter_header(token_value, method):
     if not (
         token_value.startswith("--(")
@@ -306,11 +712,12 @@ def _parse_parameter_header(token_value, method):
         raise TypeError("empty parameter header in " + method + ".sql")
 
     parameter_rx = re.compile(
-        r"\s*(?P<name>[\$\_\.A-Za-z0-9\[\]]+)(?P<required>!)?\s+(?P<type>\w+)\s*"
+        r"\s*(?P<name>[\$\_\.A-Za-z0-9\[\]]+)(?P<required>!)?\s+(?P<type>\w+)"
+        r"(?:\s*=\s*(?P<default>.+))?\s*"
     )
     params = []
     seen = set()
-    for segment in inner.split(","):
+    for segment in _split_parameter_header_segments(inner):
         if segment.strip() == "":
             raise TypeError("invalid parameter declaration in " + method + ".sql")
         m = parameter_rx.fullmatch(segment)
@@ -326,6 +733,7 @@ def _parse_parameter_header(token_value, method):
         param_name = d["name"].lstrip().rstrip().lower()
         param_type = d["type"].lower()
         param_required = bool(d.get("required"))
+        default_raw = d.get("default")
         if param_type not in KNOWN_PARAM_TYPES:
             raise TypeError(
                 "unknown parameter type '"
@@ -338,16 +746,29 @@ def _parse_parameter_header(token_value, method):
                 + ", ".join(sorted(KNOWN_PARAM_TYPES))
                 + ")"
             )
+        if param_required and default_raw is not None:
+            raise TypeError(
+                "required parameter {{"
+                + param_name
+                + "}} cannot have a default in "
+                + method
+                + ".sql"
+            )
         if param_name in seen:
             raise TypeError(
                 "duplicate parameter {{" + param_name + "}} in " + method + ".sql"
             )
         seen.add(param_name)
-        params.append({
+        decl = {
             "name": param_name,
             "type": param_type,
             "required": param_required,
-        })
+        }
+        if default_raw is not None:
+            decl["default"] = _parse_header_default_literal(
+                default_raw, param_type, param_name, method
+            )
+        params.append(decl)
     return params
 
 
@@ -356,6 +777,7 @@ def parser(tokens, method):
         return None
 
     tokens = _desugar_optional_tokens(tokens)
+    tokens = _desugar_sort_dir_tokens(tokens)
 
     ast = {}
     ast["sql_stmts"] = sql_stmts = []
@@ -375,12 +797,15 @@ def parser(tokens, method):
             break
 
         token = tokens[tc]
-        token_value = token["value"]
+        token_value = token.get("value", "")
         token_type = token["type"]
 
         if token_type in _WS_TOKEN_TYPES and not significant_seen:
             tc += 1
             continue
+
+        if token_type in ("sort", "dir"):
+            sql_stmt["parameters"].append({"name": token["param"]})
 
         if token_type == "parameter":
             parameter_name = token_value[2:len(token_value) - 2].lstrip().rstrip().lower()
@@ -491,6 +916,8 @@ def parser(tokens, method):
 
         if not sql_stmt["nullable"]:
             del sql_stmt["nullable"]
+
+        _validate_dynamic_order_by(sql_stmt["content"], method)
 
     if not ast["sql_stmts"]:
         del ast["sql_stmts"]
@@ -631,12 +1058,50 @@ def _cleanup_compiled_sql(tokens):
     return tokens
 
 
-def compile_sql(sql_stmt, nulls, char):
+def _order_by_should_elide(stmt, order_index, sort_map):
+    """True if this ORDER BY contains a sort() whose value is null (elide whole clause)."""
+    j = _skip_ws_tokens(stmt, order_index + 1)
+    if j >= len(stmt) or stmt[j]["type"] != "word" or stmt[j]["value"].lower() != "by":
+        return False
+    k = j + 1
+    saw_sort = False
+    while k < len(stmt) and not _is_clause_end_token(stmt[k]):
+        t = stmt[k]
+        if t["type"] == "sort":
+            saw_sort = True
+            if sort_map.get(t["param"]) is None:
+                return True
+        k += 1
+    return False
+
+
+def _skip_elided_order_by(stmt, order_index):
+    """Skip from ORDER through dynamic ORDER BY terms (sort/dir/ws/by)."""
+    k = order_index + 1
+    # consume optional ws, by, ws, sort/dir/ws until clause end or static
+    while k < len(stmt):
+        t = stmt[k]
+        if t["type"] in _WS_TOKEN_TYPES:
+            k += 1
+            continue
+        if t["type"] == "word" and t["value"].lower() == "by":
+            k += 1
+            continue
+        if t["type"] in ("sort", "dir"):
+            k += 1
+            continue
+        break
+    return k
+
+
+def compile_sql(sql_stmt, nulls, char, sort_map=None, dir_map=None):
     if "parameters" in sql_stmt:
         parameters_meta = {x["name"]: x for x in sql_stmt["parameters"]}
     else:
         parameters_meta = None
 
+    sort_map = sort_map or {}
+    dir_map = dir_map or {}
     nulls_set = {n.lower() for n in nulls}
     stmt = sql_stmt["content"]
     tokens = []
@@ -644,11 +1109,26 @@ def compile_sql(sql_stmt, nulls, char):
     group = None
     # After skipping a non-null "{{p}} is null" marker, drop the following " or ".
     skip_or_after_nullable = False
-    for token in stmt:
+    idx = 0
+    n = len(stmt)
+    while idx < n:
+        token = stmt[idx]
+        if (
+            token["type"] == "word"
+            and token["value"].lower() == "order"
+            and _order_by_should_elide(stmt, idx, sort_map)
+        ):
+            # Drop preceding whitespace so we don't leave trailing spaces before LIMIT.
+            while tokens and _is_whitespace_sql_fragment(tokens[-1]):
+                tokens.pop()
+            idx = _skip_elided_order_by(stmt, idx)
+            continue
+
         if token["type"] == "brace":
             if group is not None:
                 if group == token["group"]:
                     group = None
+                idx += 1
                 continue
 
             if "nullable_parameter" in token and token["nullable_parameter"] in nulls_set:
@@ -657,29 +1137,51 @@ def compile_sql(sql_stmt, nulls, char):
                 _strip_preceding_connector(tokens)
                 group = token["group"]
                 skip_or_after_nullable = False
+                idx += 1
                 continue
 
         if group is not None:
+            idx += 1
             continue
 
         if skip_or_after_nullable:
             value = token.get("value", "")
             if _is_whitespace_sql_fragment(value):
+                idx += 1
                 continue
             if token["type"] == "word" and value.strip().lower() == "or":
                 # Stay in skip mode to also drop whitespace after "or".
+                idx += 1
                 continue
             skip_or_after_nullable = False
+
+        if token["type"] == "sort":
+            expr = sort_map.get(token["param"])
+            if expr is None:
+                # Should have been elided with ORDER BY; skip stray sort.
+                idx += 1
+                continue
+            tokens.append(expr)
+            idx += 1
+            continue
+
+        if token["type"] == "dir":
+            tokens.append(dir_map.get(token["param"], "ASC"))
+            idx += 1
+            continue
 
         if token["type"] == "parameter":
             if token.get("nullable"):
                 # Param is known non-null: drop "{{p}} is null or", keep the predicate.
                 skip_or_after_nullable = True
+                idx += 1
                 continue
             tokens.append(char)
             parameters.append(parameters_meta[token["name"]])
         else:
-            tokens.append(token["value"])
+            tokens.append(token.get("value", ""))
+
+        idx += 1
 
     tokens = _cleanup_compiled_sql(tokens)
     return {"content": "".join(tokens), "parameters": parameters}

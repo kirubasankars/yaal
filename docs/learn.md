@@ -2,7 +2,7 @@
 
 Yaal is a **subtractive SQL ORM**: you write SQL + YAML descriptors; Yaal binds parameters, removes unused `optional(...)` filters, runs queries (optionally across databases), and shapes flat rows into **nested JSON**.
 
-This guide walks the shared fixtures under [`tests/fixtures/api/`](../tests/fixtures/api/). Seed data: [`docker/sqlite/schema.sql`](../docker/sqlite/schema.sql).
+This guide walks the shared fixtures under [`tests/fixtures/api/`](../tests/fixtures/api/). Seed data: [`docker/sqlite/schema.sql`](../docker/sqlite/schema.sql). Examples are **read-only** (no inserts/updates).
 
 | Step | You learn | Fixture / command |
 |---|---|---|
@@ -12,12 +12,11 @@ This guide walks the shared fixtures under [`tests/fixtures/api/`](../tests/fixt
 | 3 | Subtractive filters | `user/list` + `explain` |
 | 4 | Output shaping | `mapped` / `partition_by` / `parent_rows` |
 | 5 | Child SQL nesting | `user/nested` |
-| 6 | Multi-twig writes | `user/create` |
-| 7 | `$mode` + pagination | `user/page` |
-| 8 | Real SQL (`WITH` / agg) | `report/summary` |
-| 9 | Multi-database | `user/combine` |
-| 10 | Your own API + sandbox | `experiment/` |
-| 11 | Precompile + dual runtime | CLI / C# |
+| 6 | `$mode` + pagination | `user/page` |
+| 7 | Real SQL (`WITH` / agg) | `report/summary` |
+| 8 | Multi-database | `user/combine` |
+| 9 | Your own API + sandbox | `experiment/` |
+| 10 | Precompile + dual runtime | CLI / C# |
 
 Deep dives: [examples.md](examples.md) · [descriptors.md](descriptors.md).
 
@@ -108,15 +107,22 @@ yaal query user/list --arg active=1
 In [`user/list/$.sql`](../tests/fixtures/api/user/list/$.sql):
 
 ```sql
+--($args.active integer, $args.sort string = id, $args.dir string = asc)--
+...
 and optional(u.active = {{$args.active}})
+order by
+  sort({{$args.sort}}, name = u.user_name, id = u.user_id)
+  dir({{$args.dir}})
 ```
 
 | Call | What happens |
 |---|---|
-| no `active` | clause removed; binds `[]` |
+| no `active` | filter clause removed; binds `[]` |
 | `active=1` | `and (u.active = ?)` with bind `[1]` |
+| no `sort` / `dir` | header defaults → `ORDER BY u.user_id ASC` |
+| `sort=name` / `dir=desc` | splices `u.user_name DESC` (allowlisted only) |
 
-That is the core of “subtractive.” Details: [examples — Optional list](examples.md#optional-list--userlist).
+That is the core of “subtractive.” Details: [examples — Optional list](examples.md#optional-list--userlist) and [descriptors — Dynamic ORDER BY](descriptors.md#dynamic-order-by--sortdir).
 
 ---
 
@@ -156,27 +162,7 @@ Parent and child must both return the join key (`user_id`). Walkthrough: [exampl
 
 ---
 
-## Step 6 — Multi-twig write
-
-**Goal:** several statements in one file, then shaped SELECT.
-
-```bash
-yaal query user/create --payload '{"id":3,"name":"newbie"}'
-```
-
-[`user/create/$.sql`](../tests/fixtures/api/user/create/$.sql) splits with `--sql--`:
-
-1. `INSERT` user  
-2. `INSERT` role link  
-3. `SELECT` shaped like get  
-
-Payload fields come from bare names in the header (`--(id! integer, name! string)--`); `!` means required. Soft validation errors return `{"errors":[...]}` (not raised).
-
-Walkthrough: [examples — Multi-twig write](examples.md#multi-twig-write--usercreate).
-
----
-
-## Step 7 — `$mode` and pagination
+## Step 6 — `$mode` and pagination
 
 **Goal:** `{ paging, data }` for a list API.
 
@@ -195,7 +181,7 @@ Pagination walkthrough: [examples — Paginated nest](examples.md#paginated-nest
 
 ---
 
-## Step 8 — Real SQL: `WITH` and aggregations
+## Step 7 — Real SQL: `WITH` and aggregations
 
 **Goal:** CTEs and aggregates stay ordinary SQL.
 
@@ -209,7 +195,7 @@ Walkthrough: [examples — Real SQL](examples.md#real-sql--reportsummary).
 
 ---
 
-## Step 9 — Multi-database
+## Step 8 — Multi-database
 
 **Goal:** one operation, two named providers.
 
@@ -229,14 +215,15 @@ Walkthrough: [examples — Multi-database](examples.md#multi-database--usercombi
 
 ---
 
-## Step 10 — Build your own (experiment sandbox)
+## Step 9 — Build your own (experiment sandbox)
 
 ```bash
 make experiment-init
 make experiment
 make experiment ARGS='query user/page --arg page=1 --arg page_size=10'
 # edit experiment/api/... then re-run
-make experiment-reset    # reseed DB, keep API edits
+make experiment-reset    # reseed SQLite, keep API edits
+make experiment-clickhouse   # same API against Compose ClickHouse
 make experiment-clean
 ```
 
@@ -252,7 +239,7 @@ More: [examples — Your own API tree](examples.md#your-own-api-tree) · [exampl
 
 ---
 
-## Step 11 — Precompile and dual runtime
+## Step 10 — Precompile and dual runtime
 
 **Precompile** (no DB required for compile; elision still runs per request):
 

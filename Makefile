@@ -9,9 +9,12 @@ EXP_DB := $(EXP_DIR)/yaal.db
 EXP_DB_URL = sqlite3:///$(abspath $(EXP_DB))
 EXP_SCHEMA := docker/sqlite/schema.sql
 EXP_FIXTURE_API := tests/fixtures/api
+EXP_CH_URL ?= clickhouse://yaal:yaal@127.0.0.1:9000/yaal
+EXP_CH_SEED := docker/clickhouse/experiment_seed.sql
 
 .PHONY: help venv install test test-unit test-integration test-all example yaal \
 	experiment experiment-init experiment-reset experiment-clean \
+	experiment-clickhouse experiment-clickhouse-init experiment-clickhouse-reset \
 	integration-up integration-down integration-ps clean \
 	test-csharp test-csharp-integration example-csharp
 
@@ -27,7 +30,10 @@ help:
 	@echo "  make experiment         FS+SQLite sandbox (init if needed); ARGS defaults to query user/get"
 	@echo "  make experiment-init    Create $(EXP_DIR)/api + seed $(EXP_DB)"
 	@echo "  make experiment-reset   Reseed $(EXP_DB) only (keep API edits)"
-	@echo "  make experiment-clean   Remove $(EXP_DIR)/"
+	@echo "  make experiment-clickhouse  Same API sandbox against Compose ClickHouse"
+	@echo "  make experiment-clickhouse-init   Ensure API copy + start/seed ClickHouse"
+	@echo "  make experiment-clickhouse-reset  Truncate+reseed ClickHouse (keep API edits)"
+	@echo "  make experiment-clean   Remove $(EXP_DIR)/ (does not stop Compose DBs)"
 	@echo "  make test-csharp        Run .NET tests in sdk container (SQLite / unit)"
 	@echo "  make test-csharp-integration  Compose DBs + .NET tests in sdk container"
 	@echo "  make integration-up     Start Postgres/MySQL/ClickHouse (docker compose)"
@@ -90,6 +96,32 @@ experiment-clean:
 experiment:
 	@if [ ! -d "$(EXP_API)" ] || [ ! -f "$(EXP_DB)" ]; then $(MAKE) experiment-init; fi
 	$(PY) -m yaal_cli --api $(EXP_API) --db '$(EXP_DB_URL)' --debug $(if $(ARGS),$(ARGS),query user/get --arg id=1)
+
+# Same editable $(EXP_API) tree against Docker Compose ClickHouse (native port 9000).
+define seed_experiment_clickhouse
+	$(COMPOSE) up -d --wait clickhouse
+	$(COMPOSE) exec -T clickhouse clickhouse-client --user yaal --password yaal --multiquery < $(EXP_CH_SEED)
+endef
+
+define ensure_experiment_api
+	@if [ ! -d "$(EXP_API)" ]; then \
+		mkdir -p $(EXP_DIR); \
+		rm -rf $(EXP_API); \
+		cp -R $(EXP_FIXTURE_API) $(EXP_API); \
+	fi
+endef
+
+experiment-clickhouse-init:
+	$(ensure_experiment_api)
+	$(seed_experiment_clickhouse)
+
+experiment-clickhouse-reset:
+	@test -d "$(EXP_API)" || (echo "missing $(EXP_API); run make experiment-clickhouse-init first" && exit 1)
+	$(seed_experiment_clickhouse)
+
+experiment-clickhouse:
+	@if [ ! -d "$(EXP_API)" ]; then $(MAKE) experiment-clickhouse-init; else $(COMPOSE) up -d --wait clickhouse; fi
+	$(PY) -m yaal_cli --api $(EXP_API) --db '$(EXP_CH_URL)' --debug $(if $(ARGS),$(ARGS),query user/get --arg id=1)
 
 # .NET tests always run in mcr.microsoft.com/dotnet/sdk:8.0 (no local SDK needed).
 test-csharp:
