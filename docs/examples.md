@@ -221,7 +221,7 @@ y.Query("user/nested", args: new { id = 1 });
 
 ## Optional list — `user/list`
 
-Root `type: array`. Omit `active` to return everyone; pass it to filter. Optional `sort` / `dir` use allowlisted `sort()` / `dir()` sugar (see [descriptors](descriptors.md#dynamic-order-by--sortdir)).
+Root `type: array`. Omit `active` to return everyone; pass it to filter. Optional `sort` / `dir` use allowlisted `sort()` / `dir()` sugar (see [descriptors](descriptors.md#dynamic-order-by--sort--dir)).
 
 ### Descriptor
 

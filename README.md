@@ -37,7 +37,7 @@ yaal explain user/list --arg active=1
 
 ### Dynamic ORDER BY
 
-Allowlisted `sort()` / `dir()` splice author expressions only — never client SQL. Null `sort` elides `ORDER BY` unless the header sets a default (`string = id`). Supports multi-column sort (`sort=name,id` + `dir=desc,asc`), `NULLS FIRST/LAST` (`dir=desc_nulls_last`), and mixing with a static tiebreaker column. [Details →](docs/descriptors.md#dynamic-order-by--sortdir)
+Allowlisted `sort()` / `dir()` splice author expressions only — never client SQL. Null `sort` elides `ORDER BY` unless the header sets a default (`string = id`). Supports multi-column sort (`sort=name,id` + `dir=desc,asc`), `NULLS FIRST/LAST` (`dir=desc_nulls_last`), and mixing with a static tiebreaker column. [Details →](docs/descriptors.md#dynamic-order-by--sort--dir)
 
 ```sql
 --($args.sort string = id, $args.dir string = asc)--
@@ -218,17 +218,14 @@ for twig in y.explain_sql("user/get", args={"id": 1}):
     print(twig["sql"], twig["parameters"])
 ```
 
-## Docs and examples
+## Documentation
 
-| Resource | Purpose |
-|---|---|
-| [`docs/learn.md`](docs/learn.md) | Step-by-step learning guide |
-| [`docs/examples.md`](docs/examples.md) | End-to-end walkthroughs (SQL, YAML, sample JSON, CLI/Python/C#) |
-| [`docs/descriptors.md`](docs/descriptors.md) | Trunk/branch/twig reference, shaping, `$mode`, precompile, errors |
-| [`docs/README.md`](docs/README.md) | Docs index |
-| [`examples/demo.py`](examples/demo.py) | Runnable Python tour (`make example`) |
-| [`csharp/examples/Yaal.Example`](csharp/examples/Yaal.Example/) | Runnable .NET tour (`make example-csharp`) |
-| [`tests/fixtures/api/`](tests/fixtures/api/) | Shared descriptors: get, nested, list, page, summary, combine |
+Operations are folders of `*.sql` (+ `$.output.yaml`), discovered filesystem-first and called by path (`y.query("user/get", ...)`). Full reference (parameters, output shaping, multi-twig / `$mode`, pagination, precompile, database URLs, errors, public API) lives in [`docs/descriptors.md`](docs/descriptors.md) — not duplicated here.
+
+- [`docs/learn.md`](docs/learn.md) — step-by-step learning guide
+- [`docs/examples.md`](docs/examples.md) — end-to-end walkthroughs (SQL, YAML, sample JSON, CLI/Python/C#)
+- [`docs/descriptors.md`](docs/descriptors.md) — the full reference above
+- [`docs/README.md`](docs/README.md) — full docs index (also covers the .NET port and runnable demos)
 
 ## Make targets
 
@@ -248,179 +245,6 @@ for twig in y.explain_sql("user/get", args={"id": 1}):
 | `make integration-up` / `integration-down` | Manage compose DBs |
 
 SQLite-only usage does **not** need Docker. Compose is only for Postgres/MySQL/ClickHouse integration tests.
-
-## Descriptor layout
-
-SQL discovery is **filesystem-first**: list `*.sql` in the operation folder (at least one required). `$.sql` is the trunk when present but is not required — sibling files like `$.paging.sql` work alone. `$.output.yaml` shapes each branch (and can open `parent_rows` slots without a child SQL file). Nested child SQL is `$.{property}.sql` for property `property`. Details: [`docs/descriptors.md`](docs/descriptors.md#how-sql-files-and-outputyaml-relate).
-
-```text
-api/
-  user/
-    get/                 # operation folder (name is yours; not an HTTP verb)
-      $.sql              # trunk query (may contain --sql-- twigs)
-      $.output.yaml      # output shape (mapped / partition_by)
-    nested/
-      $.sql              # parent rows
-      $.roles.sql        # child SQL → output property "roles"
-      $.output.yaml
-    page/                # sibling branches (no trunk $.sql)
-      $.paging.sql
-      $.data.sql
-      $.output.yaml
-    combine/             # multi-DB sibling branches
-      $.app.sql          # connection "db"
-      $.flags.sql        # --sql(flags)--
-      $.output.yaml
-  report/
-    summary/             # WITH + aggregations
-      $.sql
-      $.output.yaml
-```
-
-Call by descriptor path: `y.query("user/get", args={"id": 1})`.
-
-### Parameters
-
-Declare types at the top of the SQL file (the sole input model), then bind with `{{...}}`. Use `$args` for operation keys and bare names for payload fields. Trailing `!` marks required:
-
-```sql
---($args.id integer)--
-
-select *
-from users u
-where 1 = 1
-  and optional(u.user_id = {{$args.id}})
-```
-
-```sql
---(id! integer, name! string)--
-```
-
-When a parameter is null, Yaal **subtracts** the optional group (that is the subtractive core). Long form still works:
-
-```sql
-({{param}} is null or col = {{param}})
-```
-
-including a preceding `AND`/`OR`. If that group is the only predicate, it becomes `1 = 1`.
-
-Shorter sugar (param once):
-
-```sql
-optional(col = {{param}})
-```
-
-### Output shaping
-
-```yaml
-type: object
-partition_by: user_id
-properties:
-  id:
-    mapped: user_id
-  name:
-    mapped: user_name
-  roles:
-    type: array
-    partition_by: role_id
-    parent_rows: true
-    properties:
-      id:
-        mapped: role_id
-      name:
-        mapped: role_name
-```
-
-- `mapped` — column → JSON field  
-- `partition_by` — collapse join fan-out into nested objects/arrays  
-- `parent_rows: true` — nest from parent rows without a child SQL file (output object/array slot only)  
-- Child SQL file (`$.roles.sql`) — file suffix must match the `roles` property; that property’s schema shapes the child; see [`user/nested`](tests/fixtures/api/user/nested/)
-
-### Multi-query and data passing
-
-Split one SQL file into ordered twigs with `--sql--` (or `--sql(name)--` for another connection). Args/payload binds are shared across twigs. Cross-twig values also flow through the `$params` bag.
-
-```sql
---($args.page integer, $args.page_size integer, $params.total_count integer)--
-
-SELECT
-    'params' AS "$mode",
-    COUNT(*) AS total_count
-FROM users
-WHERE active = 1
-
---sql--
-
-SELECT
-    {{$args.page}} AS page,
-    {{$args.page_size}} AS page_size,
-    {{$params.total_count}} AS total_count
-```
-
-- `$mode=params` — a result row with `'$mode' = 'params'` copies its columns onto `$params` for later twigs (e.g. `total_count` in pagination)
-- `$params.$last_inserted_id` — set after each twig (engine-specific)
-- `$run_id` — also on `$params`
-- Other `$mode` values: `error` (soft `{"errors":[...]}`), `break` (early rows), `json` (engine JSON) — full reference: [`docs/descriptors.md`](docs/descriptors.md#mode-rows)
-
-Try: `yaal query user/page --arg page=1 --arg page_size=10`. Full walkthrough: [`docs/examples.md`](docs/examples.md#paginated-nest--userpage).
-
-### Pagination (API list + meta)
-
-For paginated APIs, use **sibling branches** (no trunk `$.sql`). File suffixes become JSON properties:
-
-```text
-user/page/
-  $.paging.sql    # COUNT → $params via $mode=params, then page/page_size/total_count
-  $.data.sql      # LIMIT/OFFSET parents, then join children
-  $.output.yaml   # { paging: {...}, data: [ { id, name, roles: [...] } ] }
-```
-
-1. **`$.paging.sql`** — first twig runs `COUNT(*)` with `'$mode' = 'params'` so `total_count` lands in `$params`; second twig returns `page`, `page_size`, and `total_count` for the `paging` object.
-2. **`$.data.sql`** — apply `LIMIT`/`OFFSET` to the **parent** entity in a subquery, then join children. If you limit the join instead, page size truncates join rows and nests incomplete children.
-3. **Shape** — `data` is an array with `partition_by` + nested roles (`parent_rows` or child SQL).
-
-This is the same multi-query + `$params` pattern as above, split across sibling branch files.
-
-```bash
-yaal query user/page --arg page=1 --arg page_size=10
-```
-
-Sample shape:
-
-```json
-{
-  "paging": { "page": 1, "page_size": 10, "total_count": 2 },
-  "data": [
-    { "id": 1, "name": "admin", "roles": [{ "id": 1, "name": "Administrator" }] }
-  ]
-}
-```
-
-Full SQL/YAML: [`user/page`](tests/fixtures/api/user/page/) · [`docs/examples.md`](docs/examples.md).
-
-## Database URLs
-
-| Engine | Example |
-|---|---|
-| SQLite (absolute) | `sqlite3:////tmp/app.db` |
-| SQLite (relative) | `sqlite3://./rel/path.db` |
-| SQLite (memory) | `sqlite3:///` |
-| Postgres | `postgresql://user:pass@127.0.0.1:5432/yaal` |
-| MySQL | `mysql://user:pass@127.0.0.1:3306/yaal` |
-| ClickHouse | `clickhouse://user:pass@127.0.0.1:9000/yaal` |
-
-Register one or more named providers. The default twig connection is `"db"`; use `--sql(analytics)--` (etc.) to run a twig on another name and combine results in one operation / shape:
-
-```python
-y.setup_data_provider("db", "sqlite3:////tmp/app.db")
-y.setup_data_provider("analytics", "postgresql://user:pass@127.0.0.1:5432/yaal")
-```
-
-See twigs / named connections in [`docs/descriptors.md`](docs/descriptors.md).
-
-### Input validation
-
-Args/payload schemas are **derived** from SQL parameter headers. Soft validation uses JSON Schema Draft-4 (Python) / 2020-12 (C#) on that derived model. Invalid args/payload return `{"errors": [...]}`; missing descriptors and bad URLs raise typed exceptions. See [`docs/descriptors.md`](docs/descriptors.md).
 
 ## Tests
 

@@ -1,12 +1,13 @@
 # Yaal documentation
 
-Yaal turns SQL + YAML descriptors into nested JSON. These docs use the shared fixtures under [`tests/fixtures/api/`](../tests/fixtures/api/) and the seed schema in [`docker/sqlite/schema.sql`](../docker/sqlite/schema.sql).
+Yaal turns SQL + YAML descriptors into nested JSON. These docs use the shared fixtures under [`tests/fixtures/api/`](../tests/fixtures/api/) and the seed schema in [`docker/sqlite/schema.sql`](../docker/sqlite/schema.sql). Project overview / install: [`../README.md`](../README.md).
 
 | Doc | Purpose |
 |---|---|
 | [learn.md](learn.md) | Step-by-step learning path (install → fixtures → your own API) |
 | [examples.md](examples.md) | End-to-end examples: files, commands, sample JSON |
-| [descriptors.md](descriptors.md) | Reference: trunk/branch/twig, shaping, [`$mode`](descriptors.md#mode-rows), errors |
+| [descriptors.md](descriptors.md) | Reference: trunk/branch/twig, parameters, shaping, [`$mode`](descriptors.md#mode-rows), precompile, database URLs, errors, public API |
+| [`../csharp/README.md`](../csharp/README.md) | .NET 8 port — same descriptors, Docker-based test/example tooling |
 
 ## Try it
 

@@ -122,7 +122,7 @@ order by
 | no `sort` / `dir` | header defaults → `ORDER BY u.user_id ASC` |
 | `sort=name` / `dir=desc` | splices `u.user_name DESC` (allowlisted only) |
 
-That is the core of “subtractive.” Details: [examples — Optional list](examples.md#optional-list--userlist) and [descriptors — Dynamic ORDER BY](descriptors.md#dynamic-order-by--sortdir).
+That is the core of “subtractive.” Details: [examples — Optional list](examples.md#optional-list--userlist) and [descriptors — Dynamic ORDER BY](descriptors.md#dynamic-order-by--sort--dir).
 
 ---
 
