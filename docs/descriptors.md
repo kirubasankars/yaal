@@ -84,7 +84,7 @@ Plain SQL `--` line comments are allowed in query text. Yaal directives are only
 |---|---|
 | `$args.*` | `query(..., args=...)` |
 | bare name | `query(..., payload=...)` |
-| `$params.*` | Run bag: `$run_id`, `$last_inserted_id`, `$action=params` values |
+| `$params.*` | Run bag: `$run_id`, `$last_inserted_id`, `$mode=params` values |
 | `$parent.*` | Parent branch payload |
 
 ### Optional filters
@@ -184,27 +184,77 @@ Branch map seed = **SQL files on disk** + **object/array properties in `$.output
 
 When using `LIMIT`/`OFFSET` with join fan-out + `parent_rows`, page the parent entity in a subquery first — otherwise the limit truncates join rows and nests incomplete children.
 
-## `$action` rows
+## `$mode` rows
 
-If a result row includes `$action`, Yaal treats it specially:
+`$mode` is an optional **result-column control key**. When the first row of a twig includes `$mode`, Yaal does not treat that result as ordinary data for output shaping. It reads the mode value and steers the twig/branch:
 
-| `$action` | Effect |
+| `$mode` | Effect |
 |---|---|
-| `params` | Copy columns onto `$params`; continue |
-| `error` | Stop; return `{"errors": [...]}` |
-| `break` | Return these rows (minus `$action`) as the branch result |
-| `json` | Parse/return the `json` column as the branch result |
+| `params` | Copy the row’s columns onto `$params` for later twigs; continue the twig list |
+| `error` | Stop; return soft `{"errors": [...]}` (same shape as invalid args/payload) |
+| `break` | Return these rows as the branch result immediately (column `$mode` stripped) |
+| `json` | Treat the `json` column as the branch result (string → parse; otherwise pass through) |
+
+Ordinary SELECT twigs omit `$mode` entirely — rows go through normal `$.output.yaml` shaping.
+
+Use `$mode` for **in-SQL orchestration** across multi-twig files (stash values, soft business errors, early exit, engine JSON) without a second orchestration language in the host.
+
+### `params` — stash for later twigs
+
+Copies every column from the mode row onto `$params` (including `$mode` itself). Later twigs bind with `{{$params.*}}`. Fixture: [`user/page`](../tests/fixtures/api/user/page/) · [examples](examples.md#paginated-nest--userpage).
 
 ```sql
-SELECT 'params' AS "$action", COUNT(*) AS total_count FROM users
+--($args.page integer, $args.page_size integer, $params.total_count integer)--
+
+SELECT
+    'params' AS "$mode",
+    COUNT(*) AS total_count
+FROM users
+WHERE active = 1
+
+--sql--
+
+SELECT
+    {{$args.page}} AS page,
+    {{$args.page_size}} AS page_size,
+    {{$params.total_count}} AS total_count
 ```
+
+### `error` — soft business errors from SQL
+
+Stops the branch and returns `{"errors": [ ...rows... ]}`. Not raised as an exception. Useful for checks that belong next to the SQL (range validation, precondition failures).
 
 ```sql
 SELECT
-    'error' AS "$action",
+    'error' AS "$mode",
     1 AS code,
     'page out of range' AS message
 WHERE {{$args.page}} < 1 OR {{$args.page}} > {{$params.total_pages}}
+```
+
+### `break` — early branch result
+
+Returns the twig’s rows as the branch result and skips remaining twigs / normal shaping for that branch. `$mode` is removed from each row before return.
+
+```sql
+SELECT
+    'break' AS "$mode",
+    u.user_id AS id,
+    u.user_name AS name
+FROM users u
+WHERE u.user_id = {{$args.id}}
+```
+
+### `json` — engine-produced JSON
+
+Uses the `json` column as the branch result. If the value is a string, it is parsed as JSON; otherwise it is passed through. Handy when the database already builds JSON (e.g. `json_group_array` / `jsonb_agg`). Bypasses `$.output.yaml` shaping for that branch.
+
+```sql
+SELECT
+    'json' AS "$mode",
+    json_group_array(json_object('id', user_id, 'name', user_name)) AS json
+FROM users
+WHERE active = 1
 ```
 
 ## `output_mapper`
@@ -252,7 +302,7 @@ y.query("user/get", args={"id": 1})
 | `PathEscapeError` | Path escapes API root |
 | `YaalError` | Base class |
 
-**Soft** (not raised): invalid args/payload → `{"errors": [{"message": "..."}]}`. Also used for `$action=error`. Check for an `errors` key.
+**Soft** (not raised): invalid args/payload → `{"errors": [{"message": "..."}]}`. Also used for `$mode=error`. Check for an `errors` key.
 
 ## Input validation
 

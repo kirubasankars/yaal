@@ -17,5 +17,5 @@ public static class YaalConst
     public const string Parent = "$parent";
     public const string Json = "$json";
     public const string Index = "$index";
-    public const string Action = "$action";
+    public const string Mode = "$mode";
 }

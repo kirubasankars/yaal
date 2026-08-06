@@ -8,6 +8,7 @@ import json
 
 from collections import defaultdict
 
+from yaal_const import MODE
 from yaal_parser import compile_sql
 
 
@@ -80,7 +81,7 @@ def _execute_twigs(branch, data_providers, context, data_provider_helper):
     errors = []
 
     twigs = branch.get("twigs")
-    action_str = "$action"
+    mode_str = MODE
     params_str, error_str, break_str = "params", "error", "break"
     json_str = "json"
 
@@ -95,12 +96,12 @@ def _execute_twigs(branch, data_providers, context, data_provider_helper):
 
             if len(output) >= 1:
                 output0 = output[0]
-                if action_str in output0:
-                    action_value = output0[action_str]
-                    if action_value == error_str:
+                if mode_str in output0:
+                    mode_value = output0[mode_str]
+                    if mode_value == error_str:
                         errors.extend(output)
                         return None, errors
-                    elif action_value == json_str:
+                    elif mode_value == json_str:
                         json_list = []
                         if type(output0[json_str]) == str:
                             for o in output:
@@ -109,11 +110,11 @@ def _execute_twigs(branch, data_providers, context, data_provider_helper):
                             json_list.extend([o[json_str] for o in output])
                         return json_list, None
 
-                    elif action_value == break_str:
+                    elif mode_value == break_str:
                         for o in output:
-                            del o[action_str]
+                            del o[mode_str]
                         return output, None
-                    elif action_value == params_str:
+                    elif mode_value == params_str:
                         params = context.get_prop("$params")
                         for k, v in output0.items():
                             params.set_prop(k, v)

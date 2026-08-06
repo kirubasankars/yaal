@@ -41,7 +41,7 @@ public class BugfixTests
     }
 
     [Fact]
-    public void Action_error_cleans_up_connection()
+    public void Mode_error_cleans_up_connection()
     {
         var leak = new LeakProvider();
         var descriptor = new Branch
@@ -111,7 +111,7 @@ public class BugfixTests
             Twig twig, Shape inputShape, DataProviderHelper helper) =>
             (new List<IDictionary<string, object?>>
             {
-                new Dictionary<string, object?> { ["$action"] = "error", ["message"] = "boom" },
+                new Dictionary<string, object?> { ["$mode"] = "error", ["message"] = "boom" },
             }, null);
     }
 

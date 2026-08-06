@@ -60,7 +60,7 @@ roles:
 
 ### Multi-query + data passing
 
-`--sql--` twigs share binds; `$action=params` / `$params` / `$last_inserted_id` pass data between them. [Full example →](docs/examples.md#multi-twig-write--usercreate)
+`--sql--` twigs share binds; `$mode=params` / `$params` / `$last_inserted_id` pass data between them. [Full example →](docs/examples.md#multi-twig-write--usercreate)
 
 ```sql
 INSERT INTO users (...) VALUES ({{id}}, {{name}}, 1)
@@ -76,7 +76,7 @@ yaal query user/create --payload '{"id":3,"name":"newbie"}'
 
 ### API pagination
 
-Sibling `$.paging.sql` + `$.data.sql` → `{ paging, data }` via `$action=params`. [Full example →](docs/examples.md#paginated-nest--userpage)
+Sibling `$.paging.sql` + `$.data.sql` → `{ paging, data }` via `$mode=params`. [Full example →](docs/examples.md#paginated-nest--userpage)
 
 ```bash
 yaal query user/page --arg page=1 --arg page_size=10
@@ -204,7 +204,7 @@ for twig in y.explain_sql("user/get", args={"id": 1}):
 | Resource | Purpose |
 |---|---|
 | [`docs/examples.md`](docs/examples.md) | End-to-end walkthroughs (SQL, YAML, sample JSON, CLI/Python/C#) |
-| [`docs/descriptors.md`](docs/descriptors.md) | Trunk/branch/twig reference, shaping, `$action`, precompile, errors |
+| [`docs/descriptors.md`](docs/descriptors.md) | Trunk/branch/twig reference, shaping, `$mode`, precompile, errors |
 | [`docs/README.md`](docs/README.md) | Docs index |
 | [`examples/demo.py`](examples/demo.py) | Runnable Python tour (`make example`) |
 | [`csharp/examples/Yaal.Example`](csharp/examples/Yaal.Example/) | Runnable .NET tour (`make example-csharp`) |
@@ -332,10 +332,10 @@ INSERT INTO user_roles (user_id, role_id) VALUES ({{id}}, 2)
 SELECT ... WHERE u.user_id = {{id}}   -- shaped to nested JSON
 ```
 
-- `$action=params` — a result row with `'$action' = 'params'` copies its columns onto `$params` for later twigs (e.g. `total_count` in pagination)
+- `$mode=params` — a result row with `'$mode' = 'params'` copies its columns onto `$params` for later twigs (e.g. `total_count` in pagination)
 - `$params.$last_inserted_id` — set after each twig (engine-specific); prefer an explicit args/payload id when you need a stable key
 - `$run_id` — also on `$params`
-- Other `$action` values: `error` → soft `{"errors":[...]}`; `break` / `json` for early or custom branch results — see [`docs/descriptors.md`](docs/descriptors.md)
+- Other `$mode` values: `error` (soft `{"errors":[...]}`), `break` (early rows), `json` (engine JSON) — full reference: [`docs/descriptors.md`](docs/descriptors.md#mode-rows)
 
 Try: `yaal query user/create --payload '{"id":3,"name":"newbie"}'`. Full walkthrough: [`docs/examples.md`](docs/examples.md).
 
@@ -345,12 +345,12 @@ For paginated APIs, use **sibling branches** (no trunk `$.sql`). File suffixes b
 
 ```text
 user/page/
-  $.paging.sql    # COUNT → $params via $action=params, then page/page_size/total_count
+  $.paging.sql    # COUNT → $params via $mode=params, then page/page_size/total_count
   $.data.sql      # LIMIT/OFFSET parents, then join children
   $.output.yaml   # { paging: {...}, data: [ { id, name, roles: [...] } ] }
 ```
 
-1. **`$.paging.sql`** — first twig runs `COUNT(*)` with `'$action' = 'params'` so `total_count` lands in `$params`; second twig returns `page`, `page_size`, and `total_count` for the `paging` object.
+1. **`$.paging.sql`** — first twig runs `COUNT(*)` with `'$mode' = 'params'` so `total_count` lands in `$params`; second twig returns `page`, `page_size`, and `total_count` for the `paging` object.
 2. **`$.data.sql`** — apply `LIMIT`/`OFFSET` to the **parent** entity in a subquery, then join children. If you limit the join instead, page size truncates join rows and nests incomplete children.
 3. **Shape** — `data` is an array with `partition_by` + nested roles (`parent_rows` or child SQL).
 

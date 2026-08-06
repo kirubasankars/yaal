@@ -1,7 +1,7 @@
 --($args.page integer, $args.page_size integer, $params.total_count integer)--
 
 SELECT
-    'params' AS "$action",
+    'params' AS "$mode",
     COUNT(*) AS total_count
 FROM users
 WHERE active = 1

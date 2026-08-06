@@ -79,16 +79,16 @@ public static class Executor
             if (output.Count >= 1)
             {
                 var output0 = output[0];
-                if (output0.ContainsKey(YaalConst.Action))
+                if (output0.ContainsKey(YaalConst.Mode))
                 {
-                    var actionValue = output0[YaalConst.Action]?.ToString();
-                    if (actionValue == "error")
+                    var modeValue = output0[YaalConst.Mode]?.ToString();
+                    if (modeValue == "error")
                     {
                         errors.AddRange(output);
                         return (null, errors.Cast<IDictionary<string, object?>>().ToList());
                     }
 
-                    if (actionValue == "json")
+                    if (modeValue == "json")
                     {
                         var jsonList = new List<object?>();
                         if (output0["json"] is string)
@@ -106,14 +106,14 @@ public static class Executor
                             new Dictionary<string, object?>()).ToList(), null);
                     }
 
-                    if (actionValue == "break")
+                    if (modeValue == "break")
                     {
                         foreach (var o in output)
-                            o.Remove(YaalConst.Action);
+                            o.Remove(YaalConst.Mode);
                         return (output.ToList(), null);
                     }
 
-                    if (actionValue == "params")
+                    if (modeValue == "params")
                     {
                         var paramsShape = (Shape)context.GetProp("$params")!;
                         foreach (var (k, v) in output0)

@@ -15,8 +15,9 @@ make yaal ARGS='list'
 | JSON out / nested shape | [Nested get](#nested-get--userget) | `user/get` |
 | Output shaping (child SQL) | [Nested child SQL](#nested-child-sql--usernested) | `user/nested` |
 | Subtractive filters | [Optional list](#optional-list--userlist) | `user/list` |
-| API pagination | [Paginated nest](#paginated-nest--userpage) | `user/page` |
+| API pagination / `$mode=params` | [Paginated nest](#paginated-nest--userpage) | `user/page` |
 | Multi-query + data passing | [Multi-twig write](#multi-twig-write--usercreate) | `user/create` |
+| `$mode` (`params` / `error` / `break` / `json`) | [descriptors — `$mode` rows](descriptors.md#mode-rows) | `user/page` (+ unit tests) |
 | Real SQL (`WITH` / agg) | [Report summary](#real-sql--reportsummary) | `report/summary` |
 | Multi-database | [Multi-database](#multi-database--usercombine) | `user/combine` |
 | Ahead-of-time compile | [Precompiled descriptors](#precompiled-descriptors) | *(any)* |
@@ -312,13 +313,13 @@ user/page/
   $.output.yaml
 ```
 
-**`$.paging.sql`** — `$action=params` stores `total_count`, then returns paging fields:
+**`$.paging.sql`** — `$mode=params` stores `total_count` on `$params`, then returns paging fields (see [descriptors — `$mode`](descriptors.md#mode-rows)):
 
 ```sql
 --($args.page integer, $args.page_size integer, $params.total_count integer)--
 
 SELECT
-    'params' AS "$action",
+    'params' AS "$mode",
     COUNT(*) AS total_count
 FROM users
 WHERE active = 1

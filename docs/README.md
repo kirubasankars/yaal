@@ -5,7 +5,7 @@ Yaal turns SQL + YAML descriptors into nested JSON. These docs use the shared fi
 | Doc | Purpose |
 |---|---|
 | [examples.md](examples.md) | End-to-end examples: files, commands, sample JSON |
-| [descriptors.md](descriptors.md) | Reference: trunk/branch/twig, shaping, `$action`, errors |
+| [descriptors.md](descriptors.md) | Reference: trunk/branch/twig, shaping, [`$mode`](descriptors.md#mode-rows), errors |
 
 ## Try it
 
@@ -29,7 +29,7 @@ Fixture operations:
 | `user/get` | Nested object + `parent_rows` (one join SQL) |
 | `user/nested` | Nested child SQL file (`$.roles.sql`) + `partition_by` |
 | `user/list` | Root array + `optional()` filter |
-| `user/page` | Sibling branches + `$action=params` |
+| `user/page` | Sibling branches + `$mode=params` |
 | `user/create` | Multi-twig INSERT → SELECT |
 | `report/summary` | `WITH` + aggregations → JSON |
 | `user/combine` | Multi-database (`--sql(flags)--`) |

@@ -58,7 +58,7 @@ class TestBugfixes(unittest.TestCase):
         shape.set_prop("b", "true")
         self.assertIs(shape.get_prop("b"), True)
 
-    def test_action_error_cleans_up_connection(self):
+    def test_mode_error_cleans_up_connection(self):
         class Leak:
             def __init__(self):
                 self.begun = self.ended = self.errored = False
@@ -73,7 +73,7 @@ class TestBugfixes(unittest.TestCase):
                 self.errored = True
 
             def execute(self, twig, ctx, helper):
-                return [{"$action": "error", "message": "boom"}], None
+                return [{"$mode": "error", "message": "boom"}], None
 
         descriptor = {
             "path": "p",
