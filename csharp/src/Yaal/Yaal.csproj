@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <PackageId>Yaal</PackageId>
     <Title>Yaal</Title>
-    <Version>0.2.0</Version>
+    <Version>0.4.0</Version>
     <Authors>Kiruba Sankar Swaminathan</Authors>
     <Copyright>Copyright (c) 2026 Kiruba Sankar Swaminathan</Copyright>
     <Description>SQL→JSON library: descriptor-driven queries with nested output shaping.</Description>

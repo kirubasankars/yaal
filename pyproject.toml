@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "yaal"
-version = "0.2.0"
+version = "0.4.0"
 description = "SQL→JSON framework: descriptor-driven queries with nested output shaping"
 readme = "README.md"
 license = { file = "LICENSE" }
