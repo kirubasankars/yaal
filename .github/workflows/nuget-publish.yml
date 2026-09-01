@@ -1,0 +1,58 @@
+name: NuGet
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: prod
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Validate version matches project
+        run: |
+          PROJECT_VERSION=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' csharp/src/Yaal/Yaal.csproj)
+          if [ "$PROJECT_VERSION" != "${{ steps.version.outputs.VERSION }}" ]; then
+            echo "::error::Tag version (${{ steps.version.outputs.VERSION }}) does not match project version ($PROJECT_VERSION)"
+            exit 1
+          fi
+
+      - name: Restore
+        working-directory: csharp
+        run: dotnet restore Yaal.sln
+
+      - name: Unit tests
+        working-directory: csharp
+        # IntegrationTests Skip when YAAL_INTEGRATION is unset (Xunit.SkippableFact).
+        run: dotnet test Yaal.sln --no-restore
+
+      - name: Pack
+        working-directory: csharp
+        run: dotnet pack src/Yaal/Yaal.csproj -c Release -o ../artifacts
+
+      - name: NuGet login (OIDC)
+        id: login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      - name: Push to NuGet
+        run: >
+          dotnet nuget push ./artifacts/*.nupkg
+          --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate

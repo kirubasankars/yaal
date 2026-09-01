@@ -12,8 +12,13 @@
     <PackageProjectUrl>https://github.com/kirubasankars/yaal</PackageProjectUrl>
     <RepositoryUrl>https://github.com/kirubasankars/yaal</RepositoryUrl>
     <PackageTags>sql;json;database;yaml;descriptors</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <IsPackable>true</IsPackable>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="README.md" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="ClickHouse.Client" Version="7.14.0" />
