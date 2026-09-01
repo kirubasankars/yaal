@@ -270,7 +270,7 @@ Library, tests, and demo live under [`python/`](python/). See [`python/README.md
 
 ## C# (.NET 8)
 
-A full-parity .NET port lives under [`csharp/`](csharp/). See [`csharp/README.md`](csharp/README.md). Tests run in a .NET SDK container (no local `dotnet` required):
+A full-parity .NET port lives under [`csharp/`](csharp/). Consume from nuget.org: [`Yaal`](https://www.nuget.org/packages/Yaal) — see [`csharp/README.md`](csharp/README.md) (the package listing). Tests run in a .NET SDK container (no local `dotnet` required):
 
 ```bash
 make test-csharp
