@@ -5,15 +5,24 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>Yaal</PackageId>
+    <Title>Yaal</Title>
     <Version>0.2.0</Version>
     <Authors>Kiruba Sankar Swaminathan</Authors>
+    <Copyright>Copyright (c) 2026 Kiruba Sankar Swaminathan</Copyright>
     <Description>SQL→JSON library: descriptor-driven queries with nested output shaping.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/kirubasankars/yaal</PackageProjectUrl>
     <RepositoryUrl>https://github.com/kirubasankars/yaal</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <PackageTags>sql;json;database;yaml;descriptors</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <IsPackable>true</IsPackable>
+    <EnablePackageValidation>true</EnablePackageValidation>
+    <Deterministic>true</Deterministic>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <DebugType>embedded</DebugType>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true' or '$(CI)' == 'true'">true</ContinuousIntegrationBuild>
   </PropertyGroup>
 
   <ItemGroup>

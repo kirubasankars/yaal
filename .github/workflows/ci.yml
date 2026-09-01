@@ -22,6 +22,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
@@ -32,3 +34,15 @@ jobs:
         working-directory: csharp
         # IntegrationTests Skip when YAAL_INTEGRATION is unset (Xunit.SkippableFact).
         run: dotnet test Yaal.sln --no-restore
+      - name: Pack
+        working-directory: csharp
+        run: >
+          dotnet pack src/Yaal/Yaal.csproj -c Release --no-restore -o ../artifacts
+          -p:ContinuousIntegrationBuild=true
+      - name: Validate package
+        run: |
+          dotnet tool install --global dotnet-validate --version 0.0.1-preview.582
+          shopt -s nullglob
+          for pkg in ./artifacts/*.nupkg; do
+            dotnet-validate package local "$pkg"
+          done
