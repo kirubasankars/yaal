@@ -11,7 +11,7 @@ from pathlib import Path
 
 from yaal import Yaal
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 FIXTURE_API = ROOT / "tests" / "fixtures" / "api"
 SQLITE_SCHEMA = ROOT / "docker" / "sqlite" / "schema.sql"
 

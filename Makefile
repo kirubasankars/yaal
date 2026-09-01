@@ -24,7 +24,7 @@ help:
 	@echo "  make test               Run unit tests"
 	@echo "  make test-integration   Start Docker DBs (Postgres/MySQL/ClickHouse) and run integration tests"
 	@echo "  make test-all           Unit + integration tests"
-	@echo "  make example            Run examples/demo.py (all fixture ops + explain)"
+	@echo "  make example            Run python/examples/demo.py (all fixture ops + explain)"
 	@echo "  make example-csharp     Run csharp example (same ops in sdk container)"
 	@echo "  make yaal ARGS='...'    Run yaal CLI (query / explain / list)"
 	@echo "  make experiment         FS+SQLite sandbox (init if needed); ARGS defaults to query user/get"
@@ -50,7 +50,7 @@ install: venv
 test: test-unit
 
 test-unit:
-	$(PY) -m unittest discover -s tests/unit -v
+	$(PY) -m unittest discover -s python/tests/unit -v
 
 integration-up:
 	$(COMPOSE) up -d --wait postgres mysql clickhouse
@@ -63,12 +63,12 @@ integration-ps:
 
 test-integration: integration-up
 	$(PIP) install -e ".[engines]"
-	YAAL_INTEGRATION=1 $(PY) -m unittest discover -s tests/integration -v
+	YAAL_INTEGRATION=1 $(PY) -m unittest discover -s python/tests/integration -v
 
 test-all: test-unit test-integration
 
 example:
-	$(PY) examples/demo.py
+	$(PY) python/examples/demo.py
 
 yaal:
 	$(PY) -m yaal_cli $(ARGS)

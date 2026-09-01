@@ -199,7 +199,7 @@ Walkthrough: [examples — Real SQL](examples.md#real-sql--reportsummary).
 
 **Goal:** one operation, two named providers.
 
-Demo wiring (see [`examples/demo.py`](../examples/demo.py)):
+Demo wiring (see [`python/examples/demo.py`](../python/examples/demo.py)):
 
 ```python
 y.setup_data_provider("db", "sqlite3:///" + app_db)

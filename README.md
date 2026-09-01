@@ -157,7 +157,7 @@ make install          # venv + pip install -e .
 pip install 'yaal[postgres]'   # or [mysql] / [clickhouse] — SQLite is stdlib
 ```
 
-CLI entry point after install: `yaal` (same as `python yaal_cli.py`).
+CLI entry point after install: `yaal` (same as `python -m yaal_cli`).
 
 C# / .NET 8: `dotnet add package Yaal` (`0.2.0`), then add the client your app uses:
 
@@ -171,7 +171,7 @@ Or add a project reference to [`csharp/src/Yaal/Yaal.csproj`](csharp/src/Yaal/Ya
 
 ```bash
 make install
-make example                          # examples/demo.py — all fixtures + explain
+make example                          # python/examples/demo.py — all fixtures + explain
 make example-csharp                   # same tour in .NET (Docker SDK)
 make yaal ARGS='list'
 make yaal ARGS='query user/get --arg id=1'
@@ -188,7 +188,7 @@ make experiment-clickhouse
 make experiment-clickhouse-reset      # truncate+reseed CH (keep API edits)
 ```
 
-`make example` runs [`examples/demo.py`](examples/demo.py): temp SQLite from `docker/sqlite/schema.sql` (+ flags DB), then get / nested / list / page / `report/summary` / `user/combine` plus `explain` elision (read-only). CLI commands with `--db` omitted also seed a temp SQLite DB.
+`make example` runs [`python/examples/demo.py`](python/examples/demo.py): temp SQLite from `docker/sqlite/schema.sql` (+ flags DB), then get / nested / list / page / `report/summary` / `user/combine` plus `explain` elision (read-only). CLI commands with `--db` omitted also seed a temp SQLite DB.
 
 `make experiment` uses a local sandbox at `experiment/` (gitignored): a copy of `tests/fixtures/api` plus `yaal.db`. Edit `experiment/api/` and re-run; `make experiment-reset` reseeds the DB without wiping API edits.
 
@@ -243,7 +243,7 @@ Operations are folders of `*.sql` (+ `$.output.yaml`), discovered filesystem-fir
 | `make test` | Unit tests |
 | `make test-integration` | Start Docker Postgres/MySQL/ClickHouse and run integration tests |
 | `make test-all` | Unit + integration |
-| `make example` | Run `examples/demo.py` (all fixture ops + explain) |
+| `make example` | Run `python/examples/demo.py` (all fixture ops + explain) |
 | `make example-csharp` | Same tour in .NET SDK container |
 | `make yaal ARGS='...'` | Pass-through to CLI (`query` / `explain` / `list` / `compile`) |
 | `make experiment` | FS+SQLite sandbox under `experiment/` (init if needed) |
@@ -257,12 +257,16 @@ SQLite-only usage does **not** need Docker. Compose is only for Postgres/MySQL/C
 ## Tests
 
 ```bash
-make test                 # tests/unit
+make test                 # python/tests/unit
 YAAL_INTEGRATION=1 make test-integration
 make test-csharp          # .NET unit tests (sdk container)
 ```
 
 CI (GitHub Actions) runs Python unit tests and .NET tests on every PR. Shared SQL compile goldens live under [`tests/fixtures/sql_compile/`](tests/fixtures/sql_compile/). Descriptor fixtures live under [`tests/fixtures/api/`](tests/fixtures/api/).
+
+## Python
+
+Library, tests, and demo live under [`python/`](python/). See [`python/README.md`](python/README.md).
 
 ## C# (.NET 8)
 

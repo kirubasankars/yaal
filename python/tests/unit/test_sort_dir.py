@@ -18,7 +18,7 @@ from yaal_executor import DataProviderHelper
 from yaal_parser import compile_sql, lexer, parser, resolve_sort_dir_values
 from yaal_shape import Shape
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 FIXTURE_API = ROOT / "tests" / "fixtures" / "api"
 SCHEMA = ROOT / "docker" / "sqlite" / "schema.sql"
 

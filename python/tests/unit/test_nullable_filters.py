@@ -9,7 +9,7 @@ from pathlib import Path
 
 from yaal_parser import lexer, parser, compile_sql
 
-CASES_PATH = Path(__file__).resolve().parents[1] / "fixtures" / "sql_compile" / "cases.json"
+CASES_PATH = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "sql_compile" / "cases.json"
 
 
 def _normalize_ws(sql):

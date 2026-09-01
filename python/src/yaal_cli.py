@@ -16,7 +16,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_API = ROOT / "tests" / "fixtures" / "api"
 DEFAULT_SCHEMA = ROOT / "docker" / "sqlite" / "schema.sql"
 

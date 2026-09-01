@@ -10,7 +10,7 @@ from pathlib import Path
 
 import yaal_cli
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 FIXTURE_API = str(ROOT / "tests" / "fixtures" / "api")
 
 

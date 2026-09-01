@@ -102,7 +102,7 @@ class TestInputFromHeaders(unittest.TestCase):
     def test_fixture_user_get_without_input_yaml(self):
         from pathlib import Path
 
-        api = Path(__file__).resolve().parents[1] / "fixtures" / "api"
+        api = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "api"
         yaal = Yaal(str(api), debug=True)
         yaal.setup_data_provider("db", "sqlite3:///")
         # seed via existing fixture tests' schema is heavy; just ensure descriptor builds

@@ -10,15 +10,12 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
-import sys
 import tempfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+from yaal import Yaal
 
-from yaal import Yaal  # noqa: E402
+ROOT = Path(__file__).resolve().parents[2]
 
 API = ROOT / "tests" / "fixtures" / "api"
 SCHEMA = ROOT / "docker" / "sqlite" / "schema.sql"

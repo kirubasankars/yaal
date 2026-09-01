@@ -709,7 +709,7 @@ y.Query("orders/list", args: new { status = "open" });
 
 | Runtime | Entry |
 |---|---|
-| Python | [`examples/demo.py`](../examples/demo.py) · `make example` |
+| Python | [`python/examples/demo.py`](../python/examples/demo.py) · `make example` |
 | C# | [`csharp/examples/Yaal.Example`](../csharp/examples/Yaal.Example/) · `make example-csharp` |
 
 Both print get / nested / list / page / `report/summary` / `user/combine` and show `explain` elision for `user/list`.

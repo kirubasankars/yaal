@@ -18,8 +18,9 @@ from yaal_precompile import (
 )
 
 
-FIXTURE_API = Path(__file__).resolve().parents[1] / "fixtures" / "api"
-SCHEMA = Path(__file__).resolve().parents[2] / "docker" / "sqlite" / "schema.sql"
+ROOT = Path(__file__).resolve().parents[3]
+FIXTURE_API = ROOT / "tests" / "fixtures" / "api"
+SCHEMA = ROOT / "docker" / "sqlite" / "schema.sql"
 
 
 class TestPrecompile(unittest.TestCase):

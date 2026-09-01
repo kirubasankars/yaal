@@ -13,7 +13,7 @@ from pathlib import Path
 from yaal import Yaal, create_context
 from yaal_parser import lexer, parser
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 FIXTURE_API = ROOT / "tests" / "fixtures" / "api"
 SCHEMA = ROOT / "docker" / "sqlite" / "schema.sql"
 

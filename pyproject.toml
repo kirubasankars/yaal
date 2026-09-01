@@ -45,6 +45,7 @@ Homepage = "https://github.com/kirubasankars/yaal"
 Documentation = "https://github.com/kirubasankars/yaal/blob/main/docs/README.md"
 
 [tool.setuptools]
+package-dir = {"" = "python/src"}
 py-modules = [
     "yaal",
     "yaal_builder",
@@ -54,8 +55,10 @@ py-modules = [
     "yaal_errors",
     "yaal_executor",
     "yaal_mysql",
+    "yaal_output_schema",
     "yaal_parser",
     "yaal_postgres",
+    "yaal_precompile",
     "yaal_provider",
     "yaal_shape",
     "yaal_sqlite",
