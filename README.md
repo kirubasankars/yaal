@@ -158,7 +158,7 @@ make install          # venv + pip install -e .
 
 CLI entry point after install: `yaal` (same as `python yaal_cli.py`).
 
-C# / .NET 8: add a project reference to [`csharp/src/Yaal/Yaal.csproj`](csharp/src/Yaal/Yaal.csproj) (packable as `Yaal` `0.1.0`; not published to NuGet yet).
+C# / .NET 8: `dotnet add package Yaal` (`0.1.0`). Or add a project reference to [`csharp/src/Yaal/Yaal.csproj`](csharp/src/Yaal/Yaal.csproj).
 
 ## Quick start
 

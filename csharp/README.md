@@ -2,7 +2,13 @@
 
 C# port of the Yaal SQL→JSON library. Same descriptor files, optional-filter SQL DSL, nested JSON shaping, and multi-engine providers.
 
-Package metadata: `Yaal` `0.1.0` (MIT). Add a project reference to [`src/Yaal/Yaal.csproj`](src/Yaal/Yaal.csproj); not published to NuGet yet.
+Package: [`Yaal`](https://www.nuget.org/packages/Yaal) `0.1.0` (MIT).
+
+```bash
+dotnet add package Yaal
+```
+
+Or add a project reference to [`src/Yaal/Yaal.csproj`](src/Yaal/Yaal.csproj).
 
 Docs: [examples](../docs/examples.md) · [descriptors](../docs/descriptors.md) · [index](../docs/README.md).
 
@@ -75,3 +81,11 @@ make test-csharp-integration     # docker compose run with DBs + YAAL_INTEGRATIO
 ```
 
 Integration URLs inside the container use compose service hostnames (`postgres`, `mysql`, `clickhouse`) via `YAAL_PG_URL` / `YAAL_MYSQL_URL` / `YAAL_CH_URL`.
+
+## Publishing
+
+A GitHub Release tagged `vX.Y.Z` runs [`.github/workflows/nuget-publish.yml`](../.github/workflows/nuget-publish.yml): test, pack, push to nuget.org.
+
+1. Bump `<Version>` in [`src/Yaal/Yaal.csproj`](src/Yaal/Yaal.csproj) (and Python `version` in [`../pyproject.toml`](../pyproject.toml) if you want them aligned).
+2. Commit the bump. The workflow file must exist on that commit.
+3. Create a GitHub Release tagged `vX.Y.Z` (tag version must match `<Version>`).
