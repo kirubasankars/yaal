@@ -252,13 +252,28 @@ class Yaal:
     def setup_data_provider(self, name, database_uri):
         provider_name, options = _parse_rfc1738_args(database_uri)
         if provider_name == "postgresql":
-            from yaal_postgres import PostgresContextManager
+            try:
+                from yaal_postgres import PostgresContextManager
+            except ImportError as e:
+                raise YaalError(
+                    "PostgreSQL requires psycopg2. pip install 'yaal[postgres]'"
+                ) from e
             self._data_providers[name] = PostgresContextManager(options)
         elif provider_name == "mysql":
-            from yaal_mysql import MySQLContextManager
+            try:
+                from yaal_mysql import MySQLContextManager
+            except ImportError as e:
+                raise YaalError(
+                    "MySQL requires mysql-connector-python. pip install 'yaal[mysql]'"
+                ) from e
             self._data_providers[name] = MySQLContextManager(options)
         elif provider_name == "clickhouse":
-            from yaal_clickhouse import ClickHouseContextManager
+            try:
+                from yaal_clickhouse import ClickHouseContextManager
+            except ImportError as e:
+                raise YaalError(
+                    "ClickHouse requires clickhouse-driver. pip install 'yaal[clickhouse]'"
+                ) from e
             self._data_providers[name] = ClickHouseContextManager(options)
         elif provider_name == "sqlite3":
             self._data_providers[name] = SQLiteContextManager(options)

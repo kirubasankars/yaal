@@ -62,6 +62,7 @@ integration-ps:
 	$(COMPOSE) ps
 
 test-integration: integration-up
+	$(PIP) install -e ".[engines]"
 	YAAL_INTEGRATION=1 $(PY) -m unittest discover -s tests/integration -v
 
 test-all: test-unit test-integration

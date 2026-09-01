@@ -2,10 +2,11 @@
 
 C# port of the Yaal SQL→JSON library. Same descriptor files, optional-filter SQL DSL, nested JSON shaping, and multi-engine providers.
 
-Package: [`Yaal`](https://www.nuget.org/packages/Yaal) `0.1.0` (MIT).
+Package: [`Yaal`](https://www.nuget.org/packages/Yaal) `0.2.0` (MIT). Database drivers are not included — add the client your app uses.
 
 ```bash
 dotnet add package Yaal
+dotnet add package Microsoft.Data.Sqlite   # or Npgsql / MySqlConnector / ClickHouse.Client
 ```
 
 Or add a project reference to [`src/Yaal/Yaal.csproj`](src/Yaal/Yaal.csproj).

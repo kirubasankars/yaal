@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "yaal"
-version = "0.1.0"
+version = "0.2.0"
 description = "SQL→JSON framework: descriptor-driven queries with nested output shaping"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -25,13 +25,17 @@ classifiers = [
 dependencies = [
     "jsonschema>=4.0,<5",
     "PyYAML>=6.0,<7",
+]
+
+[project.optional-dependencies]
+postgres = ["psycopg2-binary>=2.9,<3"]
+mysql = ["mysql-connector-python>=8.0,<10"]
+clickhouse = ["clickhouse-driver>=0.2,<1"]
+engines = [
     "psycopg2-binary>=2.9,<3",
     "mysql-connector-python>=8.0,<10",
     "clickhouse-driver>=0.2,<1",
 ]
-
-[project.optional-dependencies]
-dev = []
 
 [project.scripts]
 yaal = "yaal_cli:main"

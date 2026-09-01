@@ -20,6 +20,12 @@ ROOT = Path(__file__).resolve().parents[2]
 FIXTURE_API = ROOT / "tests" / "fixtures" / "api"
 SQLITE_SCHEMA = ROOT / "docker" / "sqlite" / "schema.sql"
 
+try:
+    import clickhouse_driver  # noqa: F401
+    HAS_CLICKHOUSE = True
+except ImportError:
+    HAS_CLICKHOUSE = False
+
 
 class TestDxApi(unittest.TestCase):
 
@@ -69,12 +75,20 @@ class TestDxApi(unittest.TestCase):
         self.assertIn("user_id = ?", sql)
         self.assertEqual(explained[0]["parameters"], [1])
 
+    @unittest.skipUnless(HAS_CLICKHOUSE, "clickhouse-driver not installed")
     def test_clickhouse_url_registers_and_uses_percent_s(self):
         y = Yaal(str(FIXTURE_API), debug=True)
         y.setup_data_provider("db", "clickhouse://yaal:yaal@127.0.0.1:9000/yaal")
         self.assertEqual(y._data_provider_schemes["db"], "clickhouse")
         self.assertEqual(y._default_placeholder(), "%s")
         self.assertIn("db", y._data_providers)
+
+    @unittest.skipIf(HAS_CLICKHOUSE, "clickhouse-driver installed")
+    def test_clickhouse_missing_driver_message(self):
+        y = Yaal(str(FIXTURE_API), debug=True)
+        with self.assertRaises(YaalError) as ctx:
+            y.setup_data_provider("db", "clickhouse://yaal:yaal@127.0.0.1:9000/yaal")
+        self.assertIn("yaal[clickhouse]", str(ctx.exception))
 
     def test_unsupported_database_url(self):
         y = Yaal(str(FIXTURE_API), debug=True)

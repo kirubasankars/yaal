@@ -38,10 +38,10 @@ public sealed class Yaal
         var (providerName, options) = DatabaseUrl.Parse(databaseUri);
         _dataProviders[name] = providerName switch
         {
-            "postgresql" => new PostgresContextManager(options),
-            "mysql" => new MySqlContextManager(options),
-            "clickhouse" => new ClickHouseContextManager(options),
-            "sqlite3" => new SqliteContextManager(options),
+            "postgresql" => PostgresProviderFactory.Create(options),
+            "mysql" => MySqlProviderFactory.Create(options),
+            "clickhouse" => ClickHouseProviderFactory.Create(options),
+            "sqlite3" => SqliteProviderFactory.Create(options),
             _ => throw new UnsupportedDatabaseUrlException(
                 $"Unsupported database URL scheme '{providerName}' for provider '{name}'. " +
                 "Supported schemes: sqlite3, postgresql, mysql, clickhouse"),
