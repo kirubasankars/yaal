@@ -49,6 +49,14 @@ public sealed class Yaal
         _dataProviderSchemes[name] = providerName;
     }
 
+    /// <summary>Register an app-supplied provider (custom engine, mock, wrapper).</summary>
+    public void SetupDataProvider(string name, IDataProviderContextManager manager, string? scheme = null)
+    {
+        ArgumentNullException.ThrowIfNull(manager);
+        _dataProviders[name] = manager;
+        _dataProviderSchemes[name] = scheme ?? "";
+    }
+
     public IDataProvider GetDataProvider(string name)
     {
         if (!_dataProviders.TryGetValue(name, out var manager))

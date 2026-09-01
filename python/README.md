@@ -37,6 +37,7 @@ from yaal import Yaal
 
 y = Yaal("tests/fixtures/api", debug=True)
 y.setup_data_provider("db", "sqlite3:////tmp/app.db")
+# y.setup_data_provider("db", MyContextManager())  # app-supplied provider
 
 result = y.query("user/get", args={"id": 1})
 raw = y.query_json("user/get", args={"id": 1})

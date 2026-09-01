@@ -105,6 +105,16 @@ class TestDxApi(unittest.TestCase):
         with self.assertRaises(DescriptorNotFoundError):
             y.create_descriptor("missing/get")
 
+    def test_registers_app_provider(self):
+        class Manager:
+            def get_context(self):
+                return object()
+
+        y = Yaal(str(FIXTURE_API), debug=True)
+        y.setup_data_provider("db", Manager())
+        self.assertIsInstance(y.get_data_provider("db"), object)
+        self.assertEqual(y._data_provider_schemes["db"], "")
+
     def test_missing_data_provider(self):
         y = Yaal(str(FIXTURE_API), debug=True)
         with self.assertRaises(YaalError):

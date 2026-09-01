@@ -41,6 +41,7 @@ dotnet pack src/Yaal/Yaal.csproj -c Release
 ```csharp
 var y = new Yaal.Yaal("tests/fixtures/api", debug: true);
 y.SetupDataProvider("db", "sqlite3:////tmp/app.db");
+// y.SetupDataProvider("db", new MyContextManager());  // app-supplied provider
 
 var result = y.Query("user/get", args: new { id = 1 });
 string json = y.QueryJson("user/get", args: new { id = 1 });

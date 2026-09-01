@@ -249,7 +249,26 @@ class Yaal:
         else:
             self._content_reader = content_reader
 
-    def setup_data_provider(self, name, database_uri):
+    def setup_data_provider(self, name, database_uri=None, *, manager=None, scheme=None):
+        if manager is not None and database_uri is not None:
+            raise TypeError("pass a database URL or manager, not both")
+        if manager is None and database_uri is not None and not isinstance(database_uri, str):
+            if hasattr(database_uri, "get_context"):
+                manager = database_uri
+                database_uri = None
+            else:
+                raise TypeError(
+                    "setup_data_provider second argument must be a URL string or a manager with get_context()"
+                )
+        if manager is not None:
+            if not hasattr(manager, "get_context"):
+                raise TypeError("manager must implement get_context()")
+            self._data_providers[name] = manager
+            self._data_provider_schemes[name] = scheme or ""
+            return None
+        if database_uri is None:
+            raise TypeError("setup_data_provider requires a database URL or manager")
+
         provider_name, options = _parse_rfc1738_args(database_uri)
         if provider_name == "postgresql":
             try:

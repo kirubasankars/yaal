@@ -410,6 +410,8 @@ from yaal import Yaal
 
 y = Yaal("path/to/api", debug=True)  # or precompiled="path/to/precompiled"
 y.setup_data_provider("db", "sqlite3:////tmp/app.db")
+# or an app-supplied manager (get_context / begin / execute / end / error):
+# y.setup_data_provider("db", MyContextManager())
 
 y.query("user/get", args={"id": 1})
 y.query_json("user/get", args={"id": 1})
@@ -424,6 +426,8 @@ y.clear_cache()
 ```csharp
 var y = new Yaal.Yaal("path/to/api", debug: true);
 y.SetupDataProvider("db", "sqlite3:////tmp/app.db");
+// or an app IDataProviderContextManager:
+// y.SetupDataProvider("db", new MyContextManager());
 
 y.Query("user/get", args: new { id = 1 });
 y.QueryJson("user/get", args: new { id = 1 });

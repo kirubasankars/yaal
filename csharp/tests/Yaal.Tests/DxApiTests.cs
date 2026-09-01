@@ -4,6 +4,9 @@
 
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
+using Yaal.Execution;
+using Yaal.Providers;
+using Yaal.Sql;
 
 namespace Yaal.Tests;
 
@@ -80,10 +83,34 @@ public class DxApiTests
     }
 
     [Fact]
+    public void Registers_app_provider()
+    {
+        var y = new Yaal(FixtureApi, debug: true);
+        y.SetupDataProvider("db", new StubContextManager());
+        y.GetDataProvider("db").Should().BeOfType<StubDataProvider>();
+    }
+
+    [Fact]
     public void Registers_clickhouse_scheme()
     {
         var y = new Yaal(FixtureApi, debug: true);
         y.SetupDataProvider("db", "clickhouse://default:@127.0.0.1:8123/default");
         y.GetDataProvider("db").Should().NotBeNull();
+    }
+
+    private sealed class StubContextManager : IDataProviderContextManager
+    {
+        public IDataProvider GetContext() => new StubDataProvider();
+    }
+
+    private sealed class StubDataProvider : IDataProvider
+    {
+        public void Begin() { }
+        public void End() { }
+        public void Error() { }
+
+        public (IReadOnlyList<IDictionary<string, object?>> Rows, object? LastInsertedId) Execute(
+            Twig twig, Shape inputShape, DataProviderHelper helper) =>
+            (Array.Empty<IDictionary<string, object?>>(), null);
     }
 }
