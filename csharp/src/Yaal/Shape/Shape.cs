@@ -2,8 +2,8 @@
 // Use of this source code is governed by a MIT style
 // license that can be found in the LICENSE file.
 
-using System.Text.Json.Nodes;
-using Json.Schema;
+using System.Collections;
+using System.Globalization;
 
 namespace Yaal;
 
@@ -13,7 +13,6 @@ public sealed class Shape
     private readonly Dictionary<string, object?> _inputProperties;
     private int _index;
     private readonly Dictionary<string, object?>? _schema;
-    private readonly JsonSchema? _validator;
     private readonly Shape? _parent;
     private readonly Dictionary<string, Shape>? _extras;
     private object _data;
@@ -23,12 +22,10 @@ public sealed class Shape
     public Shape(
         Dictionary<string, object?>? schema = null,
         object? data = null,
-        JsonSchema? validator = null,
         Shape? parentShape = null,
         Dictionary<string, Shape>? extras = null)
     {
         _schema = schema;
-        _validator = validator;
         _parent = parentShape;
         _extras = extras;
 
@@ -130,7 +127,7 @@ public sealed class Shape
         if (_array)
         {
             var shapes = new List<Shape>();
-            var itemSchema = (Dictionary<string, object?>)JsonUtil.DeepCopy(schema)!;
+            var itemSchema = new Dictionary<string, object?>(schema, StringComparer.OrdinalIgnoreCase);
             itemSchema[YaalConst.Type] = YaalConst.Object;
             var idx = 0;
             foreach (var item in (IList<object?>)_data)
@@ -293,41 +290,103 @@ public sealed class Shape
             }
         }
 
-        if (_validator != null)
-        {
-            var json = JsonUtil.Serialize(_data);
-            using var doc = System.Text.Json.JsonDocument.Parse(json);
-            var result = _validator.Evaluate(doc.RootElement, new EvaluationOptions
-            {
-                OutputFormat = OutputFormat.List,
-            });
-            if (!result.IsValid)
-            {
-                CollectSchemaErrors(result, errors);
-            }
-        }
+        if (_schema != null)
+            ValidateAgainstSchema(_data, _schema, errors);
 
         return errors;
     }
 
-    private static void CollectSchemaErrors(EvaluationResults result, List<Dictionary<string, object?>> errors)
+    private static void ValidateAgainstSchema(
+        object? data,
+        Dictionary<string, object?> schema,
+        List<Dictionary<string, object?>> errors)
     {
-        if (result.Errors != null)
+        var expected = schema.TryGetValue(YaalConst.Type, out var typeObj) ? typeObj?.ToString() : null;
+        if (!string.IsNullOrEmpty(expected) && !SchemaTypeOk(data, expected))
         {
-            foreach (var err in result.Errors)
+            errors.Add(new Dictionary<string, object?>
             {
-                errors.Add(new Dictionary<string, object?>
+                ["message"] = FormatRepr(data) + " is not of type '" + expected + "'",
+            });
+            return;
+        }
+
+        if (expected == YaalConst.Array || data is IList)
+            return;
+        if (AsDict(data) is not { } dataMap)
+            return;
+
+        var dataLower = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (k, v) in dataMap)
+            dataLower[k] = v;
+
+        if (schema.TryGetValue("required", out var reqObj) && reqObj is IEnumerable reqEnum)
+        {
+            foreach (var item in reqEnum)
+            {
+                if (item is not string name)
+                    continue;
+                if (!dataLower.ContainsKey(name))
                 {
-                    ["message"] = err.Value,
-                });
+                    errors.Add(new Dictionary<string, object?>
+                    {
+                        ["message"] = "'" + name + "' is a required property",
+                    });
+                }
             }
         }
 
-        if (result.Details == null)
+        if (!schema.TryGetValue(YaalConst.Properties, out var propsObj) ||
+            propsObj is not Dictionary<string, object?> props)
             return;
 
-        foreach (var detail in result.Details)
-            CollectSchemaErrors(detail, errors);
+        foreach (var (name, propSchemaObj) in props)
+        {
+            if (!dataLower.TryGetValue(name, out var value))
+                continue;
+            if (propSchemaObj is Dictionary<string, object?> propSchema)
+                ValidateAgainstSchema(value, propSchema, errors);
+        }
+    }
+
+    private static Dictionary<string, object?>? AsDict(object? data)
+    {
+        if (data is Dictionary<string, object?> dict)
+            return dict;
+        if (data is IDictionary<string, object?> generic)
+            return new Dictionary<string, object?>(generic, StringComparer.OrdinalIgnoreCase);
+        return null;
+    }
+
+    private static bool SchemaTypeOk(object? value, string expected)
+    {
+        return expected switch
+        {
+            "integer" => IsInteger(value),
+            "number" => IsNumber(value),
+            "string" => value is string,
+            "boolean" => value is bool,
+            "object" => AsDict(value) != null,
+            "array" => value is IList,
+            _ => true,
+        };
+    }
+
+    private static bool IsInteger(object? value) =>
+        value is sbyte or byte or short or ushort or int or uint or long or ulong;
+
+    private static bool IsNumber(object? value) =>
+        IsInteger(value) || value is float or double or decimal;
+
+    private static string FormatRepr(object? value)
+    {
+        if (value is null)
+            return "None";
+        if (value is string s)
+            return "'" + s + "'";
+        if (value is bool b)
+            return b ? "True" : "False";
+        return Convert.ToString(value, CultureInfo.InvariantCulture) ?? "None";
     }
 
     public object GetData() => _oData;

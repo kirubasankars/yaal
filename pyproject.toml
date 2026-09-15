@@ -23,7 +23,6 @@ classifiers = [
     "Topic :: Database",
 ]
 dependencies = [
-    "jsonschema>=4.0,<5",
     "PyYAML>=6.0,<7",
 ]
 

@@ -4,8 +4,6 @@
 
 import unittest
 
-from jsonschema import FormatChecker, Draft4Validator
-
 from yaal_shape import Shape
 
 
@@ -329,7 +327,6 @@ class TestShape(unittest.TestCase):
             }
         }
 
-        validator = Draft4Validator(schema=schema, format_checker=FormatChecker())
         data = {
             "number": "a",
             "obj": {
@@ -337,7 +334,7 @@ class TestShape(unittest.TestCase):
             }
         }
 
-        s1 = Shape(schema=schema, data=data, validator=validator)
+        s1 = Shape(schema=schema, data=data)
         self.assertListEqual([{'message': "'a' is not of type 'integer'"}, {'message': "'c' is not of type 'integer'"}],
                              s1.validate())
 
@@ -351,13 +348,12 @@ class TestShape(unittest.TestCase):
             }
         }
 
-        validator = Draft4Validator(schema=schema, format_checker=FormatChecker())
         data = {
             "number": "a"
         }
-        e = Shape(schema=schema, data=data, validator=validator)
+        e = Shape(schema=schema, data=data)
         extras = {"e": e}
-        s1 = Shape(schema=schema, data=data, validator=validator, extras=extras)
+        s1 = Shape(schema=schema, data=data, extras=extras)
 
         self.assertListEqual([{'message': "'a' is not of type 'integer'", 'name': 'e'}, {'message': "'a' is not of type 'integer'"}],
                              s1.validate(True))

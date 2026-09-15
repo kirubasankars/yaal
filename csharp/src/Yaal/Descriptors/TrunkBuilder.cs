@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 using System.Text.RegularExpressions;
-using Json.Schema;
 using Yaal.Sql;
 
 namespace Yaal.Descriptors;
@@ -76,25 +75,8 @@ public static class TrunkBuilder
 
         BuildBranch(trunk, mapByFiles, contentReader, payloadSchema, outputSchema, trunk.Model, bag);
         trunk.Connections = (List<string>)bag["connections"]!;
-        trunk.Validators = new Dictionary<string, JsonSchema?>
-        {
-            ["args"] = CreateValidator(argsSchema),
-            ["payload"] = CreateValidator(payloadSchema),
-        };
 
         return trunk;
-    }
-
-    private static JsonSchema? CreateValidator(Dictionary<string, object?>? schema)
-    {
-        if (schema == null)
-            return null;
-        // Json.Schema defaults to 2020-12. Python uses Draft4Validator. Keep derived input
-        // models on the common subset (type/properties/required).
-        var copy = (Dictionary<string, object?>)JsonUtil.DeepCopy(schema)!;
-        copy.Remove("$schema");
-        var node = JsonUtil.ToJsonNode(copy);
-        return JsonSchema.FromText(node!.ToJsonString());
     }
 
     private static List<string> OrderListByDots(List<string>? names)
@@ -102,25 +84,12 @@ public static class TrunkBuilder
         if (names == null || names.Count == 0)
             return new List<string>();
 
-        var working = names.ToList();
-        var dots = working.Select(x => x.Count(c => c == '.')).ToList();
-        var ordered = new List<string>();
-
-        while (dots.Count > 0)
-        {
-            var el = dots.Min();
-            while (true)
-            {
-                var idx = dots.IndexOf(el);
-                if (idx < 0)
-                    break;
-                ordered.Add(working[idx].ToLowerInvariant());
-                working.RemoveAt(idx);
-                dots.RemoveAt(idx);
-            }
-        }
-
-        return ordered;
+        return names
+            .Select((name, index) => (name, index))
+            .OrderBy(x => x.name.Count(c => c == '.'))
+            .ThenBy(x => x.index)
+            .Select(x => x.name.ToLowerInvariant())
+            .ToList();
     }
 
     private static void BuildBranchMapByFiles(Dictionary<string, object?> branchMap, string item)

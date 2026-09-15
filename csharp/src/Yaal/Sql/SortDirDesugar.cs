@@ -246,7 +246,7 @@ public static class SortDirDesugar
     }
 
     private static bool IsOrderByClauseEndWord(SqlToken token) =>
-        token.Type == "word" && OrderByClauseEnd.Contains(token.Value.Trim());
+        SqlTokenUtil.IsWordLike(token) && OrderByClauseEnd.Contains(token.Value.Trim());
 
     /// <summary>
     /// Split an ORDER BY body into comma-separated terms. Depth-aware: commas inside
@@ -283,7 +283,7 @@ public static class SortDirDesugar
                 continue;
             }
 
-            if (depth == 0 && t.Type == "word")
+            if (depth == 0 && SqlTokenUtil.IsWordLike(t))
             {
                 var val = t.Value;
                 if (val == ",")
@@ -360,11 +360,10 @@ public static class SortDirDesugar
         while (i < n)
         {
             var t = content[i];
-            if (t.Type == "word" && t.Value.Equals("order", StringComparison.OrdinalIgnoreCase))
+            if (SqlTokenUtil.TokenEquals(t, "order"))
             {
                 var j = SkipWs(content, i + 1);
-                if (j < n && content[j].Type == "word" &&
-                    content[j].Value.Equals("by", StringComparison.OrdinalIgnoreCase))
+                if (j < n && SqlTokenUtil.TokenEquals(content[j], "by"))
                 {
                     var k = SkipWs(content, j + 1);
                     var (terms, endIdx, _) = SplitOrderByTerms(content, k);

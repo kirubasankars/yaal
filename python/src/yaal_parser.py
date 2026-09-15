@@ -9,6 +9,22 @@ from yaal_errors import SortDirError
 KNOWN_PARAM_TYPES = frozenset({"integer", "string", "float", "bool", "blob"})
 
 _WS_TOKEN_TYPES = frozenset({"space", "newline"})
+
+
+def _is_word_like(token):
+    return token.get("type") in ("word", "sql")
+
+
+def _token_text_lower(token):
+    return token.get("value", "").strip().lower()
+
+
+def _token_eq(token, word):
+    return _is_word_like(token) and _token_text_lower(token) == word.lower()
+
+
+def _has_significant_sql_content(content):
+    return any(_is_word_like(x) and x.get("value", "").strip() for x in content)
 _SORT_KEY_RX = re.compile(r"^\w+$")
 _ORDER_BY_CLAUSE_END = frozenset({
     "limit", "offset", "fetch", "for", "union", "except", "intersect", ")", ";",
@@ -26,6 +42,19 @@ _DIR_VOCAB = {
     "desc_nulls_first": "DESC NULLS FIRST",
     "desc_nulls_last": "DESC NULLS LAST",
 }
+
+_PARAMETER_RX = re.compile(
+    r"\s*(?P<name>[\$\_\.A-Za-z0-9\[\]]+)(?P<required>!)?\s+(?P<type>\w+)"
+    r"(?:\s*=\s*(?P<default>.+))?\s*"
+)
+_SQL_RX = re.compile(r"--sql\(\s*(?P<name>\w+)?\s*\)--")
+_POSSIBLE_NULL_PARAMETER_RX = re.compile(
+    r"^\(\s*{{(?P<name>[A-Za-z0-9_.$-]*?)}}\s+is\s+null\s+or",
+    re.IGNORECASE,
+)
+
+_COMPACT_MERGE_RESERVED = frozenset({"order", "by", "or"})
+_COMPACT_STRUCTURAL = frozenset({"parameter", "brace", "sort", "dir"})
 
 
 def lex_dash(current, content):
@@ -498,7 +527,7 @@ def _desugar_sort_dir_tokens(tokens):
 
 
 def _is_order_by_clause_end_word(token):
-    return token["type"] == "word" and token["value"].strip().lower() in _ORDER_BY_CLAUSE_END
+    return _is_word_like(token) and _token_text_lower(token) in _ORDER_BY_CLAUSE_END
 
 
 def _split_order_by_terms(content, start_idx):
@@ -537,7 +566,7 @@ def _split_order_by_terms(content, start_idx):
             i += 1
             continue
 
-        if depth == 0 and t["type"] == "word":
+        if depth == 0 and _is_word_like(t):
             val = t["value"]
             if val == ",":
                 terms.append(current)
@@ -605,9 +634,9 @@ def _validate_dynamic_order_by(content, method):
     i = 0
     while i < n:
         t = content[i]
-        if t["type"] == "word" and t["value"].lower() == "order":
+        if _token_eq(t, "order"):
             j = _skip_ws_tokens(content, i + 1)
-            if j < n and content[j]["type"] == "word" and content[j]["value"].lower() == "by":
+            if j < n and _token_eq(content[j], "by"):
                 k = _skip_ws_tokens(content, j + 1)
                 terms, end_idx, _trailing_ws = _split_order_by_terms(content, k)
 
@@ -882,16 +911,12 @@ def _parse_parameter_header(token_value, method):
     if inner.strip() == "":
         raise TypeError("empty parameter header in " + method + ".sql")
 
-    parameter_rx = re.compile(
-        r"\s*(?P<name>[\$\_\.A-Za-z0-9\[\]]+)(?P<required>!)?\s+(?P<type>\w+)"
-        r"(?:\s*=\s*(?P<default>.+))?\s*"
-    )
     params = []
     seen = set()
     for segment in _split_parameter_header_segments(inner):
         if segment.strip() == "":
             raise TypeError("invalid parameter declaration in " + method + ".sql")
-        m = parameter_rx.fullmatch(segment)
+        m = _PARAMETER_RX.fullmatch(segment)
         if not m:
             raise TypeError(
                 "invalid parameter declaration '"
@@ -943,6 +968,58 @@ def _parse_parameter_header(token_value, method):
     return params
 
 
+def compact_twig_tokens(content):
+    """Merge adjacent whitespace and static SQL runs; keep structural tokens intact."""
+    if not content:
+        return content
+
+    out = []
+    buf_type = None
+    buf_value = []
+
+    def flush():
+        nonlocal buf_type, buf_value
+        if buf_type == "space" and buf_value:
+            out.append({"type": "space", "value": "".join(buf_value)})
+        elif buf_type == "sql" and buf_value:
+            out.append({"type": "sql", "value": "".join(buf_value)})
+        buf_type = None
+        buf_value = []
+
+    for token in content:
+        t = token["type"]
+        if t in _COMPACT_STRUCTURAL:
+            flush()
+            out.append(token)
+            continue
+        if t in _WS_TOKEN_TYPES:
+            if buf_type == "space":
+                buf_value.append(token.get("value", ""))
+            else:
+                flush()
+                buf_type = "space"
+                buf_value = [token.get("value", "")]
+            continue
+        if t in ("word", "sql"):
+            val = token.get("value", "")
+            if val.strip().lower() in _COMPACT_MERGE_RESERVED:
+                flush()
+                out.append(token)
+                continue
+            if buf_type == "sql":
+                buf_value.append(val)
+            else:
+                flush()
+                buf_type = "sql"
+                buf_value = [val]
+            continue
+        flush()
+        out.append(token)
+
+    flush()
+    return out
+
+
 def parser(tokens, method):
     if not tokens:
         return None
@@ -952,9 +1029,7 @@ def parser(tokens, method):
 
     ast = {}
     ast["sql_stmts"] = sql_stmts = []
-    brace_groups = []
-
-    sql_rx = re.compile(r"--sql\(\s*(?P<name>\w+)?\s*\)--")
+    brace_groups = {}
 
     sql_stmt = {
         "content": [],
@@ -1013,14 +1088,14 @@ def parser(tokens, method):
             else:
                 token["type"] = "sql"
                 if len(sql_stmt):
-                    if len([x for x in sql_stmt["content"] if x["type"] == "word"]):
+                    if _has_significant_sql_content(sql_stmt["content"]):
                         sql_stmts.append(sql_stmt)
                     # New SQL statement
                     sql_stmt = {
                         "content": [],
                         "parameters": []
                     }
-                    m = sql_rx.search(token_value)
+                    m = _SQL_RX.search(token_value)
                     if m:
                         d = m.groupdict()
                         sql_stmt["connection"] = d["name"] or "db"
@@ -1029,18 +1104,17 @@ def parser(tokens, method):
                 continue
 
         if token_type == "brace":
-            exists = [x for x in brace_groups if x["group"] == token["group"]]
-            if not exists:
-                brace_groups.append(token)
+            group_id = token["group"]
+            if group_id not in brace_groups:
+                brace_groups[group_id] = token
                 token["content"] = []
             else:
-                group = exists[0]
+                group = brace_groups.pop(group_id)
                 group["content"].append(token["value"])
                 group["content"] = "".join(group["content"])
-                brace_groups.remove(exists[0])
 
         if brace_groups:
-            for g in brace_groups:
+            for g in brace_groups.values():
                 g["content"].append(token["value"])
 
         sql_stmt["content"].append(token)
@@ -1048,7 +1122,7 @@ def parser(tokens, method):
 
         tc = tc + 1
 
-    if len([x for x in sql_stmt["content"] if x["type"] == "word"]):
+    if _has_significant_sql_content(sql_stmt["content"]):
         sql_stmts.append(sql_stmt)
 
     ast_parameters = None
@@ -1067,17 +1141,12 @@ def parser(tokens, method):
 
         sql_stmt["parameters"] = parameters
 
-    possible_null_parameter_rx = re.compile(
-        r"^\(\s*{{(?P<name>[A-Za-z0-9_.$-]*?)}}\s+is\s+null\s+or",
-        re.IGNORECASE,
-    )
-
     for sql_stmt in sql_stmts:
 
         sql_stmt["nullable"] = []
         for token in sql_stmt["content"]:
             if token["type"] == "brace" and "content" in token:
-                m = possible_null_parameter_rx.search(token["content"])
+                m = _POSSIBLE_NULL_PARAMETER_RX.search(token["content"])
                 if m:
                     name = m.groupdict()["name"].lower()
                     sql_stmt["nullable"].append(name)
@@ -1089,6 +1158,11 @@ def parser(tokens, method):
             del sql_stmt["nullable"]
 
         _validate_dynamic_order_by(sql_stmt["content"], method)
+
+        sql_stmt["has_sort_dir"] = any(
+            t["type"] == "sort" for t in sql_stmt["content"]
+        )
+        sql_stmt["content"] = compact_twig_tokens(sql_stmt["content"])
 
     if not ast["sql_stmts"]:
         del ast["sql_stmts"]
@@ -1250,7 +1324,7 @@ def _compile_order_by(stmt, order_idx, sort_map):
     """
     n = len(stmt)
     j = _skip_ws_tokens(stmt, order_idx + 1)
-    if j >= n or stmt[j]["type"] != "word" or stmt[j]["value"].lower() != "by":
+    if j >= n or not _token_eq(stmt[j], "by"):
         return False, None, order_idx
 
     k = _skip_ws_tokens(stmt, j + 1)
@@ -1294,7 +1368,7 @@ def compile_sql(sql_stmt, nulls, char, sort_map=None):
     n = len(stmt)
     while idx < n:
         token = stmt[idx]
-        if token["type"] == "word" and token["value"].lower() == "order":
+        if _token_eq(token, "order"):
             is_order_by, fragments, next_idx = _compile_order_by(stmt, idx, sort_map)
             if is_order_by:
                 if fragments is None:
@@ -1331,7 +1405,7 @@ def compile_sql(sql_stmt, nulls, char, sort_map=None):
             if _is_whitespace_sql_fragment(value):
                 idx += 1
                 continue
-            if token["type"] == "word" and value.strip().lower() == "or":
+            if _token_eq(token, "or"):
                 # Stay in skip mode to also drop whitespace after "or".
                 idx += 1
                 continue
