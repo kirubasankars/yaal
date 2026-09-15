@@ -16,7 +16,7 @@ EXP_CH_SEED := docker/clickhouse/experiment_seed.sql
 	experiment experiment-init experiment-reset experiment-clean \
 	experiment-clickhouse experiment-clickhouse-init experiment-clickhouse-reset \
 	integration-up integration-down integration-ps clean \
-	test-csharp test-csharp-integration example-csharp
+	test-csharp test-csharp-integration example-csharp benchmark-csharp
 
 help:
 	@echo "Targets:"
@@ -36,6 +36,7 @@ help:
 	@echo "  make experiment-clean   Remove $(EXP_DIR)/ (does not stop Compose DBs)"
 	@echo "  make test-csharp        Run .NET tests in sdk container (SQLite / unit)"
 	@echo "  make test-csharp-integration  Compose DBs + .NET tests in sdk container"
+	@echo "  make benchmark-csharp   Descriptor load benchmarks (JSON vs CS vs live SQL)"
 	@echo "  make integration-up     Start Postgres/MySQL/ClickHouse (docker compose)"
 	@echo "  make integration-down   Stop and remove compose containers/volumes"
 	@echo "  make clean              Remove venv, caches, and experiment sandbox"
@@ -134,6 +135,10 @@ test-csharp-integration:
 example-csharp:
 	$(COMPOSE) --profile csharp run --rm --no-deps dotnet-test \
 		dotnet run --project csharp/examples/Yaal.Example/Yaal.Example.csproj
+
+benchmark-csharp:
+	$(COMPOSE) --profile csharp run --rm --no-deps dotnet-test \
+		sh -c 'dotnet build csharp/src/Yaal/Yaal.csproj -c Release && dotnet run --project csharp/benchmarks/Yaal.Benchmarks.Generator/Yaal.Benchmarks.Generator.csproj && dotnet run -c Release --project csharp/benchmarks/Yaal.Benchmarks/Yaal.Benchmarks.csproj'
 
 clean: experiment-clean
 	rm -rf $(VENV) __pycache__ .pytest_cache
