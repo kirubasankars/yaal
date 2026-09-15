@@ -21,10 +21,16 @@ make yaal ARGS='list'
 | `$mode` (`params` / `error` / `break` / `json`) | [descriptors — `$mode` rows](descriptors.md#mode-rows) | `user/page` (+ unit tests) |
 | Real SQL (`WITH` / agg) | [Report summary](#real-sql--reportsummary) | `report/summary` |
 | Multi-database | [Multi-database](#multi-database--usercombine) | `user/combine` |
+| Typed results (POCO / dataclass) | [Typed results](#typed-results) | `user/get`, `user/list`, `user/page` |
 | Ahead-of-time compile | [Precompiled descriptors](#precompiled-descriptors) | *(any)* |
+| C# source precompile + register | [C# source precompile](#c-source-precompile-zero-parse-startup) | *(any)* |
+| Explain / compiled SQL preview | [Explain SQL](#explain-sql) | `user/list`, `user/get` |
+| Multi-twig writes | [Multi-twig writes](#multi-twig-writes--usercreate) | `user/create` |
+| Custom data provider | [Custom provider](#custom-data-provider) | *(app code)* |
+| Descriptor load benchmarks | [Benchmarks](#descriptor-load-benchmarks) | `user/list` |
 | Dual runtime | [Dual runtime](#dual-runtime-python--c) | shared fixtures |
 
-Examples are **read-only** (SELECT / shape). They do not insert or update seed data.
+Most examples are **read-only** (SELECT / shape). [`user/create`](#multi-twig-writes--usercreate) inserts rows for write-path demos.
 
 ---
 
@@ -90,14 +96,13 @@ yaal explain user/get          # optional(...) removed; binds []
 
 ```python
 y.query("user/get", args={"id": 1})
+y.query_typed("user/get", UserDto, args={"id": 1})
 ```
 
 ```csharp
 y.Query("user/get", args: new { id = 1 });
-
-// Typed POCO (C# only)
-var user = y.Query<User>("user/get", args: new { id = 1 });
-// user.Roles is List<Role> when output YAML nests roles
+var user = y.Query<UserDto>("user/get", args: new { id = 1 });
+// user.Roles is List<RoleDto> when output YAML nests roles
 ```
 
 ### Sample JSON
@@ -278,6 +283,16 @@ yaal explain user/list
 yaal explain user/list --arg active=1 --arg sort=id
 ```
 
+```python
+y.query("user/list", args={"active": 1})
+y.query_list("user/list", UserRowDto, args={"active": 1})
+```
+
+```csharp
+y.Query("user/list", args: new { active = 1 });
+y.QueryList<UserRowDto>("user/list", args: new { active = 1 });
+```
+
 ### Explain (elision + defaults)
 
 **active omitted** — filter removed; header defaults keep the dynamic term (`u.user_id ASC`) plus the static tiebreaker:
@@ -422,10 +437,12 @@ yaal query user/page --arg page=2 --arg page_size=10
 
 ```python
 y.query("user/page", args={"page": 1, "page_size": 1})
+y.query_typed("user/page", PageDto, args={"page": 1, "page_size": 1})
 ```
 
 ```csharp
 y.Query("user/page", args: new { page = 1, page_size = 1 });
+y.Query<PageDto>("user/page", args: new { page = 1, page_size = 1 });
 ```
 
 ### Sample JSON (`page=1`, `page_size=1`)
@@ -608,13 +625,331 @@ y.Query("user/combine", args: new { id = 1 });
 
 ---
 
+## Typed results
+
+Map shaped JSON to **dataclasses** (Python) or **POCOs** (C#) instead of `dict` / `Dictionary<string, object?>`. Nested YAML properties become nested types; root `type: array` descriptors use `query_list` / `QueryList`.
+
+Typed APIs call `ThrowIfErrors` / `throw_if_errors` first — validation and execution failures raise `YaalQueryException` / `YaalQueryError` instead of returning `{"errors": [...]}`. Use untyped `query()` / `Query()` when you need the soft error dict.
+
+### Shared setup (Python)
+
+```python
+import dataclasses
+import sqlite3
+import tempfile
+from pathlib import Path
+from typing import List, Optional
+
+from yaal import Yaal
+from yaal_errors import YaalQueryError
+
+ROOT = Path("tests/fixtures/api")  # repo-relative
+SCHEMA = Path("docker/sqlite/schema.sql")
+
+db_path = tempfile.mktemp(suffix=".db")
+sqlite3.connect(db_path).executescript(SCHEMA.read_text())
+
+y = Yaal(str(ROOT), debug=True)
+y.setup_data_provider("db", "sqlite3:///" + db_path)
+```
+
+### Shared setup (C#)
+
+```csharp
+using Microsoft.Data.Sqlite;
+using Yaal;
+
+var api = Path.Combine(repoRoot, "tests", "fixtures", "api");
+var dbPath = Path.Combine(Path.GetTempPath(), "yaal-typed.db");
+await using (var con = new SqliteConnection("Data Source=" + dbPath))
+{
+    await con.OpenAsync();
+    await using var cmd = con.CreateCommand();
+    cmd.CommandText = await File.ReadAllTextAsync(Path.Combine(repoRoot, "docker", "sqlite", "schema.sql"));
+    await cmd.ExecuteNonQueryAsync();
+}
+
+var y = new Yaal.Yaal(api, debug: true);
+y.SetupDataProvider("db", "sqlite3:///" + dbPath);
+```
+
+### Model types
+
+Python property names match JSON keys (`id`, `name`, `page_size`). C# uses PascalCase; snake_case YAML keys (`page_size`) map to `PageSize`.
+
+```python
+@dataclasses.dataclass
+class RoleDto:
+    id: int = 0
+    name: str = ""
+
+@dataclasses.dataclass
+class UserDto:
+    id: int = 0
+    name: str = ""
+    roles: Optional[List[RoleDto]] = None
+
+@dataclasses.dataclass
+class UserRowDto:
+    id: int = 0
+    name: str = ""
+    active: int = 0
+
+@dataclasses.dataclass
+class PagingDto:
+    page: int = 0
+    page_size: int = 0
+    total_count: int = 0
+
+@dataclasses.dataclass
+class PageDto:
+    paging: Optional[PagingDto] = None
+    data: Optional[List[UserDto]] = None
+```
+
+```csharp
+public sealed class RoleDto
+{
+    public int Id { get; set; }
+    public string? Name { get; set; }
+}
+
+public sealed class UserDto
+{
+    public int Id { get; set; }
+    public string? Name { get; set; }
+    public List<RoleDto>? Roles { get; set; }
+}
+
+public sealed class UserRowDto
+{
+    public int Id { get; set; }
+    public string? Name { get; set; }
+    public int Active { get; set; }
+}
+
+public sealed class PagingDto
+{
+    public int Page { get; set; }
+    public int PageSize { get; set; }      // JSON key: page_size
+    public int TotalCount { get; set; }    // JSON key: total_count
+}
+
+public sealed class PageDto
+{
+    public PagingDto? Paging { get; set; }
+    public List<UserDto>? Data { get; set; }
+}
+```
+
+### Object descriptor — `user/get`
+
+One user with nested `roles` from join + `parent_rows` shaping.
+
+```python
+user = y.query_typed("user/get", UserDto, args={"id": 1})
+assert user.id == 1
+assert user.name == "admin"
+assert len(user.roles) == 2
+assert user.roles[0].name == "Administrator"
+```
+
+```csharp
+var user = y.Query<UserDto>("user/get", args: new { id = 1 });
+// user.Roles[0].Name == "Administrator"
+```
+
+Same types work for [`user/nested`](#nested-child-sql--usernested) (child SQL branch instead of join).
+
+### Array descriptor — `user/list`
+
+Root output is `type: array` — use `query_list` / `QueryList`, not `query_typed` / `Query<T>` on the row type alone.
+
+```python
+users = y.query_list("user/list", UserRowDto, args={"active": 1})
+for u in users:
+    print(u.id, u.name, u.active)
+
+# Empty result set → []
+users = y.query_list("user/list", UserRowDto, args={"active": 0})
+```
+
+```csharp
+var users = y.QueryList<UserRowDto>("user/list", args: new { active = 1 });
+// or: y.Query<List<UserRowDto>>("user/list", args: new { active = 1 });
+```
+
+Invalid `sort` (not in allowlist) raises on typed path:
+
+```python
+try:
+    y.query_list("user/list", UserRowDto, args={"sort": "nope"})
+except YaalQueryError as e:
+    print(e.errors)  # validation messages
+```
+
+```csharp
+try
+{
+    y.QueryList<UserRowDto>("user/list", args: new { sort = "nope" });
+}
+catch (YaalQueryException ex)
+{
+    Console.WriteLine(ex.Errors[0]["message"]);
+}
+```
+
+### Paginated nest — `user/page`
+
+Nested branches `paging` and `data` map to nested DTOs; `data[].roles` maps recursively.
+
+```python
+page = y.query_typed("user/page", PageDto, args={"page": 1, "page_size": 10})
+assert page.paging.page == 1
+assert page.paging.page_size == 10
+assert page.paging.total_count == 2
+assert page.data[0].roles[0].name == "Administrator"
+```
+
+```csharp
+var page = y.Query<PageDto>("user/page", args: new { page = 1, page_size = 10 });
+// page.Paging.PageSize == 10  (from JSON page_size)
+// page.Data[0].Roles![0].Name == "Administrator"
+```
+
+### `QueryInto` / `query_into` — hydrate existing instances
+
+Object descriptors only. Reuses the instance you pass in (handy for DI-scoped models or partial updates).
+
+```python
+user = UserDto(name="placeholder")
+same = y.query_into("user/get", user, args={"id": 1})
+assert same is user
+assert user.id == 1
+assert user.name == "admin"
+```
+
+```csharp
+var user = new UserDto { Name = "placeholder" };
+var same = y.QueryInto("user/get", user, args: new { id = 1 });
+// ReferenceEquals(same, user) == true
+```
+
+`query_into` / `QueryInto` on an array descriptor (`user/list`) raises — use `query_list` / `QueryList` instead.
+
+### `Materialize` — map an already-fetched result
+
+When you already called untyped `query()` (or received shaped JSON from a cache), map without re-running SQL:
+
+```python
+shaped = y.query("user/get", args={"id": 1})
+user = Yaal.materialize(UserDto, shaped)
+
+# In-place update
+user = UserDto(name="keep-me")
+Yaal.materialize_into(shaped, user)
+```
+
+```csharp
+var shaped = y.Query("user/get", args: new { id = 1 });
+var user = Yaal.Materialize<UserDto>(shaped);
+
+var existing = new UserDto { Name = "keep-me" };
+Yaal.MaterializeInto(shaped, existing);
+```
+
+If `shaped` contains `errors`, materialize throws before mapping.
+
+### Multi-database typed — `user/combine`
+
+```python
+@dataclasses.dataclass
+class AppSlice:
+    id: int = 0
+    name: str = ""
+
+@dataclasses.dataclass
+class FlagsSlice:
+    user_id: int = 0
+    vip: int = 0
+
+@dataclasses.dataclass
+class CombineDto:
+    app: Optional[AppSlice] = None
+    flags: Optional[FlagsSlice] = None
+
+y.setup_data_provider("flags", "sqlite3:///" + flags_db_path)
+combo = y.query_typed("user/combine", CombineDto, args={"id": 1})
+# combo.app.name == "admin", combo.flags.vip == 1
+```
+
+```csharp
+public sealed class CombineDto
+{
+    public AppSlice? App { get; set; }
+    public FlagsSlice? Flags { get; set; }
+}
+
+y.SetupDataProvider("flags", "sqlite3:///" + flagsDb);
+var combo = y.Query<CombineDto>("user/combine", args: new { id = 1 });
+```
+
+### Conversion and mapping rules
+
+| Input (shaped JSON) | Python target | C# target |
+|---|---|---|
+| `"id": 1` | `int` field `id` | `int Id` |
+| `"page_size": 10` | `page_size: int` | `int PageSize` |
+| `"roles": [{...}]` | `List[RoleDto]` | `List<RoleDto>` |
+| `"status": "active"` | `Enum` member | `enum` / `Enum.TryParse` |
+| missing key | default / `None` | default / `null` |
+| extra keys | ignored | ignored |
+
+C# also supports `T[]` array properties, `Guid`, `DateTime`, and nullable value types. Mapping is case-insensitive on keys for both runtimes.
+
+### When to use typed vs untyped
+
+| Situation | Use |
+|---|---|
+| Happy-path API handler returning a known shape | `query_typed` / `Query<T>` |
+| Need `errors` dict for form validation UX | `query()` / `Query()` |
+| Array root descriptor | `query_list` / `QueryList<T>` |
+| Rehydrate DI model in place | `query_into` / `QueryInto` |
+| Cached / proxied shaped JSON | `materialize` / `Materialize` |
+
+---
+
 ## Precompiled descriptors
 
-Compile SQL/YAML ahead of time (no database required). Elision still runs per request.
+Compile SQL/YAML **once** (no database required). At runtime Yaal loads the artifact instead of re-lexing `*.sql` / `$.output.yaml`. **Optional-filter elision still runs per request** — compile time does not bake in arg values.
+
+### Artifact layout (JSON)
+
+```text
+/tmp/yaal-precompiled/
+  user/
+    get.json
+    list.json
+    page.json
+  report/
+    summary.json
+```
+
+Alternate output mappers become `user/get#summary.json` (path + `#` + mapper name).
+
+### Python CLI workflow
 
 ```bash
+# 1. Compile (from repo root)
 yaal --api tests/fixtures/api compile --out /tmp/yaal-precompiled
-yaal --api tests/fixtures/api --precompiled /tmp/yaal-precompiled query user/get --arg id=1
+
+# 2. Run with precompiled dir
+yaal --api tests/fixtures/api --precompiled /tmp/yaal-precompiled \
+  query user/get --arg id=1
+
+# 3. Explain still works — elision applied on top of precompiled twigs
+yaal --api tests/fixtures/api --precompiled /tmp/yaal-precompiled \
+  explain user/list --arg active=1
 ```
 
 ```python
@@ -622,7 +957,16 @@ from yaal import Yaal
 
 y = Yaal("tests/fixtures/api", precompiled="/tmp/yaal-precompiled")
 y.setup_data_provider("db", "sqlite3:////tmp/app.db")
+
 y.query("user/get", args={"id": 1})
+y.query_typed("user/get", UserDto, args={"id": 1})  # typed works the same
+```
+
+### C# JSON workflow
+
+```bash
+dotnet run --project csharp/src/Yaal.Cli -- \
+  compile --api tests/fixtures/api --format json --out /tmp/yaal-precompiled
 ```
 
 ```csharp
@@ -631,7 +975,308 @@ y.SetupDataProvider("db", "sqlite3:////tmp/app.db");
 y.Query("user/get", args: new { id = 1 });
 ```
 
-`debug=True` forces live SQL/YAML and ignores `precompiled`. Details: [descriptors.md](descriptors.md#precompiled-descriptors).
+JSON is deserialized into typed `Branch` / `Twig` models (`System.Text.Json`, snake_case). Twig tokens are compacted at compile time (adjacent whitespace merged; parameters and `sort()`/`dir()` preserved).
+
+### Load order and `debug`
+
+When `debug=false` (default), descriptor resolution is:
+
+1. `RegisterDescriptor` / `UnregisterDescriptor` in-memory map
+2. Per-process memory cache (`ClearCache` clears this only)
+3. `precompiled` directory (JSON files)
+4. Live SQL/YAML from disk
+
+`debug=true` **skips** precompiled and registered shortcuts for descriptor *loading* — forces live parse every time (useful when editing descriptors). It does not disable SQL elision at execution time.
+
+```python
+y = Yaal("tests/fixtures/api", precompiled="/tmp/yaal-precompiled", debug=True)
+# Ignores /tmp/yaal-precompiled; re-reads tests/fixtures/api/*.sql
+```
+
+---
+
+## C# source precompile (zero-parse startup)
+
+Fastest cold start: emit C# source with static `Branch` instances, compile into your app, register at startup. No JSON file I/O or deserialization at runtime.
+
+### Generate sources
+
+```bash
+dotnet run --project csharp/src/Yaal.Cli -- \
+  compile \
+  --api tests/fixtures/api \
+  --format cs \
+  --out csharp/benchmarks/Yaal.Benchmarks/Generated \
+  --namespace Yaal.Benchmarks.Generated
+```
+
+Output (example):
+
+```text
+Generated/
+  YaalDescriptorRegistry.g.cs    # IEnumerable<(string path, Branch branch)> All
+  user/
+    list/UserList.g.cs           # static Branch Descriptor { get; }
+    get/UserGet.g.cs
+    ...
+```
+
+Each generated file exposes a static `Descriptor` property. The registry lists every path:
+
+```csharp
+// YaalDescriptorRegistry.g.cs (generated)
+public static class YaalDescriptorRegistry
+{
+    public static IEnumerable<(string Path, Branch Branch)> All =>
+        new (string, Branch)[]
+        {
+            ("user/list", UserList.Descriptor),
+            ("user/get", UserGet.Descriptor),
+            // ...
+        };
+}
+```
+
+### Register at startup
+
+```csharp
+using Yaal;
+using Yaal.Benchmarks.Generated;
+
+var y = new Yaal.Yaal("tests/fixtures/api");  // api root still needed for path validation
+foreach (var (path, branch) in YaalDescriptorRegistry.All)
+    y.RegisterDescriptor(path, branch);
+
+y.SetupDataProvider("db", "sqlite3:////tmp/app.db");
+y.Query("user/list", args: new { active = 1 });
+y.QueryList<UserRowDto>("user/list", args: new { active = 1 });
+```
+
+`RegisterDescriptor` overwrites any prior registration for the same path (and optional `#mapper` key). `UnregisterDescriptor("user/list")` removes it.
+
+### When to pick JSON vs C#
+
+| Format | Pros | Cons |
+|---|---|---|
+| JSON (`--format json`) | Same artifacts as Python CLI; easy to inspect/diff | Deserialize cost at startup |
+| C# (`--format cs`) | Fastest load (`RegisterDescriptor`); AOT-friendly | Regenerate + rebuild app when descriptors change |
+
+Re-run `compile` in CI when `api/**/*.sql` changes. Check generated files into your repo or emit in a build step.
+
+---
+
+## Explain SQL
+
+`explain` / `ExplainSql` returns compiled SQL **after** optional-filter elision and parameter binding metadata — without executing against the database.
+
+### CLI
+
+```bash
+# user/list — active omitted → optional clause removed
+yaal explain user/list
+
+# active=1 → predicate kept, bind [1]
+yaal explain user/list --arg active=1
+
+# sort/dir defaults from header (sort=id, dir=asc)
+yaal explain user/list --arg active=1 --arg sort=name --arg dir=desc
+
+# Multi-twig: user/page returns one entry per twig
+yaal explain user/page --arg page=1 --arg page_size=10
+```
+
+### Python
+
+```python
+for twig in y.explain_sql("user/list"):
+    print("connection:", twig.get("connection"))
+    print("sql:", twig["sql"])
+    print("parameters:", twig["parameters"])
+    print()
+
+for twig in y.explain_sql("user/list", args={"active": 1, "sort": "name", "dir": "desc"}):
+    print(twig["sql"])
+    # where (u.active = ?) ... order by u.user_name DESC ...
+    print(twig["parameters"])  # [1]
+```
+
+### C#
+
+```csharp
+foreach (var twig in y.ExplainSql("user/list", args: new { active = 1 }))
+{
+    Console.WriteLine(twig["sql"]);
+    Console.WriteLine(twig["parameters"]);
+}
+
+// Multi-database twig shows connection name
+foreach (var twig in y.ExplainSql("user/combine", args: new { id = 1 }))
+    Console.WriteLine($"{twig["connection"]}: {twig["sql"]}");
+```
+
+### What explain shows vs query
+
+| | `query` | `explain` |
+|---|---|---|
+| Hits database | yes | no |
+| Applies `optional()` elision | yes | yes |
+| Resolves `sort()` / `dir()` | yes | yes |
+| Output shaping (nested JSON) | yes | no |
+| Returns | shaped JSON / POCO | `[{method, connection, sql, parameters}, ...]` |
+
+Use explain to debug bind values, verify elision, or log SQL in staging without side effects.
+
+---
+
+## Multi-twig writes — `user/create`
+
+Demonstrates multiple `--sql--` twigs in one operation: insert user, insert role link, then **select** shaped result. Requires a writable database (not used in `make example`).
+
+### Descriptor
+
+```text
+user/create/
+  $.sql
+  $.output.yaml
+```
+
+**`$.sql`**
+
+```sql
+--(id! integer, name! string)--
+
+INSERT INTO users (user_id, user_name, active) VALUES ({{id}}, {{name}}, 1)
+
+--sql--
+
+INSERT INTO user_roles (user_id, role_id) VALUES ({{id}}, 2)
+
+--sql--
+
+SELECT
+    u.user_id,
+    u.user_name,
+    r.role_id,
+    r.role_name
+FROM users u
+INNER JOIN user_roles ur ON ur.user_id = u.user_id
+INNER JOIN roles r ON r.role_id = ur.role_id
+WHERE u.user_id = {{id}}
+ORDER BY r.role_id
+```
+
+Payload fields (`id`, `name`) come from the SQL header without `$args.` prefix. Required `!` marks enforce presence.
+
+**`$.output.yaml`** — same nested shape as `user/get`.
+
+### Commands
+
+Use a **writable** SQLite file (not the read-only demo temp DB):
+
+```bash
+sqlite3 /tmp/yaal-writable.db < docker/sqlite/schema.sql
+
+yaal query user/create \
+  --api tests/fixtures/api \
+  --db 'sqlite3:////tmp/yaal-writable.db' \
+  --payload '{"id": 99, "name": "newbie"}'
+```
+
+```python
+y = Yaal("tests/fixtures/api", debug=True)
+y.setup_data_provider("db", "sqlite3:////tmp/yaal-writable.db")
+created = y.query("user/create", payload={"id": 99, "name": "newbie"})
+# {"id": 99, "name": "newbie", "roles": [{"id": 2, "name": "User"}]}
+
+typed = y.query_typed("user/create", UserDto, payload={"id": 100, "name": "typed"})
+```
+
+```csharp
+var created = y.Query("user/create", payload: new { id = 99, name = "newbie" });
+var typed = y.Query<UserDto>("user/create", payload: new { id = 100, name = "typed" });
+```
+
+Missing required payload field → soft `errors` on untyped path; `YaalQueryException` on typed path.
+
+---
+
+## Custom data provider
+
+Wrap your own engine, connection pool, or mock by implementing the provider interface. Same descriptor tree; your code executes compiled SQL.
+
+### Python
+
+```python
+class LoggingSqliteManager:
+    def get_context(self):
+        return self
+
+    def begin(self):
+        return self._conn
+
+    def execute(self, twig, compiled, parameters):
+        print("SQL:", compiled["content"], "binds:", parameters)
+        # delegate to real driver …
+        return cursor
+
+    def end(self, cursor):
+        cursor.close()
+
+    def error(self, cursor, exc):
+        if cursor:
+            cursor.close()
+
+y.setup_data_provider("db", LoggingSqliteManager())
+```
+
+### C#
+
+```csharp
+public sealed class MyContextManager : IDataProviderContextManager
+{
+    public IDataProvider GetContext() => /* your IDataProvider */;
+}
+
+y.SetupDataProvider("db", new MyContextManager(), scheme: "postgresql");
+// scheme drives ExplainSql placeholder style: %s vs ?
+```
+
+Use this for metrics, read replicas, tenancy routing, or in-memory fakes in unit tests.
+
+---
+
+## Descriptor load benchmarks
+
+Compare descriptor **load** cost (not query execution) for `user/list`:
+
+```bash
+make benchmark-csharp
+```
+
+Typical relative order (machine-dependent):
+
+| Method | What it measures |
+|---|---|
+| Live SQL parse (`CreateDescriptor`) | Read + lex `*.sql` / YAML from disk |
+| JSON file load | Read `list.json` + `System.Text.Json` deserialize |
+| JSON string deserialize | In-memory JSON only |
+| CS static descriptor | Touch `UserList.Descriptor` (generated) |
+| Startup + precompiled JSON + `ExplainSql` | Full `Yaal` ctor + JSON dir + one explain |
+| Startup + `RegisterDescriptor(CS)` + `ExplainSql` | Register generated branch + explain |
+| Startup + `debug` + `ExplainSql` | Live parse every time |
+
+Generated CS + `RegisterDescriptor` is usually fastest for production cold start. JSON precompile is a good middle ground when you want cross-language artifacts. See [`csharp/benchmarks/`](../csharp/benchmarks/).
+
+---
+
+## Precompiled descriptors (quick reference)
+
+```bash
+yaal --api tests/fixtures/api compile --out /tmp/yaal-precompiled
+yaal --api tests/fixtures/api --precompiled /tmp/yaal-precompiled query user/get --arg id=1
+```
+
+Details: [Precompiled descriptors](#precompiled-descriptors) · [C# source precompile](#c-source-precompile-zero-parse-startup) · [descriptors.md](descriptors.md#precompiled-descriptors).
 
 ---
 
@@ -721,5 +1366,17 @@ y.Query("orders/list", args: new { status = "open" });
 | C# | [`csharp/examples/Yaal.Example`](../csharp/examples/Yaal.Example/) · `make example-csharp` |
 
 Both print get / nested / list / page / `report/summary` / `user/combine` and show `explain` elision for `user/list`.
+
+### Example doc map
+
+| Topic | Section |
+|---|---|
+| Typed mapping (all fixtures) | [Typed results](#typed-results) |
+| JSON precompile | [Precompiled descriptors](#precompiled-descriptors) |
+| C# `RegisterDescriptor` | [C# source precompile](#c-source-precompile-zero-parse-startup) |
+| `explain` / `ExplainSql` | [Explain SQL](#explain-sql) |
+| INSERT + SELECT twigs | [Multi-twig writes](#multi-twig-writes--usercreate) |
+| Mock / custom engine | [Custom data provider](#custom-data-provider) |
+| Load-time performance | [Descriptor load benchmarks](#descriptor-load-benchmarks) |
 
 See also: [descriptors.md](descriptors.md) · [README.md](README.md)

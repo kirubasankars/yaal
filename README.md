@@ -150,7 +150,7 @@ var user = y.Query<User>("user/get", args: new { id = 1 });
 var users = y.QueryList<User>("user/list", args: new { active = 1 });
 ```
 
-Details: [`python/README.md`](python/README.md) · [`csharp/README.md`](csharp/README.md).
+Walkthroughs: [examples — typed results](docs/examples.md#typed-results). Package docs: [`python/README.md`](python/README.md) · [`csharp/README.md`](csharp/README.md).
 
 ### Dual runtime
 
