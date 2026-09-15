@@ -197,7 +197,10 @@ public static class Executor
         {
             if (useParentRows)
             {
-                output = JsonUtil.DeepCopyRows(parentRows);
+                output = parentRows
+                    .Select(row => (IDictionary<string, object?>)new Dictionary<string, object?>(
+                        row, StringComparer.OrdinalIgnoreCase))
+                    .ToList();
             }
             else
             {
@@ -260,8 +263,15 @@ public static class Executor
 
                     if (string.IsNullOrEmpty(outputPartitionBy))
                     {
-                        foreach (var row in output)
-                            row[branchName] = JsonUtil.DeepCopy(subNodeOutput);
+                        if (output.Count == 1)
+                        {
+                            output[0][branchName] = subNodeOutput;
+                        }
+                        else
+                        {
+                            foreach (var row in output)
+                                row[branchName] = JsonUtil.DeepCopy(subNodeOutput);
+                        }
                     }
                     else
                     {
@@ -300,10 +310,9 @@ public static class Executor
                         {
                             var row = rows[0];
                             var partitionKey = PartitionKey(row[outputPartitionBy]);
-                            row[branchName] = JsonUtil.DeepCopy(
-                                subNodeGroups.TryGetValue(partitionKey, out var children)
-                                    ? children
-                                    : new List<IDictionary<string, object?>>());
+                            row[branchName] = subNodeGroups.TryGetValue(partitionKey, out var children)
+                                ? children
+                                : new List<IDictionary<string, object?>>();
                             newOutput.Add(row);
                         }
                         output = newOutput;

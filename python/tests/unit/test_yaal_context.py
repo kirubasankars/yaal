@@ -55,23 +55,16 @@ class TestYaalContext(unittest.TestCase):
         self.assertEqual(Shape, type(context.get_prop("$args")))
         self.assertEqual(Shape, type(context.get_prop("$params")))
 
-    def test_create_context_with_validator(self):
-        model = {}
-        validator = {}
+    def test_create_context_with_schema(self):
+        model = {"type": "object", "properties": {}}
         descriptor = {
             "path": "",
             "model": {
                 "args": model,
                 "payload": model,
             },
-            "_validators": {
-                "args": validator,
-                "payload": validator,
-            }
         }
         context = yaal.create_context(descriptor=descriptor)
 
         self.assertEqual(model, context.get_prop("$args").get_schema())
-        self.assertEqual(validator, context.get_prop("$args").get_validator())
         self.assertEqual(model, context.get_schema())
-        self.assertEqual(validator, context.get_validator())

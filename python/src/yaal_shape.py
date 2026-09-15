@@ -58,20 +58,63 @@ def _coerce_boolean(value):
     raise ValueError("value expected as boolean, given " + str(type(value)))
 
 
+def _schema_type_ok(value, expected):
+    if expected == "integer":
+        return isinstance(value, int) and not isinstance(value, bool)
+    if expected == "number":
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    if expected == "string":
+        return isinstance(value, str)
+    if expected == "boolean":
+        return isinstance(value, bool)
+    if expected == "object":
+        return isinstance(value, dict)
+    if expected == "array":
+        return isinstance(value, list)
+    return True
+
+
+def _validate_against_schema(data, schema, errors):
+    """Check types and required fields on a header-derived input model."""
+    if not isinstance(schema, dict):
+        return
+    expected = schema.get(yaal_const.TYPE)
+    if expected and not _schema_type_ok(data, expected):
+        errors.append({"message": "%r is not of type %r" % (data, expected)})
+        return
+    if expected == "array" or isinstance(data, list):
+        return
+    if not isinstance(data, dict):
+        return
+
+    data_l = {str(k).lower(): v for k, v in data.items()}
+    for name in schema.get("required") or []:
+        if isinstance(name, str) and name.lower() not in data_l:
+            errors.append({"message": "%r is a required property" % name})
+
+    props = schema.get(yaal_const.PROPERTIES) or {}
+    if not isinstance(props, dict):
+        return
+    for name, prop_schema in props.items():
+        key = name.lower() if isinstance(name, str) else name
+        if key not in data_l:
+            continue
+        _validate_against_schema(data_l[key], prop_schema, errors)
+
+
 # Framework-owned keys allowed in Shape data; user/schema properties may not start with $.
 _ALLOWED_DOLLAR_DATA_KEYS = frozenset({"$run_id"})
 
 
 class Shape:
 
-    def __init__(self, schema=None, data=None, validator=None, parent_shape=None, extras=None):
+    def __init__(self, schema=None, data=None, parent_shape=None, extras=None):
         self._array = False
         self._object = False
         self._input_properties = None
         self._index = 0
 
         self._schema = schema
-        self._validator = validator
 
         self._parent = parent_shape
         self._extras = extras
@@ -133,7 +176,7 @@ class Shape:
 
         if self._array:
             shapes = []
-            item_schema = copy.deepcopy(schema)
+            item_schema = dict(schema)
             item_schema[yaal_const.TYPE] = yaal_const.OBJECT
             idx = 0
             for item in self._data:
@@ -258,14 +301,8 @@ class Shape:
                     x["name"] = name
                     errors.append(x)
 
-        if self._validator:
-            error_list = list(self._validator.iter_errors(self._data))
-            if error_list:
-                for x in error_list:
-                    m = {
-                        "message": x.message
-                    }
-                    errors.append(m)
+        if self._schema:
+            _validate_against_schema(self._data, self._schema, errors)
 
         return errors
 
@@ -294,9 +331,6 @@ class Shape:
 
     def get_schema(self):
         return self._schema
-
-    def get_validator(self):
-        return self._validator
 
     def __str__(self):
         return json.dumps(self.get_data())

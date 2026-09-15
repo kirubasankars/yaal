@@ -29,7 +29,11 @@ public sealed class DataProviderHelper
             }
         }
 
-        var sortMap = SortDirDesugar.ResolveValues(twig, inputShape);
+        Dictionary<string, string?> sortMap;
+        if (twig.HasSortDir == false)
+            sortMap = new Dictionary<string, string?>(StringComparer.Ordinal);
+        else
+            sortMap = SortDirDesugar.ResolveValues(twig, inputShape);
         var nullsKey = string.Join("\0", nulls.Select(n => n.ToLowerInvariant()).OrderBy(n => n, StringComparer.Ordinal));
         var sortKey = string.Join("\0", sortMap.OrderBy(kv => kv.Key, StringComparer.Ordinal)
             .Select(kv => kv.Key + "=" + (kv.Value ?? "")));

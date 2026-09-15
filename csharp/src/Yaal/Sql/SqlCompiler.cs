@@ -39,7 +39,7 @@ public static class SqlCompiler
     {
         var n = stmt.Count;
         var j = SkipWsTokens(stmt, orderIdx + 1);
-        if (j >= n || stmt[j].Type != "word" || !stmt[j].Value.Equals("by", StringComparison.OrdinalIgnoreCase))
+        if (j >= n || !SqlTokenUtil.TokenEquals(stmt[j], "by"))
             return (false, null, orderIdx);
 
         var k = SkipWsTokens(stmt, j + 1);
@@ -105,7 +105,7 @@ public static class SqlCompiler
         while (idx < stmt.Count)
         {
             var token = stmt[idx];
-            if (token.Type == "word" && token.Value.Equals("order", StringComparison.OrdinalIgnoreCase))
+            if (SqlTokenUtil.TokenEquals(token, "order"))
             {
                 var (isOrderBy, fragments, nextIdx) = CompileOrderBy(stmt, idx, sortMap);
                 if (isOrderBy)
@@ -159,7 +159,7 @@ public static class SqlCompiler
                     idx += 1;
                     continue;
                 }
-                if (token.Type == "word" && token.Value.Trim().Equals("or", StringComparison.OrdinalIgnoreCase))
+                if (SqlTokenUtil.TokenEquals(token, "or"))
                 {
                     // Stay in skip mode to also drop whitespace after "or".
                     idx += 1;

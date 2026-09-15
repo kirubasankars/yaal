@@ -11,22 +11,17 @@ public static class ContextFactory
     public static Shape CreateContext(Branch descriptor, object? payload = null, object? args = null)
     {
         var model = descriptor.Model;
-        var validators = descriptor.Validators;
 
         Dictionary<string, object?>? argsSchema = null;
         Dictionary<string, object?>? payloadSchema = null;
-        Json.Schema.JsonSchema? argsValidator = null;
-        Json.Schema.JsonSchema? payloadValidator = null;
 
-        if (model != null && validators != null)
+        if (model != null)
         {
             argsSchema = model.Args;
             payloadSchema = model.Payload;
-            validators.TryGetValue("args", out argsValidator);
-            validators.TryGetValue("payload", out payloadValidator);
         }
 
-        var argsShape = new Shape(schema: argsSchema, validator: argsValidator);
+        var argsShape = new Shape(schema: argsSchema);
         if (args != null)
         {
             var argsDict = JsonUtil.ToDict(args) ?? JsonUtil.ObjectToDictionary(args);
@@ -52,7 +47,6 @@ public static class ContextFactory
 
         return new Shape(
             schema: payloadSchema,
-            validator: payloadValidator,
             data: payloadData,
             extras: extras);
     }

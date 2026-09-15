@@ -252,7 +252,7 @@ public static class SqlParser
 
         var ast = new SqlAst();
         var sqlStmts = new List<Twig>();
-        var braceGroups = new List<SqlToken>();
+        var braceGroups = new Dictionary<int, SqlToken>();
 
         var sqlStmt = new Twig();
 
@@ -310,7 +310,7 @@ public static class SqlParser
                 }
 
                 token.Type = "sql";
-                if (sqlStmt.Content.Any(x => x.Type == "word"))
+                if (SqlTokenUtil.HasSignificantSqlContent(sqlStmt.Content))
                     sqlStmts.Add(sqlStmt);
 
                 sqlStmt = new Twig();
@@ -325,26 +325,25 @@ public static class SqlParser
                 continue;
             }
 
-            if (tokenType == "brace")
+            if (tokenType == "brace" && token.Group is int groupId)
             {
-                var exists = braceGroups.FirstOrDefault(x => x.Group == token.Group);
-                if (exists == null)
+                if (!braceGroups.TryGetValue(groupId, out var existing))
                 {
-                    braceGroups.Add(token);
+                    braceGroups[groupId] = token;
                     token.Content = new List<string>();
                 }
                 else
                 {
-                    var contentList = (List<string>)exists.Content!;
+                    var contentList = (List<string>)existing.Content!;
                     contentList.Add(token.Value);
-                    exists.Content = string.Join("", contentList);
-                    braceGroups.Remove(exists);
+                    existing.Content = string.Join("", contentList);
+                    braceGroups.Remove(groupId);
                 }
             }
 
             if (braceGroups.Count > 0)
             {
-                foreach (var g in braceGroups)
+                foreach (var g in braceGroups.Values)
                 {
                     if (g.Content is List<string> list)
                         list.Add(token.Value);
@@ -356,7 +355,7 @@ public static class SqlParser
             tc += 1;
         }
 
-        if (sqlStmt.Content.Any(x => x.Type == "word"))
+        if (SqlTokenUtil.HasSignificantSqlContent(sqlStmt.Content))
             sqlStmts.Add(sqlStmt);
 
         var astParameters = ast.Parameters;
@@ -396,6 +395,9 @@ public static class SqlParser
                 stmt.Nullable = null;
 
             SortDirDesugar.ValidateDynamicOrderBy(stmt.Content, method);
+
+            stmt.HasSortDir = stmt.Content.Any(t => t.Type == "sort");
+            stmt.Content = TwigCompaction.Compact(stmt.Content);
         }
 
         if (sqlStmts.Count > 0)

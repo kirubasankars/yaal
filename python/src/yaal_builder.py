@@ -5,8 +5,6 @@
 import os
 import re
 
-from jsonschema import FormatChecker, Draft4Validator
-
 from yaal_parser import lexer, parser
 from yaal_shape import _to_lower_keys_deep, _to_lower_keys
 
@@ -24,23 +22,9 @@ _SQL_TO_JSON_TYPE = {
 def _order_list_by_dots(names):
     if not names:
         return []
-
-    dots = [x.count(".") for x in names]
-    ordered = []
-    for x in range(0, len(dots)):
-        if len(dots) == 0:
-            break
-
-        el = min(dots)
-        while True:
-            try:
-                idx = dots.index(el)
-                ordered.append(names[idx].lower())
-                del names[idx]
-                del dots[idx]
-            except Exception:
-                break
-    return ordered
+    indexed = list(enumerate(names))
+    indexed.sort(key=lambda pair: (pair[1].count("."), pair[0]))
+    return [pair[1].lower() for pair in indexed]
 
 
 def _build_branch_map_by_files(branch_map, item):
@@ -322,13 +306,5 @@ def create_trunk(path, output_mapper, content_reader):
     bag = {"connections": ["db"]}
     _build_branch(trunk, trunk_map["$"], content_reader, payload_schema, output_schema, trunk["model"], bag)
     trunk["connections"] = bag["connections"]
-
-    payload_validator = Draft4Validator(schema=payload_schema, format_checker=FormatChecker())
-    args_validator = Draft4Validator(schema=args_schema, format_checker=FormatChecker())
-
-    trunk["_validators"] = {
-        "args": args_validator,
-        "payload": payload_validator
-    }
 
     return trunk

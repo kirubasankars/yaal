@@ -2,6 +2,7 @@
 # Use of this source code is governed by a MIT style
 # license that can be found in the LICENSE file.
 
+import copy
 import json
 import os
 import tempfile
@@ -35,13 +36,13 @@ class TestPrecompile(unittest.TestCase):
         self.assertIsInstance(twig["content"][0], dict)
         self.assertIn("type", twig["content"][0])
 
-    def test_import_rebuilds_validators(self):
+    def test_import_keeps_model_without_validators(self):
         y = Yaal(str(FIXTURE_API), debug=True)
         desc = y.create_descriptor("user/get")
         exported = export_descriptor(desc)
-        loaded = import_descriptor(exported)
-        self.assertIn("_validators", loaded)
-        self.assertIsNotNone(loaded["_validators"]["args"])
+        loaded = import_descriptor(copy.deepcopy(exported))
+        self.assertNotIn("_validators", loaded)
+        self.assertIn("args", loaded["model"])
 
     def test_compile_and_query_matches_source(self):
         import sqlite3

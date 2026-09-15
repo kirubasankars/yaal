@@ -11,24 +11,21 @@ import json
 import os
 from pathlib import Path
 
-from jsonschema import Draft4Validator, FormatChecker
-
 PRECOMPILE_VERSION = 1
 
 
 def export_descriptor(descriptor):
-    """Deep-copy a trunk for JSON export: drop validators, keep twig tokens."""
+    """Deep-copy a trunk for JSON export: drop leftover validators, keep twig tokens."""
     data = copy.deepcopy(descriptor)
     _strip_validators(data)
     return data
 
 
 def import_descriptor(data):
-    """Load a precompiled trunk dict and rebuild Draft4 validators from schemas."""
-    descriptor = copy.deepcopy(data)
-    descriptor.pop("_yaal_precompile", None)
-    _attach_validators(descriptor)
-    return descriptor
+    """Load a precompiled trunk dict (input model stays on descriptor.model)."""
+    data.pop("_yaal_precompile", None)
+    _strip_validators(data)
+    return data
 
 
 def _strip_validators(descriptor):
@@ -37,20 +34,6 @@ def _strip_validators(descriptor):
     descriptor.pop("_validators", None)
     for branch in descriptor.get("branches") or []:
         _strip_validators(branch)
-
-
-def _attach_validators(trunk):
-    model = trunk.get("model") or {}
-    validators = {}
-    for key in ("args", "payload"):
-        schema = model.get(key)
-        if schema:
-            validators[key] = Draft4Validator(
-                schema=schema, format_checker=FormatChecker()
-            )
-        else:
-            validators[key] = None
-    trunk["_validators"] = validators
 
 
 def discover_output_mappers(api_root, path):
