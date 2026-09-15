@@ -69,9 +69,22 @@ users = y.query_list("user/list", User, args={"active": 1})
 
 existing = User(name="placeholder")
 y.query_into("user/get", existing, args={"id": 1})
+
+# Materialize an already-fetched dictionary result
+shaped = y.query("user/get", args={"id": 1})
+mapped = Yaal.materialize(User, shaped)
 ```
 
-Typed queries raise `YaalQueryError` on validation/execution errors; use `query()` if you need the `errors` dict.
+Typed queries raise `YaalQueryError` on validation/execution errors; use `query()` if you need the `errors` dict. Mapping lives in `yaal_materializer.py` (dataclasses, `__init__` annotations, or plain classes with type hints).
+
+### Precompiled descriptors
+
+```bash
+yaal --api tests/fixtures/api compile --out /tmp/yaal-precompiled
+y = Yaal("tests/fixtures/api", precompiled="/tmp/yaal-precompiled")
+```
+
+`debug=True` forces live SQL/YAML and ignores `precompiled`. See [descriptors.md](../docs/descriptors.md#precompiled-descriptors).
 
 Descriptors are shared with the .NET library under [`../tests/fixtures/api/`](../tests/fixtures/api/) (`user/get`, `user/nested`, `user/list`, `user/page`, `report/summary`, `user/combine`).
 
