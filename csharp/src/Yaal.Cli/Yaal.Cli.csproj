@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>yaal</AssemblyName>
+    <RootNamespace>Yaal.Cli</RootNamespace>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>yaal</ToolCommandName>
+    <!-- PackAsTool + ProjectReference: avoid duplicate "Yaal" entry in deps.json -->
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <PackageId>Yaal.Cli</PackageId>
+    <Version>0.4.0</Version>
+    <Description>CLI for compiling and inspecting Yaal SQL→JSON descriptors.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Yaal\Yaal.csproj" />
+  </ItemGroup>
+
+</Project>

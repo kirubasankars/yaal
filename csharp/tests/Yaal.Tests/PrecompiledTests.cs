@@ -15,6 +15,20 @@ public class PrecompiledTests
             "tests", "fixtures", "api"));
 
     [Fact]
+    public void Typed_export_import_roundtrip()
+    {
+        var y = new Yaal(FixtureApi, debug: true);
+        var branch = y.CreateDescriptor("user/get");
+        var json = Precompiled.ExportJson(branch, indented: true);
+        var loaded = Precompiled.Import(json);
+
+        loaded.Path.Should().Be("user/get");
+        loaded.Twigs.Should().NotBeNull().And.NotBeEmpty();
+        loaded.Model.Should().NotBeNull();
+        loaded.Model!.Args.Should().NotBeNull();
+    }
+
+    [Fact]
     public void Load_python_compiled_json_preserves_twig_tokens()
     {
         // Build artifact with Python shape by compiling via TrunkBuilder then
@@ -23,7 +37,7 @@ public class PrecompiledTests
         var branch = y.CreateDescriptor("user/get");
         branch.Twigs.Should().NotBeNull().And.NotBeEmpty();
 
-        var json = JsonUtil.Serialize(BranchToDict(branch), indented: true);
+        var json = Precompiled.ExportJson(branch, indented: true);
         using var doc = System.Text.Json.JsonDocument.Parse(json);
         var loaded = Precompiled.Import(doc.RootElement);
 
@@ -31,8 +45,8 @@ public class PrecompiledTests
         loaded.Twigs.Should().NotBeNull().And.NotBeEmpty();
         loaded.Twigs![0].Content.Should().NotBeEmpty();
         loaded.Twigs[0].Content[0].Type.Should().NotBeNullOrEmpty();
-        loaded.Validators.Should().NotBeNull();
-        loaded.Validators!.Should().ContainKey("args");
+        loaded.Model.Should().NotBeNull();
+        loaded.Model!.Args.Should().NotBeNull();
     }
 
     [Fact]
@@ -40,7 +54,7 @@ public class PrecompiledTests
     {
         var y = new Yaal(FixtureApi, debug: true);
         var branch = y.CreateDescriptor("user/list");
-        var json = JsonUtil.Serialize(BranchToDict(branch), indented: true);
+        var json = Precompiled.ExportJson(branch, indented: true);
 
         var dir = Path.Combine(Path.GetTempPath(), "yaal-pre-" + Guid.NewGuid().ToString("n"));
         Directory.CreateDirectory(Path.Combine(dir, "user"));
@@ -137,6 +151,8 @@ public class PrecompiledTests
                 };
                 if (t.Nullable != null)
                     td["nullable"] = t.Nullable;
+                if (t.HasSortDir != null)
+                    td["has_sort_dir"] = t.HasSortDir.Value;
                 return td;
             }).ToList();
         }

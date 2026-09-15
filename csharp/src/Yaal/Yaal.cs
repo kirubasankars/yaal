@@ -14,6 +14,7 @@ public sealed class Yaal
     private readonly string _rootPath;
     private readonly IContentReader _contentReader;
     private readonly Dictionary<string, Branch> _descriptors = new();
+    private readonly Dictionary<string, Branch> _registered = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, IDataProviderContextManager> _dataProviders = new();
     private readonly Dictionary<string, string> _dataProviderSchemes = new();
     private readonly bool _debug;
@@ -83,6 +84,23 @@ public sealed class Yaal
     public void ClearCache()
     {
         _descriptors.Clear();
+    }
+
+    /// <summary>Register an in-memory descriptor (overwrites an existing registration for the same key).</summary>
+    public void RegisterDescriptor(string descriptorPath, Branch branch, string? outputMapper = null)
+    {
+        ArgumentNullException.ThrowIfNull(branch);
+        var key = DescriptorKey(descriptorPath, outputMapper);
+        _registered[key] = branch;
+        _descriptors.Remove(key);
+    }
+
+    /// <summary>Remove a registered in-memory descriptor.</summary>
+    public void UnregisterDescriptor(string descriptorPath, string? outputMapper = null)
+    {
+        var key = DescriptorKey(descriptorPath, outputMapper);
+        _registered.Remove(key);
+        _descriptors.Remove(key);
     }
 
     public object? Query(
@@ -171,9 +189,10 @@ public sealed class Yaal
         if (!_debug && _descriptors.TryGetValue(cacheKey, out var cached))
             return cached;
 
-        // debug=true forces live SQL/YAML; otherwise prefer precompiled artifacts.
         Branch descriptor;
-        if (!string.IsNullOrEmpty(_precompiled) && !_debug)
+        if (!_debug && _registered.TryGetValue(cacheKey, out var registered))
+            descriptor = registered;
+        else if (!string.IsNullOrEmpty(_precompiled) && !_debug)
             descriptor = Precompiled.LoadFromDirectory(_precompiled, descriptorPath, outputMapper);
         else
             descriptor = CreateDescriptor(descriptorPath, outputMapper);
