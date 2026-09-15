@@ -48,7 +48,7 @@ public static class ObjectMaterializer
             return typed;
 
         if (shapedResult is IDictionary<string, object?> dict)
-            return (T)MapObject(typeof(T), dict)!;
+            return (T)MapObject(typeof(T), dict, strict: true)!;
 
         throw new InvalidOperationException(
             "Expected a shaped object (dictionary) but got " + shapedResult.GetType().Name);
@@ -65,7 +65,7 @@ public static class ObjectMaterializer
         var items = NormalizeList(shapedResult);
         var result = new List<T>(items.Count);
         foreach (var item in items)
-            result.Add(MapElement<T>(item));
+            result.Add(MapElement<T>(item, strict: true));
         return result;
     }
 
@@ -74,17 +74,18 @@ public static class ObjectMaterializer
         ArgumentNullException.ThrowIfNull(into);
 
         if (shapedResult is IDictionary<string, object?> dict)
-            MapIntoObject(into, dict);
+            MapIntoObject(into, dict, strict: false);
         else
             throw new InvalidOperationException(
                 "Expected a shaped object (dictionary) but got " + (shapedResult?.GetType().Name ?? "null"));
     }
 
-    internal static object? MapObject(Type type, IDictionary<string, object?> source)
+    internal static object? MapObject(Type type, IDictionary<string, object?> source, bool strict = true)
     {
+        EnsureHasBindableProperties(type);
         var instance = Activator.CreateInstance(type)
             ?? throw new InvalidOperationException("Could not create instance of " + type.FullName);
-        MapIntoObject(instance, source);
+        MapIntoObject(instance, source, strict);
         return instance;
     }
 
@@ -100,13 +101,17 @@ public static class ObjectMaterializer
             "Expected a shaped array (list) but got " + (shapedResult?.GetType().Name ?? "null"));
     }
 
-    private static void MapIntoObject(object target, IDictionary<string, object?> source)
+    private static void MapIntoObject(object target, IDictionary<string, object?> source, bool strict)
     {
         var map = GetTypeMap(target.GetType());
         foreach (var binding in map.Properties)
         {
             if (!TryGetValue(source, binding.Key, out var raw))
+            {
+                if (strict)
+                    throw MissingColumnException(binding.Property, target.GetType());
                 continue;
+            }
 
             if (raw == null)
             {
@@ -116,21 +121,22 @@ public static class ObjectMaterializer
 
             if (binding.IsList)
             {
-                SetListProperty(target, binding, raw);
+                SetListProperty(target, binding, raw, strict);
                 continue;
             }
 
             if (IsDictionary(raw))
             {
+                var nestedDict = AsDictionary(raw)!;
                 var nested = binding.Property.GetValue(target);
                 if (nested == null)
                 {
-                    nested = MapObject(binding.TargetType, AsDictionary(raw)!);
+                    nested = MapObject(binding.TargetType, nestedDict, strict);
                     binding.Property.SetValue(target, nested);
                 }
                 else
                 {
-                    MapIntoObject(nested, AsDictionary(raw)!);
+                    MapIntoObject(nested, nestedDict, strict);
                 }
                 continue;
             }
@@ -139,7 +145,7 @@ public static class ObjectMaterializer
         }
     }
 
-    private static void SetListProperty(object target, PropertyBinding binding, object raw)
+    private static void SetListProperty(object target, PropertyBinding binding, object raw, bool strict)
     {
         var elementType = binding.ElementType!;
         var items = NormalizeListItems(raw);
@@ -149,7 +155,7 @@ public static class ObjectMaterializer
         {
             list.Clear();
             foreach (var item in items)
-                list.Add(MapElement(item, elementType));
+                list.Add(MapElement(item, elementType, strict));
             return;
         }
 
@@ -157,14 +163,14 @@ public static class ObjectMaterializer
         {
             var array = Array.CreateInstance(elementType, items.Count);
             for (var i = 0; i < items.Count; i++)
-                array.SetValue(MapElement(items[i], elementType), i);
+                array.SetValue(MapElement(items[i], elementType, strict), i);
             binding.Property.SetValue(target, array);
             return;
         }
 
         var typedList = (IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(elementType))!;
         foreach (var item in items)
-            typedList.Add(MapElement(item, elementType));
+            typedList.Add(MapElement(item, elementType, strict));
         binding.Property.SetValue(target, typedList);
     }
 
@@ -177,7 +183,7 @@ public static class ObjectMaterializer
         throw new InvalidOperationException("Expected a list value but got " + raw.GetType().Name);
     }
 
-    private static T MapElement<T>(object? item)
+    private static T MapElement<T>(object? item, bool strict)
     {
         if (item == null)
             return default!;
@@ -186,12 +192,12 @@ public static class ObjectMaterializer
             return typed;
 
         if (item is IDictionary<string, object?> dict)
-            return (T)MapObject(typeof(T), dict)!;
+            return (T)MapObject(typeof(T), dict, strict)!;
 
         return (T)ConvertValue(item, typeof(T))!;
     }
 
-    private static object? MapElement(object? item, Type elementType)
+    private static object? MapElement(object? item, Type elementType, bool strict)
     {
         if (item == null)
             return null;
@@ -200,7 +206,7 @@ public static class ObjectMaterializer
             return item;
 
         if (item is IDictionary<string, object?> dict)
-            return MapObject(elementType, dict);
+            return MapObject(elementType, dict, strict);
 
         return ConvertValue(item, elementType);
     }
@@ -216,6 +222,8 @@ public static class ObjectMaterializer
             foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
             {
                 if (!prop.CanWrite)
+                    continue;
+                if (prop.GetCustomAttribute<YaalIgnoreAttribute>() != null)
                     continue;
 
                 var propType = prop.PropertyType;
@@ -234,6 +242,27 @@ public static class ObjectMaterializer
             Cache[type] = cached;
             return cached;
         }
+    }
+
+    private static void EnsureHasBindableProperties(Type type)
+    {
+        var map = GetTypeMap(type);
+        if (map.Properties.Length == 0)
+        {
+            throw new InvalidOperationException(
+                $"Type {type.Name} has no public writable properties to map. " +
+                "Add public getters/setters or mark client-only properties with [YaalIgnore].");
+        }
+    }
+
+    private static InvalidOperationException MissingColumnException(PropertyInfo property, Type ownerType)
+    {
+        var snake = ToSnakeCase(property.Name);
+        var tried = string.Equals(snake, property.Name, StringComparison.OrdinalIgnoreCase)
+            ? property.Name
+            : property.Name + ", " + snake;
+        return new InvalidOperationException(
+            $"Property '{property.Name}' on type {ownerType.Name} has no matching column in query result (tried {tried}).");
     }
 
     private static bool TryGetElementType(Type type, out Type? elementType)

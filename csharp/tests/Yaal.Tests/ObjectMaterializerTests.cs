@@ -135,7 +135,7 @@ public class ObjectMaterializerTests : IDisposable
     [Fact]
     public void Materialize_static_helpers_work()
     {
-        var shaped = new Dictionary<string, object?> { ["id"] = 7L, ["name"] = "x" };
+        var shaped = new Dictionary<string, object?> { ["id"] = 7L, ["name"] = "x", ["active"] = 1L };
         var user = Yaal.Materialize<UserRowDto>(shaped);
         user.Id.Should().Be(7);
     }
@@ -194,6 +194,7 @@ public class ObjectMaterializerTests : IDisposable
         {
             ["id"] = 1L,
             ["name"] = "admin",
+            ["active"] = 1L,
             ["extra"] = "ignored",
         };
 
@@ -209,6 +210,7 @@ public class ObjectMaterializerTests : IDisposable
         {
             ["ID"] = 5L,
             ["NAME"] = "x",
+            ["ACTIVE"] = 1L,
         };
 
         var user = ObjectMaterializer.Map<UserRowDto>(shaped);
@@ -448,7 +450,12 @@ public class ObjectMaterializerTests : IDisposable
     [Fact]
     public void Map_invalid_guid_throws()
     {
-        var shaped = new Dictionary<string, object?> { ["id"] = "not-a-guid" };
+        var shaped = new Dictionary<string, object?>
+        {
+            ["status"] = "Active",
+            ["id"] = "not-a-guid",
+            ["created"] = "2024-01-15T10:30:00",
+        };
         Action act = () => ObjectMaterializer.Map<ConversionDto>(shaped);
         act.Should().Throw<FormatException>();
     }
@@ -463,11 +470,11 @@ public class ObjectMaterializerTests : IDisposable
     }
 
     [Fact]
-    public void Map_empty_dict_produces_default_poco()
+    public void Map_empty_dict_strict_throws()
     {
-        var user = ObjectMaterializer.Map<UserRowDto>(new Dictionary<string, object?>());
-        user.Id.Should().Be(0);
-        user.Name.Should().BeNull();
+        Action act = () => ObjectMaterializer.Map<UserRowDto>(new Dictionary<string, object?>());
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Property 'Id'*no matching column*");
     }
 
     [Fact]
@@ -559,12 +566,230 @@ public class ObjectMaterializerTests : IDisposable
     }
 
     [Fact]
-    public void Query_user_get_nonexistent_returns_default_poco()
+    public void Query_user_get_nonexistent_strict_throws()
     {
-        var user = _yaal.Query<UserDto>("user/get", args: new { id = 9999 });
-        user.Id.Should().Be(0);
-        user.Name.Should().BeNull();
-        user.Roles.Should().BeNull();
+        Action act = () => _yaal.Query<UserDto>("user/get", args: new { id = 9999 });
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*no matching column*");
+    }
+
+    [Fact]
+    public void QueryList_user_simple_maps_lowercase_aliases_to_pascal_case()
+    {
+        var users = _yaal.QueryList<SimpleUserDto>("user/simple");
+        users.Should().ContainSingle();
+        users[0].Id.Should().Be(1);
+        users[0].Name.Should().Be("kiruba");
+    }
+
+    [Fact]
+    public void Map_strict_missing_property_throws()
+    {
+        var shaped = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["id"] = 1L,
+            ["name"] = "admin",
+        };
+
+        Action act = () => ObjectMaterializer.Map<UserDto>(shaped);
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Property 'Roles'*no matching column*");
+    }
+
+    [Fact]
+    public void Map_yaal_ignore_skips_missing_property()
+    {
+        var shaped = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["id"] = 1L,
+            ["name"] = "admin",
+        };
+
+        var user = ObjectMaterializer.Map<UserWithIgnoredRolesDto>(shaped);
+        user.Id.Should().Be(1);
+        user.Name.Should().Be("admin");
+        user.DisplayLabel.Should().BeNull();
+    }
+
+    [Fact]
+    public void Map_strict_nested_missing_property_throws()
+    {
+        var shaped = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["id"] = 1L,
+            ["profile"] = new Dictionary<string, object?> { ["name"] = "admin" },
+        };
+
+        Action act = () => ObjectMaterializer.Map<UserWithProfileDto>(shaped);
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Property 'Bio'*no matching column*");
+    }
+
+    [Fact]
+    public void MapInto_lenient_skips_missing_properties()
+    {
+        var user = new UserDto { Id = 42, Name = "unchanged", Roles = new List<RoleDto>() };
+        var shaped = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["id"] = 1L,
+        };
+
+        ObjectMaterializer.MapInto(shaped, user);
+
+        user.Id.Should().Be(1);
+        user.Name.Should().Be("unchanged");
+    }
+
+    [Fact]
+    public void Query_user_get_nested_roles_have_expected_ids_and_names()
+    {
+        var user = _yaal.Query<UserDto>("user/get", args: new { id = 1 });
+
+        user.Roles.Should().NotBeNull().And.HaveCount(2);
+        user.Roles![0].Id.Should().Be(1);
+        user.Roles[0].Name.Should().Be("Administrator");
+        user.Roles[1].Id.Should().Be(2);
+        user.Roles[1].Name.Should().Be("User");
+    }
+
+    [Fact]
+    public void Query_user_nested_child_sql_matches_get_role_shape()
+    {
+        var fromJoin = _yaal.Query<UserDto>("user/get", args: new { id = 1 });
+        var fromChildSql = _yaal.Query<UserDto>("user/nested", args: new { id = 1 });
+
+        fromChildSql.Id.Should().Be(fromJoin.Id);
+        fromChildSql.Name.Should().Be(fromJoin.Name);
+        fromChildSql.Roles.Should().NotBeNull().And.HaveCount(fromJoin.Roles!.Count);
+        fromChildSql.Roles!.Select(r => r.Id).Should().BeEquivalentTo(fromJoin.Roles.Select(r => r.Id));
+        fromChildSql.Roles.Select(r => r.Name).Should().BeEquivalentTo(fromJoin.Roles.Select(r => r.Name));
+    }
+
+    [Fact]
+    public void Query_user_page_materializes_deep_nest_paging_data_roles()
+    {
+        var page = _yaal.Query<PageDto>("user/page", args: new { page = 1, page_size = 1 });
+
+        page.Paging.Should().NotBeNull();
+        page.Paging!.Page.Should().Be(1);
+        page.Paging.PageSize.Should().Be(1);
+        page.Paging.TotalCount.Should().Be(2);
+
+        page.Data.Should().NotBeNull().And.HaveCount(1);
+        page.Data![0].Id.Should().Be(1);
+        page.Data[0].Name.Should().Be("admin");
+        page.Data[0].Roles.Should().NotBeNull().And.HaveCount(2);
+        page.Data[0].Roles![0].Name.Should().Be("Administrator");
+    }
+
+    [Fact]
+    public void Query_user_combine_materializes_multi_branch_nest()
+    {
+        var combo = _yaal.Query<CombineDto>("user/combine", args: new { id = 1 });
+
+        combo.App.Should().NotBeNull();
+        combo.App!.Id.Should().Be(1);
+        combo.App.Name.Should().Be("admin");
+
+        combo.Flags.Should().NotBeNull();
+        combo.Flags!.UserId.Should().Be(1);
+        combo.Flags.Vip.Should().Be(1);
+    }
+
+    [Fact]
+    public void QueryInto_user_get_hydrates_nested_roles()
+    {
+        var user = new UserDto
+        {
+            Name = "placeholder",
+            Roles = new List<RoleDto> { new() { Id = 99, Name = "stale" } },
+        };
+
+        var same = _yaal.QueryInto("user/get", user, args: new { id = 1 });
+
+        same.Should().BeSameAs(user);
+        user.Roles.Should().NotBeNull().And.HaveCount(2);
+        user.Roles![0].Name.Should().Be("Administrator");
+    }
+
+    [Fact]
+    public void Map_strict_nested_role_missing_name_throws()
+    {
+        var shaped = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["id"] = 1L,
+            ["name"] = "admin",
+            ["roles"] = new List<object?>
+            {
+                new Dictionary<string, object?> { ["id"] = 10L },
+            },
+        };
+
+        Action act = () => ObjectMaterializer.Map<UserDto>(shaped);
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Property 'Name'*RoleDto*no matching column*");
+    }
+
+    [Fact]
+    public void Map_strict_empty_roles_list_succeeds()
+    {
+        var shaped = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["id"] = 1L,
+            ["name"] = "admin",
+            ["roles"] = new List<object?>(),
+        };
+
+        var user = ObjectMaterializer.Map<UserDto>(shaped);
+
+        user.Roles.Should().NotBeNull().And.BeEmpty();
+    }
+
+    [Fact]
+    public void Map_strict_full_nested_profile_succeeds()
+    {
+        var shaped = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["id"] = 1L,
+            ["profile"] = new Dictionary<string, object?>
+            {
+                ["name"] = "admin",
+                ["bio"] = "engineer",
+            },
+        };
+
+        var user = ObjectMaterializer.Map<UserWithProfileDto>(shaped);
+
+        user.Profile.Should().NotBeNull();
+        user.Profile!.Name.Should().Be("admin");
+        user.Profile.Bio.Should().Be("engineer");
+    }
+
+    [Fact]
+    public void MapInto_lenient_nested_skips_missing_role_field_on_new_elements()
+    {
+        var user = new UserDto
+        {
+            Id = 42,
+            Name = "unchanged",
+            Roles = new List<RoleDto> { new() { Id = 99, Name = "replaced" } },
+        };
+        var shaped = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["id"] = 1L,
+            ["roles"] = new List<object?>
+            {
+                new Dictionary<string, object?> { ["id"] = 10L },
+            },
+        };
+
+        ObjectMaterializer.MapInto(shaped, user);
+
+        user.Id.Should().Be(1);
+        user.Name.Should().Be("unchanged");
+        user.Roles.Should().HaveCount(1);
+        user.Roles![0].Id.Should().Be(10);
+        user.Roles[0].Name.Should().BeNull();
     }
 
     public enum StatusEnum
@@ -639,5 +864,41 @@ public class ObjectMaterializerTests : IDisposable
         public int Id { get; set; }
         public string? Name { get; set; }
         public int Active { get; set; }
+    }
+
+    public sealed class SimpleUserDto
+    {
+        public int Id { get; set; }
+        public string? Name { get; set; }
+    }
+
+    public sealed class UserWithIgnoredRolesDto
+    {
+        public int Id { get; set; }
+        public string? Name { get; set; }
+
+        [YaalIgnore]
+        public string? DisplayLabel { get; set; }
+
+        [YaalIgnore]
+        public List<RoleDto>? Roles { get; set; }
+    }
+
+    public sealed class CombineDto
+    {
+        public AppSliceDto? App { get; set; }
+        public FlagsSliceDto? Flags { get; set; }
+    }
+
+    public sealed class AppSliceDto
+    {
+        public int Id { get; set; }
+        public string? Name { get; set; }
+    }
+
+    public sealed class FlagsSliceDto
+    {
+        public int UserId { get; set; }
+        public int Vip { get; set; }
     }
 }

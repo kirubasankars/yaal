@@ -17,6 +17,13 @@ from yaal_errors import YaalQueryError
 T = TypeVar("T")
 
 
+def yaal_ignore(**field_kwargs):
+    """Dataclass field marker: skip during strict typed mapping."""
+    metadata = dict(field_kwargs.pop("metadata", {}))
+    metadata["yaal_ignore"] = True
+    return dataclasses.field(metadata=metadata, **field_kwargs)
+
+
 def throw_if_errors(shaped_result):
     if not isinstance(shaped_result, dict):
         return
@@ -28,7 +35,7 @@ def throw_if_errors(shaped_result):
         raise YaalQueryError(normalized)
 
 
-def map_object(cls: Type[T], shaped_result) -> T:
+def map_object(cls: Type[T], shaped_result, *, strict: bool = True) -> T:
     if shaped_result is None:
         raise TypeError("shaped_result cannot be None")
     if isinstance(shaped_result, cls):
@@ -37,12 +44,13 @@ def map_object(cls: Type[T], shaped_result) -> T:
         raise TypeError(
             "Expected a shaped object (dict) but got %s" % type(shaped_result).__name__
         )
+    _ensure_has_bindable_properties(cls)
     instance = cls()
-    map_into(shaped_result, instance)
+    _map_into(shaped_result, instance, strict=strict)
     return instance
 
 
-def map_list(cls: Type[T], shaped_result) -> List[T]:
+def map_list(cls: Type[T], shaped_result, *, strict: bool = True) -> List[T]:
     if shaped_result is None:
         return []
     if isinstance(shaped_result, list) and shaped_result and all(
@@ -50,7 +58,10 @@ def map_list(cls: Type[T], shaped_result) -> List[T]:
     ):
         return list(shaped_result)
     items = _normalize_list(shaped_result)
-    return [map_object(cls, item) if isinstance(item, dict) else item for item in items]
+    return [
+        map_object(cls, item, strict=strict) if isinstance(item, dict) else item
+        for item in items
+    ]
 
 
 def map_into(shaped_result, into):
@@ -61,28 +72,54 @@ def map_into(shaped_result, into):
             "Expected a shaped object (dict) but got %s"
             % (type(shaped_result).__name__ if shaped_result is not None else "null")
         )
+    _map_into(shaped_result, into, strict=False)
+
+
+def _map_into(shaped_result, into, *, strict: bool):
     bindings = _type_bindings(type(into))
     for key, field_type, is_list, elem_type in bindings:
-        raw = _dict_get_insensitive(shaped_result, key)
-        if raw is None and not _dict_has_insensitive(shaped_result, key):
+        if not _dict_has_insensitive(shaped_result, key):
+            if strict:
+                raise ValueError(_missing_column_message(key, type(into)))
             continue
+        raw = _dict_get_insensitive(shaped_result, key)
         if is_list:
-            _set_list_property(into, key, raw, elem_type)
+            _set_list_property(into, key, raw, elem_type, strict=strict)
             continue
         if isinstance(raw, dict):
             nested = getattr(into, key, None)
+            elem_cls = _resolve_type(field_type)
             if nested is None:
-                nested = map_object(_resolve_type(field_type), raw)
+                nested = map_object(elem_cls, raw, strict=strict)
                 setattr(into, key, nested)
             else:
-                map_into(raw, nested)
+                _map_into(raw, nested, strict=strict)
             continue
         setattr(into, key, _convert_value(raw, _resolve_type(field_type)))
+
+
+def _ensure_has_bindable_properties(cls):
+    if not any(True for _ in _type_bindings(cls)):
+        raise TypeError(
+            "Type %s has no mappable fields. Add public fields or mark client-only "
+            "fields with yaal_ignore()." % cls.__name__
+        )
+
+
+def _missing_column_message(key, owner_type):
+    snake = _to_snake_case(key)
+    tried = key if snake.lower() == key.lower() else "%s, %s" % (key, snake)
+    return (
+        "Field '%s' on type %s has no matching column in query result (tried %s)."
+        % (key, owner_type.__name__, tried)
+    )
 
 
 def _type_bindings(cls):
     if dataclasses.is_dataclass(cls):
         for field in dataclasses.fields(cls):
+            if field.metadata.get("yaal_ignore"):
+                continue
             ft = field.type
             if isinstance(ft, str):
                 hints = get_type_hints(cls)
@@ -92,7 +129,10 @@ def _type_bindings(cls):
         return
 
     hints = get_type_hints(cls)
+    ignored = getattr(cls, "__yaal_ignore__", ())
     for name in hints:
+        if name in ignored:
+            continue
         ft = hints[name]
         is_list, elem = _split_list_type(ft)
         yield name, ft, is_list, elem
@@ -115,7 +155,7 @@ def _resolve_type(field_type):
     return field_type
 
 
-def _set_list_property(target, key, raw, elem_type):
+def _set_list_property(target, key, raw, elem_type, *, strict: bool):
     if raw is None:
         setattr(target, key, None)
         return
@@ -127,7 +167,7 @@ def _set_list_property(target, key, raw, elem_type):
         elif isinstance(item, dict):
             elem_cls = _resolve_type(elem_type)
             if isinstance(elem_cls, type):
-                mapped.append(map_object(elem_cls, item))
+                mapped.append(map_object(elem_cls, item, strict=strict))
             else:
                 mapped.append(item)
         else:
@@ -213,4 +253,3 @@ def _normalize_errors(errors_obj):
     if isinstance(errors_obj, list):
         return [e for e in errors_obj if isinstance(e, dict)]
     return []
-
