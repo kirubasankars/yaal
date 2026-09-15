@@ -6,7 +6,7 @@ Yaal turns SQL + YAML descriptors into nested JSON. These docs use the shared fi
 |---|---|
 | [learn.md](learn.md) | Step-by-step learning path (install → fixtures → your own API) |
 | [examples.md](examples.md) | End-to-end examples: files, commands, sample JSON |
-| [descriptors.md](descriptors.md) | Reference: trunk/branch/twig, parameters, shaping, [`$mode`](descriptors.md#mode-rows), precompile, database URLs, errors, public API |
+| [descriptors.md](descriptors.md) | Reference: trunk/branch/twig, parameters, shaping, [`$mode`](descriptors.md#mode-rows), precompile, typed mapping, database URLs, errors, public API |
 | [why-sql-first.md](why-sql-first.md) | Why SQL-first fits ClickHouse-like engines and complex reporting apps |
 | [`../python/README.md`](../python/README.md) | Python library layout (`python/src`, tests, examples) |
 | [`../csharp/README.md`](../csharp/README.md) | .NET 8 / NuGet package — install, usage, database URLs, custom providers |
@@ -17,6 +17,7 @@ Yaal turns SQL + YAML descriptors into nested JSON. These docs use the shared fi
 make install
 make example                 # Python: all fixtures + explain
 make example-csharp          # same tour in .NET (Docker SDK)
+make benchmark-csharp        # descriptor load benchmarks (.NET)
 make yaal ARGS='list'
 make yaal ARGS='query user/get --arg id=1'
 ```

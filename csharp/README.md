@@ -72,7 +72,56 @@ var shaped = y.Query("user/get", args: new { id = 1 });
 var mapped = Yaal.Materialize<User>(shaped);
 ```
 
-Property names match YAML output keys (`id`, `name`, `roles`, …). Typed queries throw `YaalQueryException` on validation or execution errors; use untyped `Query()` if you need the `errors` dictionary.
+Property names match YAML output keys (`id`, `name`, `roles`, …). Snake_case column aliases (`page_size`) map to PascalCase properties (`PageSize`). Typed queries throw `YaalQueryException` on validation or execution errors; use untyped `Query()` if you need the `errors` dictionary.
+
+### Precompiled descriptors
+
+Compile SQL/YAML ahead of time so startup skips lexing sources. Optional-filter elision still runs per request.
+
+**JSON artifacts** (same layout as the Python CLI):
+
+```bash
+dotnet run --project src/Yaal.Cli -- compile --api ./api --format json --out ./precompiled
+var y = new Yaal("./api", precompiled: "./precompiled");
+```
+
+**C# source** (fastest load — register generated `Branch` instances at startup):
+
+```bash
+dotnet run --project src/Yaal.Cli -- \
+  compile --api ./api --format cs --out Generated/YaalDescriptors --namespace MyApp.Descriptors
+```
+
+```csharp
+var y = new Yaal("./api");
+foreach (var (path, branch) in MyApp.Descriptors.YaalDescriptorRegistry.All)
+    y.RegisterDescriptor(path, branch);
+```
+
+**In-memory registration** (built or hand-authored descriptors):
+
+```csharp
+y.RegisterDescriptor("user/get", myBranch);
+y.UnregisterDescriptor("user/get");
+```
+
+Load order when `debug=false`: registered → cache → precompiled JSON directory → live SQL/YAML. `debug=true` forces live SQL/YAML and ignores `precompiled`.
+
+### yaal CLI
+
+The `Yaal.Cli` project ships a `compile` command (`--format json|cs`). From the repo:
+
+```bash
+dotnet run --project csharp/src/Yaal.Cli -- compile --api ./api --format cs --out ./Generated
+```
+
+### Benchmarks
+
+Compare descriptor load cost (live SQL vs JSON precompile vs `RegisterDescriptor`):
+
+```bash
+make benchmark-csharp
+```
 
 Preview compiled SQL after optional-filter elision:
 

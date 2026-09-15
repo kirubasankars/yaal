@@ -443,6 +443,10 @@ y.setup_data_provider("db", "sqlite3:////tmp/app.db")
 
 y.query("user/get", args={"id": 1})
 y.query_json("user/get", args={"id": 1})
+y.query_typed("user/get", User, args={"id": 1})
+y.query_list("user/list", User, args={"active": 1})
+y.query_into("user/get", existing_user, args={"id": 1})
+Yaal.materialize(User, shaped_dict)
 y.explain_sql("user/get", args={"id": 1})
 y.clear_cache()
 ```
@@ -460,6 +464,10 @@ y.SetupDataProvider("db", "sqlite3:////tmp/app.db");
 
 y.RegisterDescriptor("user/get", myBranch);  // optional in-memory descriptor
 y.Query("user/get", args: new { id = 1 });
+y.Query<User>("user/get", args: new { id = 1 });
+y.QueryList<User>("user/list", args: new { active = 1 });
+y.QueryInto("user/get", existing, args: new { id = 1 });
+Yaal.Materialize<User>(shaped);
 y.QueryJson("user/get", args: new { id = 1 });
 y.ExplainSql("user/get", args: new { id = 1 });
 y.UnregisterDescriptor("user/get");

@@ -127,6 +127,31 @@ yaal query report/summary
 # {"user_count":2,"active_count":2,"assignment_count":3}
 ```
 
+### Typed results
+
+Map shaped JSON to dataclasses (Python) or POCOs (C#) instead of dictionaries. Nested YAML properties map to nested types; array descriptors use `query_list` / `QueryList`. Typed queries raise `YaalQueryError` / `YaalQueryException` on validation or execution errors — use untyped `query()` / `Query()` if you need the `errors` dict.
+
+```python
+import dataclasses
+
+@dataclasses.dataclass
+class User:
+    id: int = 0
+    name: str = ""
+
+user = y.query_typed("user/get", User, args={"id": 1})
+users = y.query_list("user/list", User, args={"active": 1})
+```
+
+```csharp
+public class User { public int Id { get; set; } public string? Name { get; set; } }
+
+var user = y.Query<User>("user/get", args: new { id = 1 });
+var users = y.QueryList<User>("user/list", args: new { active = 1 });
+```
+
+Details: [`python/README.md`](python/README.md) · [`csharp/README.md`](csharp/README.md).
+
 ### Dual runtime
 
 Python and .NET 8 share [`tests/fixtures/api/`](tests/fixtures/api/). [Full example →](docs/examples.md#dual-runtime-python--c)
@@ -143,11 +168,30 @@ y.Query("user/get", args: new { id = 1 });
 
 `yaal compile` / `precompiled=...`; elision still runs per request. [Full example →](docs/examples.md#precompiled-descriptors)
 
+**Python CLI** — JSON artifacts:
+
 ```bash
 yaal --api tests/fixtures/api compile --out /tmp/yaal-precompiled
 yaal --api tests/fixtures/api --precompiled /tmp/yaal-precompiled \
   query user/get --arg id=1
 ```
+
+**C# JSON load** — pass `precompiled:` to the constructor (same artifact layout).
+
+**C# source precompile** — zero-parse startup via generated `Branch` types and `RegisterDescriptor`:
+
+```bash
+dotnet run --project csharp/src/Yaal.Cli -- \
+  compile --api tests/fixtures/api --format cs --out Generated/YaalDescriptors
+```
+
+```csharp
+var y = new Yaal.Yaal("tests/fixtures/api");
+foreach (var (path, branch) in Yaal.Generated.YaalDescriptorRegistry.All)
+    y.RegisterDescriptor(path, branch);
+```
+
+Load order when `debug=false`: registered → cache → precompiled JSON → live SQL/YAML. See [descriptors.md — precompiled](docs/descriptors.md#precompiled-descriptors).
 
 ## Install
 
@@ -216,6 +260,14 @@ y.setup_data_provider("db", "sqlite3:////tmp/app.db")
 
 result = y.query("user/get", args={"id": 1})
 # {'id': 1, 'name': 'admin', 'roles': [{'id': 1, 'name': 'Administrator'}, ...]}
+
+# Typed: y.query_typed("user/get", User, args={"id": 1})  # see python/README.md
+```
+
+```csharp
+var y = new Yaal.Yaal("tests/fixtures/api", debug: true);
+y.SetupDataProvider("db", "sqlite3:////tmp/app.db");
+var user = y.Query<User>("user/get", args: new { id = 1 });
 ```
 
 Preview compiled SQL (after null-filter elision):
@@ -250,6 +302,9 @@ Operations are folders of `*.sql` (+ `$.output.yaml`), discovered filesystem-fir
 | `make experiment-clickhouse` | Same API sandbox against Compose ClickHouse |
 | `make experiment-init` / `experiment-reset` / `experiment-clean` | Create, reseed SQLite, or remove sandbox |
 | `make experiment-clickhouse-init` / `experiment-clickhouse-reset` | Start/seed or reseed ClickHouse (keep API edits) |
+| `make test-csharp` | .NET unit tests (SDK container) |
+| `make test-csharp-integration` | Compose DBs + .NET integration tests |
+| `make benchmark-csharp` | Descriptor load benchmarks (live SQL vs JSON vs `RegisterDescriptor`) |
 | `make integration-up` / `integration-down` | Manage compose DBs |
 
 SQLite-only usage does **not** need Docker. Compose is only for Postgres/MySQL/ClickHouse integration tests.
@@ -270,10 +325,11 @@ Library, tests, and demo live under [`python/`](python/). See [`python/README.md
 
 ## C# (.NET 8)
 
-A full-parity .NET port lives under [`csharp/`](csharp/). Consume from nuget.org: [`Yaal`](https://www.nuget.org/packages/Yaal) — see [`csharp/README.md`](csharp/README.md) (the package listing). Tests run in a .NET SDK container (no local `dotnet` required):
+A full-parity .NET port lives under [`csharp/`](csharp/). Consume from nuget.org: [`Yaal`](https://www.nuget.org/packages/Yaal) — see [`csharp/README.md`](csharp/README.md) (the package listing). Includes typed `Query<T>` / `QueryList<T>`, JSON or C# source precompile, `RegisterDescriptor`, and the `yaal` CLI (`compile --format json|cs`). Tests run in a .NET SDK container (no local `dotnet` required):
 
 ```bash
 make test-csharp
 make test-csharp-integration
 make example-csharp
+make benchmark-csharp
 ```
