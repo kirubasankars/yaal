@@ -63,6 +63,31 @@ class TestFlatOutputSchema(unittest.TestCase):
         result = _output_mapper("array", output_model, None, rows)
         self.assertEqual(result, [{"type": "user", "id": 1}])
 
+    def test_case_insensitive_mapped_column(self):
+        output_model = {
+            "type": "array",
+            "properties": {
+                "id": {"mapped": "USER_ID"},
+                "name": {"mapped": "user_name"},
+            },
+        }
+        rows = [{"USER_ID": 1, "user_name": "a"}]
+        result = _output_mapper("array", output_model, None, rows)
+        self.assertEqual(result, [{"id": 1, "name": "a"}])
+
+    def test_missing_mapped_column_raises(self):
+        output_model = {
+            "type": "array",
+            "properties": {"id": {"mapped": "missing_col"}},
+        }
+        with self.assertRaises(Exception) as ctx:
+            _output_mapper("array", output_model, None, [{"id": 1}])
+        self.assertIn("_mapped column missing", str(ctx.exception))
+
+    def test_empty_object_output(self):
+        result = _output_mapper("object", {"type": "object", "properties": {}}, None, [])
+        self.assertEqual(result, {})
+
     def test_parent_rows_object_child_shapes(self):
         from yaal_executor import _output_mapper
 

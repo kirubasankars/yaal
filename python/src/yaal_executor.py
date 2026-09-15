@@ -29,7 +29,10 @@ class DataProviderHelper:
             for n in twig["nullable"]:
                 if input_shape.get_prop(n) is None:
                     nulls.append(n)
-        sort_map = resolve_sort_dir_values(twig, input_shape)
+        if twig.get("has_sort_dir") is False:
+            sort_map = {}
+        else:
+            sort_map = resolve_sort_dir_values(twig, input_shape)
         sort_key = tuple(sorted((p, v if v is not None else "") for p, v in sort_map.items()))
         key = (id(twig), frozenset(nulls), char, sort_key)
         cached = self._compile_cache.get(key)
@@ -163,7 +166,7 @@ def _execute_branch(branch, is_trunk, data_providers, context, parent_rows):
 
     try:
         if use_parent_rows:
-            output = copy.deepcopy(parent_rows)
+            output = [dict(row) for row in parent_rows]
         else:
             if is_trunk:
                 for name, data_provider in data_providers.items():
@@ -208,8 +211,11 @@ def _execute_branch(branch, is_trunk, data_providers, context, parent_rows):
                     output.append({})
 
                 if not output_partition_by:
-                    for row in output:
-                        row[branch_name] = copy.deepcopy(sub_node_output)
+                    if len(output) == 1:
+                        output[0][branch_name] = sub_node_output
+                    else:
+                        for row in output:
+                            row[branch_name] = copy.deepcopy(sub_node_output)
                 else:
                     sub_node_groups = defaultdict(list)
                     for row in sub_node_output:
@@ -231,7 +237,7 @@ def _execute_branch(branch, is_trunk, data_providers, context, parent_rows):
                     for idx, rows in groups.items():
                         row = rows[0]
                         partition_key = row[output_partition_by]
-                        row[branch_name] = copy.deepcopy(sub_node_groups.get(partition_key, []))
+                        row[branch_name] = sub_node_groups.get(partition_key, [])
                         _output.append(row)
                     output = _output
 
@@ -243,6 +249,23 @@ def _execute_branch(branch, is_trunk, data_providers, context, parent_rows):
     finally:
         if is_trunk and began:
             _trunk_cleanup(data_providers, db_data_provider, failed)
+
+
+def _row_has_insensitive(row, key):
+    if key in row:
+        return True
+    key_lower = key.lower()
+    return any(k.lower() == key_lower for k in row)
+
+
+def _row_get_insensitive(row, key):
+    if key in row:
+        return row[key]
+    key_lower = key.lower()
+    for k, v in row.items():
+        if k.lower() == key_lower:
+            return v
+    raise KeyError(key)
 
 
 def _output_mapper(output_type, output_modal, branches, result):
@@ -297,8 +320,8 @@ def _output_mapper(output_type, output_modal, branches, result):
                     _type = v.get(_type_str)
 
                 if _mapped:
-                    if _mapped in row:
-                        mapped_obj[k] = row[_mapped]
+                    if _row_has_insensitive(row, _mapped):
+                        mapped_obj[k] = _row_get_insensitive(row, _mapped)
                         prop_count = prop_count + 1
                     else:
                         raise Exception(_mapped + " _mapped column missing from row")

@@ -78,28 +78,14 @@ def create_context(descriptor, payload=None, args=None):
     args_str, payload_str = "args", "payload"
 
     model = descriptor.get("model")
-    validators = descriptor.get("_validators")
-    if model and validators:
-        if args_str in model:
-            args_schema = model[args_str]
-            args_validator = validators.get(args_str)
-        else:
-            args_schema = None
-            args_validator = None
-
-        if payload_str in model:
-            payload_schema = model[payload_str]
-            payload_validator = validators.get(payload_str)
-        else:
-            payload_schema = None
-            payload_validator = None
+    if model:
+        args_schema = model.get(args_str)
+        payload_schema = model.get(payload_str)
     else:
         args_schema = None
-        args_validator = None
         payload_schema = None
-        payload_validator = None
 
-    args_shape = Shape(schema=args_schema, validator=args_validator)
+    args_shape = Shape(schema=args_schema)
     if args:
         for k, v in args.items():
             args_shape.set_prop(k, v)
@@ -114,7 +100,7 @@ def create_context(descriptor, payload=None, args=None):
         "$args": args_shape,
     }
 
-    return Shape(schema=payload_schema, validator=payload_validator, data=payload, extras=extras)
+    return Shape(schema=payload_schema, data=payload, extras=extras)
 
 
 def _normalize_sqlite_options(options):
@@ -370,6 +356,67 @@ class Yaal:
         descriptor = self._load_descriptor(descriptor_path, output_mapper)
         context = create_context(descriptor, payload=payload, args=args)
         return self.get_result(descriptor, context)
+
+    def query_typed(self, descriptor_path, cls, *, payload=None, args=None, output_mapper=None):
+        """Run a query and materialize the shaped result to a dataclass or plain object."""
+        from yaal_materializer import map_object, map_list, throw_if_errors
+
+        descriptor = self._load_descriptor(descriptor_path, output_mapper)
+        context = create_context(descriptor, payload=payload, args=args)
+        raw = self.get_result(descriptor, context)
+        throw_if_errors(raw)
+        output_type = descriptor.get("output_type", "array")
+        if output_type == "object":
+            return map_object(cls, raw)
+        if output_type == "array":
+            return map_list(cls, raw)
+        raise TypeError("Unsupported output_type: %s" % output_type)
+
+    def query_list(self, descriptor_path, cls, *, payload=None, args=None, output_mapper=None):
+        """Run an array-output query and materialize rows to a list of cls."""
+        from yaal_materializer import map_list, throw_if_errors
+
+        descriptor = self._load_descriptor(descriptor_path, output_mapper)
+        if descriptor.get("output_type") != "array":
+            raise TypeError(
+                "Descriptor %r returns an object; use query_typed() instead." % descriptor_path
+            )
+        context = create_context(descriptor, payload=payload, args=args)
+        raw = self.get_result(descriptor, context)
+        throw_if_errors(raw)
+        return map_list(cls, raw)
+
+    def query_into(self, descriptor_path, into, *, payload=None, args=None, output_mapper=None):
+        """Run an object-output query and map the result into an existing instance."""
+        from yaal_materializer import map_into, throw_if_errors
+
+        descriptor = self._load_descriptor(descriptor_path, output_mapper)
+        if descriptor.get("output_type") != "object":
+            raise TypeError(
+                "Descriptor %r returns an array; query_into supports object output only."
+                % descriptor_path
+            )
+        if into is None:
+            raise TypeError("into cannot be None")
+        context = create_context(descriptor, payload=payload, args=args)
+        raw = self.get_result(descriptor, context)
+        throw_if_errors(raw)
+        map_into(raw, into)
+        return into
+
+    @staticmethod
+    def materialize(cls, shaped_result):
+        from yaal_materializer import map_object, throw_if_errors
+
+        throw_if_errors(shaped_result)
+        return map_object(cls, shaped_result)
+
+    @staticmethod
+    def materialize_into(shaped_result, into):
+        from yaal_materializer import map_into, throw_if_errors
+
+        throw_if_errors(shaped_result)
+        map_into(shaped_result, into)
 
     def query_json(self, descriptor_path, *, payload=None, args=None, output_mapper=None):
         """Same as query, but return a JSON string."""
