@@ -94,6 +94,10 @@ y.query("user/get", args={"id": 1})
 
 ```csharp
 y.Query("user/get", args: new { id = 1 });
+
+// Typed POCO (C# only)
+var user = y.Query<User>("user/get", args: new { id = 1 });
+// user.Roles is List<Role> when output YAML nests roles
 ```
 
 ### Sample JSON
@@ -197,6 +201,10 @@ y.query("user/nested", args={"id": 1})
 
 ```csharp
 y.Query("user/nested", args: new { id = 1 });
+
+// Same nested graph as a POCO
+var user = y.Query<User>("user/nested", args: new { id = 1 });
+// user.Roles populated from child SQL branch
 ```
 
 ### Sample JSON

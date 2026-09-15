@@ -38,6 +38,42 @@ var result = y.Query("user/get", args: new { id = 1 });
 string json = y.QueryJson("user/get", args: new { id = 1 });
 ```
 
+### Typed results (Dapper-style POCO mapping)
+
+Map shaped results directly to your types instead of dictionaries:
+
+```csharp
+public class User
+{
+    public int Id { get; set; }
+    public string? Name { get; set; }
+    public List<Role>? Roles { get; set; }
+}
+
+public class Role
+{
+    public int Id { get; set; }
+    public string? Name { get; set; }
+}
+
+// Object descriptor → single POCO
+var user = y.Query<User>("user/get", args: new { id = 1 });
+
+// Array descriptor → List<T>
+var users = y.QueryList<User>("user/list", args: new { active = 1 });
+// or: var users = y.Query<List<User>>("user/list", args: new { active = 1 });
+
+// Hydrate an existing instance (object descriptors only)
+var existing = new User { Name = "placeholder" };
+y.QueryInto("user/get", existing, args: new { id = 1 });
+
+// Materialize an already-fetched dictionary result
+var shaped = y.Query("user/get", args: new { id = 1 });
+var mapped = Yaal.Materialize<User>(shaped);
+```
+
+Property names match YAML output keys (`id`, `name`, `roles`, …). Typed queries throw `YaalQueryException` on validation or execution errors; use untyped `Query()` if you need the `errors` dictionary.
+
 Preview compiled SQL after optional-filter elision:
 
 ```csharp
