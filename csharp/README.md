@@ -72,7 +72,31 @@ var shaped = y.Query("user/get", args: new { id = 1 });
 var mapped = Yaal.Materialize<User>(shaped);
 ```
 
-Property names match YAML output keys (`id`, `name`, `roles`, …). Snake_case column aliases (`page_size`) map to PascalCase properties (`PageSize`). Typed queries throw `YaalQueryException` on validation or execution errors; use untyped `Query()` if you need the `errors` dictionary.
+SQL/shaped keys (`id`, `name`, `page_size`) map to PascalCase properties (`Id`, `Name`, `PageSize`) case-insensitively. **Strict mapping** is the default for `Query<T>`, `QueryList<T>`, and `Materialize<T>`: every public writable property must appear in the result unless marked `[YaalIgnore]`. `QueryInto` / `MaterializeInto` stay lenient (skip missing columns).
+
+```csharp
+public class User
+{
+    public int Id { get; set; }
+    public string? Name { get; set; }
+
+    [YaalIgnore]
+    public string? DisplayLabel { get; set; }  // client-only; not in SQL
+}
+```
+
+Minimal SQL-only descriptor (no `$.output.yaml`):
+
+```sql
+-- api/user/get/$.sql
+select 1 as id, 'kiruba' as name
+```
+
+```csharp
+var users = y.QueryList<User>("user/get");  // [{ Id = 1, Name = "kiruba" }]
+```
+
+Typed queries throw `YaalQueryException` on validation or execution errors; use untyped `Query()` if you need the `errors` dictionary.
 
 ### Precompiled descriptors
 

@@ -2,84 +2,29 @@
 // Use of this source code is governed by a MIT style
 // license that can be found in the LICENSE file.
 
-using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Yaal;
 
-var repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", ".."));
-var schemaPath = Path.Combine(repoRoot, "docker", "sqlite", "schema.sql");
-var flagsSchemaPath = Path.Combine(repoRoot, "docker", "sqlite", "flags_schema.sql");
-var apiPath = Path.Combine(repoRoot, "tests", "fixtures", "api");
-
+var repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "api"));
 var dbPath = Path.Combine(Path.GetTempPath(), "yaal-example-" + Guid.NewGuid().ToString("N") + ".db");
-var flagsPath = Path.Combine(Path.GetTempPath(), "yaal-example-flags-" + Guid.NewGuid().ToString("N") + ".db");
-try
+
+await using (var con = new SqliteConnection("Data Source=" + dbPath))
 {
-    await using (var con = new SqliteConnection("Data Source=" + dbPath))
-    {
-        await con.OpenAsync();
-        await using var cmd = con.CreateCommand();
-        cmd.CommandText = await File.ReadAllTextAsync(schemaPath);
-        await cmd.ExecuteNonQueryAsync();
-    }
-
-    await using (var con = new SqliteConnection("Data Source=" + flagsPath))
-    {
-        await con.OpenAsync();
-        await using var cmd = con.CreateCommand();
-        cmd.CommandText = await File.ReadAllTextAsync(flagsSchemaPath);
-        await cmd.ExecuteNonQueryAsync();
-    }
-
-    // For zero-parse startup, compile with:
-    //   dotnet run --project src/Yaal.Cli -- compile --api <api> --format cs --out Generated
-    // then RegisterDescriptor for each entry in YaalDescriptorRegistry.All.
-    var y = new Yaal.Yaal(apiPath, debug: true);
-    y.SetupDataProvider("db", "sqlite3:///" + dbPath);
-    y.SetupDataProvider("flags", "sqlite3:///" + flagsPath);
-
-    var opts = new JsonSerializerOptions { WriteIndented = true };
-
-    void Print(string title, object? value)
-    {
-        Console.WriteLine($"-- {title} --");
-        Console.WriteLine(JsonSerializer.Serialize(value, opts));
-        Console.WriteLine();
-    }
-
-    var a = y.Query("user/get", args: new { id = 1 });
-
-    Print("user/get id=1", y.Query("user/get", args: new { id = 1 }));
-    Print("user/nested id=1", y.Query("user/nested", args: new { id = 1 }));
-    Print("user/list active=1", y.Query("user/list", args: new { active = 1 }));
-    Print("user/list sort=name dir=desc", y.Query("user/list", args: new { sort = "name", dir = "desc" }));
-    Print(
-        "user/list sort=name,id dir=desc,asc (multi-column)",
-        y.Query("user/list", args: new { sort = "name,id", dir = "desc,asc" }));
-    Print(
-        "user/page page=1 page_size=1",
-        y.Query("user/page", args: new { page = 1, page_size = 1 }));
-    Print("report/summary", y.Query("report/summary"));
-    Print("user/combine id=1", y.Query("user/combine", args: new { id = 1 }));
-
-    Console.WriteLine("-- explain user/list (active omitted) --");
-    foreach (var twig in y.ExplainSql("user/list"))
-    {
-        Console.WriteLine(twig["sql"]!.ToString()!.Trim());
-        Console.WriteLine("binds: " + JsonSerializer.Serialize(twig["parameters"]));
-        Console.WriteLine();
-    }
-
-    Console.WriteLine("-- explain user/list active=1 --");
-    foreach (var twig in y.ExplainSql("user/list", args: new { active = 1 }))
-    {
-        Console.WriteLine(twig["sql"]!.ToString()!.Trim());
-        Console.WriteLine("binds: " + JsonSerializer.Serialize(twig["parameters"]));
-        Console.WriteLine();
-    }
+    await con.OpenAsync();
+    await using var cmd = con.CreateCommand();
+    cmd.CommandText = "SELECT 1";
+    await cmd.ExecuteScalarAsync();
 }
-finally
+
+var y = new Yaal.Yaal(repoRoot, debug: true);
+y.SetupDataProvider("db", "sqlite3:///" + dbPath);
+
+var users = y.QueryList<User>("user/get");
+foreach (var u in users)
+    Console.WriteLine($"{u.Id} {u.Name}");
+
+public class User
 {
-    try { File.Delete(dbPath); } catch { /* ignore */ }
-    try { File.Delete(flagsPath); } catch { /* ignore */ }
+    public int Id { get; set; }
+    public string? Name { get; set; }
 }

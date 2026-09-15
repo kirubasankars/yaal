@@ -894,6 +894,54 @@ y.SetupDataProvider("flags", "sqlite3:///" + flagsDb);
 var combo = y.Query<CombineDto>("user/combine", args: new { id = 1 });
 ```
 
+### Strict mapping and opt-out
+
+`Query<T>`, `QueryList<T>`, and `Materialize<T>` (Python: `query_typed`, `query_list`, `materialize`) require **every mapped property/field** to have a matching shaped key. Missing keys fail with an error naming the property. Keys present with `null` are OK.
+
+`QueryInto` / `query_into` stay **lenient** — missing columns are skipped (partial hydration).
+
+Opt out properties not returned by SQL:
+
+```csharp
+public class UserDto
+{
+    public int Id { get; set; }
+    public string? Name { get; set; }
+
+    [YaalIgnore]
+    public string? DisplayLabel { get; set; }
+}
+```
+
+```python
+from yaal_materializer import yaal_ignore
+
+@dataclasses.dataclass
+class UserDto:
+    id: int = 0
+    name: str = ""
+    display_label: Optional[str] = yaal_ignore(default=None)
+```
+
+### Minimal SQL-only list (`user/simple`)
+
+No `$.output.yaml` — default array output. Lowercase SQL aliases map to PascalCase POCOs:
+
+**`user/simple/$.sql`**
+
+```sql
+select 1 as id, 'kiruba' as name
+```
+
+```csharp
+var users = y.QueryList<SimpleUserDto>("user/simple");
+// users[0].Id == 1, users[0].Name == "kiruba"
+```
+
+```python
+users = y.query_list("user/simple", SimpleUserDto)
+```
+
 ### Conversion and mapping rules
 
 | Input (shaped JSON) | Python target | C# target |
@@ -902,7 +950,8 @@ var combo = y.Query<CombineDto>("user/combine", args: new { id = 1 });
 | `"page_size": 10` | `page_size: int` | `int PageSize` |
 | `"roles": [{...}]` | `List[RoleDto]` | `List<RoleDto>` |
 | `"status": "active"` | `Enum` member | `enum` / `Enum.TryParse` |
-| missing key | default / `None` | default / `null` |
+| missing key (strict) | `ValueError` | `InvalidOperationException` |
+| missing key (`QueryInto`) | unchanged | unchanged |
 | extra keys | ignored | ignored |
 
 C# also supports `T[]` array properties, `Guid`, `DateTime`, and nullable value types. Mapping is case-insensitive on keys for both runtimes.

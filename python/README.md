@@ -77,6 +77,18 @@ mapped = Yaal.materialize(User, shaped)
 
 Typed queries raise `YaalQueryError` on validation/execution errors; use `query()` if you need the `errors` dict. Mapping lives in `yaal_materializer.py` (dataclasses, `__init__` annotations, or plain classes with type hints).
 
+**Strict mapping:** `query_typed`, `query_list`, and `materialize` require every dataclass field to appear in the shaped result. Use `yaal_ignore()` for client-only fields. `query_into` / `materialize_into` skip missing columns.
+
+```python
+from yaal_materializer import yaal_ignore
+
+@dataclasses.dataclass
+class User:
+    id: int = 0
+    name: str = ""
+    label: Optional[str] = yaal_ignore(default=None)
+```
+
 ### Precompiled descriptors
 
 ```bash
