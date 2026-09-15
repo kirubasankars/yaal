@@ -47,6 +47,32 @@ for twig in y.explain_sql("user/get", args={"id": 1}):
     print(twig["sql"])
 ```
 
+### Typed results (dataclass mapping)
+
+```python
+import dataclasses
+from typing import List, Optional
+
+@dataclasses.dataclass
+class Role:
+    id: int = 0
+    name: str = ""
+
+@dataclasses.dataclass
+class User:
+    id: int = 0
+    name: str = ""
+    roles: Optional[List[Role]] = None
+
+user = y.query_typed("user/get", User, args={"id": 1})
+users = y.query_list("user/list", User, args={"active": 1})
+
+existing = User(name="placeholder")
+y.query_into("user/get", existing, args={"id": 1})
+```
+
+Typed queries raise `YaalQueryError` on validation/execution errors; use `query()` if you need the `errors` dict.
+
 Descriptors are shared with the .NET library under [`../tests/fixtures/api/`](../tests/fixtures/api/) (`user/get`, `user/nested`, `user/list`, `user/page`, `report/summary`, `user/combine`).
 
 ## Database URLs

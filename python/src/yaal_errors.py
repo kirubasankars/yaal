@@ -24,3 +24,11 @@ class SortDirError(YaalError):
     def __init__(self, message):
         super().__init__(message)
         self.message = message
+
+
+class YaalQueryError(YaalError):
+    """Raised when a shaped query result contains validation or execution errors."""
+
+    def __init__(self, errors):
+        super().__init__("Query returned validation or execution errors.")
+        self.errors = errors
