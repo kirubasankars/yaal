@@ -31,6 +31,9 @@ try
         await cmd.ExecuteNonQueryAsync();
     }
 
+    // For zero-parse startup, compile with:
+    //   dotnet run --project src/Yaal.Cli -- compile --api <api> --format cs --out Generated
+    // then RegisterDescriptor for each entry in YaalDescriptorRegistry.All.
     var y = new Yaal.Yaal(apiPath, debug: true);
     y.SetupDataProvider("db", "sqlite3:///" + dbPath);
     y.SetupDataProvider("flags", "sqlite3:///" + flagsPath);
@@ -43,6 +46,8 @@ try
         Console.WriteLine(JsonSerializer.Serialize(value, opts));
         Console.WriteLine();
     }
+
+    var a = y.Query("user/get", args: new { id = 1 });
 
     Print("user/get id=1", y.Query("user/get", args: new { id = 1 }));
     Print("user/nested id=1", y.Query("user/nested", args: new { id = 1 }));

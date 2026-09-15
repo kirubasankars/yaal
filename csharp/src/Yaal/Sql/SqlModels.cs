@@ -2,6 +2,8 @@
 // Use of this source code is governed by a MIT style
 // license that can be found in the LICENSE file.
 
+using System.Text.Json.Serialization;
+
 namespace Yaal.Sql;
 
 public sealed class SqlToken
@@ -11,8 +13,11 @@ public sealed class SqlToken
     public int? Group { get; set; }
     public string? Name { get; set; }
     public bool Nullable { get; set; }
+    [JsonPropertyName("nullable_parameter")]
     public string? NullableParameter { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<ParamDecl>? Parameters { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public object? Content { get; set; }
     /// <summary>sort()/dir() parameter name (e.g. $args.sort).</summary>
     public string? Param { get; set; }
@@ -35,6 +40,9 @@ public sealed class Twig
     public List<ParamDecl> Parameters { get; set; } = new();
     public List<string>? Nullable { get; set; }
     public string Connection { get; set; } = "db";
+    /// <summary>True when twig contains sort() tokens; false skips runtime sort/dir resolution.</summary>
+    [JsonPropertyName("has_sort_dir")]
+    public bool? HasSortDir { get; set; }
 }
 
 public sealed class SqlAst

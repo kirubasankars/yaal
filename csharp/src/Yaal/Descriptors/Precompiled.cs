@@ -3,7 +3,7 @@
 // license that can be found in the LICENSE file.
 
 using System.Text.Json;
-using Json.Schema;
+using System.Text.Json.Serialization;
 using Yaal.Sql;
 
 namespace Yaal.Descriptors;
@@ -15,14 +15,21 @@ public static class Precompiled
 {
     public const int Version = 1;
 
+    internal static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        PropertyNameCaseInsensitive = true,
+        ReadCommentHandling = JsonCommentHandling.Skip,
+        AllowTrailingCommas = true,
+    };
+
     public static string ArtifactFileName(string path, string? outputMapper = null) =>
         string.IsNullOrEmpty(outputMapper) ? path + ".json" : path + "#" + outputMapper + ".json";
 
     public static Branch LoadFile(string filePath)
     {
         var json = File.ReadAllText(filePath);
-        using var doc = JsonDocument.Parse(json);
-        return Import(doc.RootElement);
+        return Import(json);
     }
 
     public static Branch LoadFromDirectory(string precompiledDir, string descriptorPath, string? outputMapper = null)
@@ -36,188 +43,85 @@ public static class Precompiled
         return LoadFile(filePath);
     }
 
-    public static Branch Import(JsonElement root)
+    public static Branch Import(JsonElement root) => Import(root.GetRawText());
+
+    public static Branch Import(string json)
     {
-        var branch = ReadBranch(root);
-        AttachValidators(branch);
-        return branch;
+        var branch = JsonSerializer.Deserialize<Branch>(json, JsonOptions)
+            ?? throw new InvalidOperationException("Empty precompiled descriptor");
+        return Normalize(branch);
     }
 
-    private static void AttachValidators(Branch trunk)
+    public static string ExportJson(Branch branch, bool indented = true)
     {
-        var model = trunk.Model;
-        trunk.Validators = new Dictionary<string, JsonSchema?>
+        var options = new JsonSerializerOptions(JsonOptions)
         {
-            ["args"] = CreateValidator(model?.Args),
-            ["payload"] = CreateValidator(model?.Payload),
+            WriteIndented = indented,
         };
+        return JsonSerializer.Serialize(branch, options);
     }
 
-    private static JsonSchema? CreateValidator(Dictionary<string, object?>? schema)
+    internal static Branch Normalize(Branch branch)
     {
-        if (schema == null || schema.Count == 0)
-            return null;
-        var copy = (Dictionary<string, object?>)JsonUtil.DeepCopy(schema)!;
-        copy.Remove("$schema");
-        var node = JsonUtil.ToJsonNode(copy);
-        return JsonSchema.FromText(node!.ToJsonString());
-    }
-
-    private static Branch ReadBranch(JsonElement el)
-    {
-        var branch = new Branch
+        if (branch.Parameters != null)
         {
-            Name = Str(el, "name") ?? "",
-            Method = Str(el, "method") ?? "",
-            Path = Str(el, "path") ?? "",
-            InputType = Str(el, "input_type") ?? YaalConst.Object,
-            OutputType = Str(el, "output_type") ?? YaalConst.Array,
-            PartitionBy = Str(el, "partition_by"),
-            UseParentRows = Bool(el, "use_parent_rows"),
-        };
+            branch.Parameters = branch.Parameters.ToDictionary(
+                kv => kv.Key,
+                kv => NormalizeParamDecl(kv.Value),
+                StringComparer.OrdinalIgnoreCase);
+        }
 
-        if (el.TryGetProperty("model", out var modelEl) && modelEl.ValueKind == JsonValueKind.Object)
+        if (branch.Model != null)
         {
             branch.Model = new DescriptorModel
             {
-                Args = DictOrNull(modelEl, "args"),
-                Payload = DictOrNull(modelEl, "payload"),
-                Output = DictOrNull(modelEl, "output"),
+                Args = NormalizeModelDict(branch.Model.Args),
+                Payload = NormalizeModelDict(branch.Model.Payload),
+                Output = NormalizeModelDict(branch.Model.Output),
             };
         }
 
-        if (el.TryGetProperty("parameters", out var paramsEl) && paramsEl.ValueKind == JsonValueKind.Object)
+        if (branch.Twigs != null)
         {
-            branch.Parameters = new Dictionary<string, ParamDecl>(StringComparer.OrdinalIgnoreCase);
-            foreach (var prop in paramsEl.EnumerateObject())
-            {
-                branch.Parameters[prop.Name] = ReadParamDecl(prop.Value, prop.Name);
-            }
+            foreach (var twig in branch.Twigs)
+                NormalizeTwig(twig);
         }
 
-        if (el.TryGetProperty("twigs", out var twigsEl) && twigsEl.ValueKind == JsonValueKind.Array)
+        if (branch.Branches != null)
         {
-            branch.Twigs = new List<Twig>();
-            foreach (var twigEl in twigsEl.EnumerateArray())
-                branch.Twigs.Add(ReadTwig(twigEl));
-        }
-
-        if (el.TryGetProperty("branches", out var branchesEl) && branchesEl.ValueKind == JsonValueKind.Array)
-        {
-            branch.Branches = new List<Branch>();
-            foreach (var child in branchesEl.EnumerateArray())
-                branch.Branches.Add(ReadBranch(child));
-        }
-
-        if (el.TryGetProperty("connections", out var connEl) && connEl.ValueKind == JsonValueKind.Array)
-        {
-            branch.Connections = connEl.EnumerateArray()
-                .Select(x => x.GetString() ?? "db")
-                .ToList();
+            foreach (var child in branch.Branches)
+                Normalize(child);
         }
 
         return branch;
     }
 
-    private static Twig ReadTwig(JsonElement el)
+    private static void NormalizeTwig(Twig twig)
     {
-        var twig = new Twig
-        {
-            Connection = Str(el, "connection") ?? "db",
-        };
-
-        if (el.TryGetProperty("content", out var contentEl) && contentEl.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var tokEl in contentEl.EnumerateArray())
-                twig.Content.Add(ReadToken(tokEl));
-        }
-
-        if (el.TryGetProperty("parameters", out var paramsEl) && paramsEl.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var p in paramsEl.EnumerateArray())
-                twig.Parameters.Add(ReadParamDecl(p));
-        }
-
-        if (el.TryGetProperty("nullable", out var nullEl) && nullEl.ValueKind == JsonValueKind.Array)
-        {
-            twig.Nullable = nullEl.EnumerateArray()
-                .Select(x => x.GetString() ?? "")
-                .Where(x => x.Length > 0)
-                .ToList();
-        }
-
-        return twig;
+        twig.Parameters = twig.Parameters.Select(NormalizeParamDecl).ToList();
+        foreach (var token in twig.Content)
+            token.Content = null;
     }
 
-    private static SqlToken ReadToken(JsonElement el)
+    private static ParamDecl NormalizeParamDecl(ParamDecl decl)
     {
-        var token = new SqlToken
-        {
-            Type = Str(el, "type") ?? "",
-            Value = Str(el, "value") ?? "",
-            Name = Str(el, "name"),
-            Nullable = Bool(el, "nullable"),
-            NullableParameter = Str(el, "nullable_parameter"),
-            Param = Str(el, "param"),
-        };
-
-        if (el.TryGetProperty("group", out var groupEl) && groupEl.ValueKind == JsonValueKind.Number)
-            token.Group = groupEl.GetInt32();
-
-        if (el.TryGetProperty("choices", out var choicesEl) && choicesEl.ValueKind == JsonValueKind.Object)
-        {
-            token.Choices = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var prop in choicesEl.EnumerateObject())
-                token.Choices[prop.Name.ToLowerInvariant()] = prop.Value.GetString() ?? prop.Value.ToString();
-        }
-
-        return token;
-    }
-
-    private static ParamDecl ReadParamDecl(JsonElement el, string? fallbackName = null)
-    {
-        var decl = new ParamDecl
-        {
-            Name = Str(el, "name") ?? fallbackName ?? "",
-            Type = Str(el, "type") ?? "",
-            Required = Bool(el, "required"),
-        };
-        if (el.TryGetProperty("default", out var defEl) && defEl.ValueKind != JsonValueKind.Null)
-        {
+        if (decl.Default is JsonElement je)
+            decl.Default = JsonUtil.FromJsonElement(je);
+        if (decl.Default != null && !decl.HasDefault)
             decl.HasDefault = true;
-            decl.Default = defEl.ValueKind switch
-            {
-                JsonValueKind.String => defEl.GetString(),
-                JsonValueKind.Number when defEl.TryGetInt64(out var l) => l,
-                JsonValueKind.Number => defEl.GetDouble(),
-                JsonValueKind.True => true,
-                JsonValueKind.False => false,
-                _ => defEl.ToString(),
-            };
-        }
         return decl;
     }
 
-    private static Dictionary<string, object?>? DictOrNull(JsonElement parent, string name)
+    private static Dictionary<string, object?>? NormalizeModelDict(Dictionary<string, object?>? dict)
     {
-        if (!parent.TryGetProperty(name, out var el) || el.ValueKind != JsonValueKind.Object)
+        if (dict == null)
             return null;
-        return JsonUtil.ToDict(el);
-    }
 
-    private static string? Str(JsonElement el, string name)
-    {
-        if (!el.TryGetProperty(name, out var v) || v.ValueKind == JsonValueKind.Null)
-            return null;
-        return v.ValueKind == JsonValueKind.String ? v.GetString() : v.ToString();
-    }
+        var plain = dict.ToDictionary(
+            kv => kv.Key,
+            kv => kv.Value is JsonElement je ? JsonUtil.FromJsonElement(je) : kv.Value,
+            StringComparer.OrdinalIgnoreCase);
 
-    private static bool Bool(JsonElement el, string name)
-    {
-        if (!el.TryGetProperty(name, out var v))
-            return false;
-        return v.ValueKind == JsonValueKind.True ||
-               (v.ValueKind == JsonValueKind.String &&
-                bool.TryParse(v.GetString(), out var b) && b);
+        return JsonUtil.ToLowerKeysDeep(plain) as Dictionary<string, object?>;
     }
 }

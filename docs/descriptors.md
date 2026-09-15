@@ -65,7 +65,7 @@ Call path = folder path: `y.query("user/page", args={"page": 1, "page_size": 10}
 
 ## Parameters
 
-The SQL parameter header is the **sole input model**. Declare types at the top of a SQL file (first significant token; leading blank lines/spaces are fine); bind with `{{...}}`. Yaal derives args/payload JSON Schema from these headers (union across files in the operation).
+The SQL parameter header is the **sole input model**. Declare types at the top of a SQL file (first significant token; leading blank lines/spaces are fine); bind with `{{...}}`. Yaal derives args/payload input schemas from these headers (union across files in the operation).
 
 ```sql
 --($args.id integer, name! string)--
@@ -76,7 +76,7 @@ where optional(u.user_id = {{$args.id}})
   and u.user_name = {{name}}
 ```
 
-Allowed types: `integer`, `string`, `float`, `bool`, `blob`. Each name needs a type; duplicates and unknown types are errors. Trailing `!` on a name marks it **required** (`--($args.id! integer)--`). Optional `= <literal>` sets a JSON Schema **default** used when the caller omits the value:
+Allowed types: `integer`, `string`, `float`, `bool`, `blob`. Each name needs a type; duplicates and unknown types are errors. Trailing `!` on a name marks it **required** (`--($args.id! integer)--`). Optional `= <literal>` sets a **default** used when the caller omits the value:
 
 ```sql
 --($args.sort string = id, $args.dir string = asc, $args.page integer = 1)--
@@ -363,7 +363,7 @@ There is no process-wide or cross-query result cache. `clear_cache()` only clear
 
 ## Precompiled descriptors
 
-Compile SQL/YAML once to JSON (token twigs preserved), then load at runtime without re-lexing sources:
+Compile SQL/YAML once to JSON (twig token arrays compacted: adjacent whitespace and static SQL merged; structural tokens such as parameters, braces, and `sort()`/`dir()` preserved), then load at runtime without re-lexing sources:
 
 ```bash
 yaal --api path/to/api compile --out path/to/precompiled
@@ -377,10 +377,38 @@ y.query("user/get", args={"id": 1})
 
 `debug=True` forces live SQL/YAML and ignores `precompiled`. Artifacts are one JSON file per path (`user/get.json`; alternate mappers as `user/get#summary.json`). Optional-filter SQL elision still runs per request.
 
+**C# typed load:** precompiled JSON is deserialized into `Branch` / `Twig` via `System.Text.Json` (snake_case). No manual token-by-token parsing at load time.
+
+**C# source precompile (zero-parse startup):**
+
+```bash
+dotnet run --project csharp/src/Yaal.Cli -- compile --api path/to/api --format cs --out Generated/YaalDescriptors
+```
+
+Generated `.g.cs` files expose static `Branch` properties plus `YaalDescriptorRegistry.All`. Register at startup:
+
+```csharp
+var y = new Yaal.Yaal("path/to/api");
+foreach (var (path, branch) in Yaal.Generated.YaalDescriptorRegistry.All)
+    y.RegisterDescriptor(path, branch);
+```
+
+**In-memory registration (C#):** pass a built or generated `Branch` without any artifact file:
+
+```csharp
+y.RegisterDescriptor("user/get", myBranch);
+y.UnregisterDescriptor("user/get");
+```
+
+Load order when `debug=false`: registered descriptor → memory cache → precompiled JSON directory → live SQL/YAML.
+
 ## Performance notes
 
 - Providers drain cursors with `fetchmany` into a per-branch row list; nesting (`partition_by`) still buffers that branch in memory.
 - Compiled SQL (after optional-filter elision) is cached per twig + null-set + placeholder for the duration of a trunk execution.
+- Twigs without `sort()`/`dir()` skip runtime sort/dir resolution (`has_sort_dir: false` on precompiled artifacts).
+- Precompiled twig tokens are compacted at parse time (smaller JSON, faster load); compile/explain semantics are unchanged.
+- Nested row stitching uses shallow copies where safe (`use_parent_rows`, `partition_by`, single-parent branches).
 - Postgres / MySQL URL query knobs: `pool_size` (and Postgres `minconn` / `maxconn`). Defaults: Postgres max 20, MySQL 10.
 - C# uses driver connection pooling (Npgsql / MySqlConnector); pass `pooling`, `pool_size` / `maximum pool size` in the URL query string.
 
@@ -399,7 +427,7 @@ y.query("user/get", args={"id": 1})
 
 ## Input validation
 
-Args/payload schemas are derived from SQL headers (`float`→`number`, `bool`→`boolean`). Soft validation uses JSON Schema Draft-4 (Python) / 2020-12 (C#) on that derived model. Invalid args/payload return `{"errors": [...]}`.
+Args/payload schemas are derived from SQL headers (`float`→`number`, `bool`→`boolean`). Soft validation checks types and `required` on that model. Invalid args/payload return `{"errors": [...]}`.
 
 ## Public API
 
@@ -425,13 +453,16 @@ y.clear_cache()
 
 ```csharp
 var y = new Yaal.Yaal("path/to/api", debug: true);
+// or precompiled="path/to/precompiled" for JSON artifacts
 y.SetupDataProvider("db", "sqlite3:////tmp/app.db");
 // or an app IDataProviderContextManager:
 // y.SetupDataProvider("db", new MyContextManager());
 
+y.RegisterDescriptor("user/get", myBranch);  // optional in-memory descriptor
 y.Query("user/get", args: new { id = 1 });
 y.QueryJson("user/get", args: new { id = 1 });
 y.ExplainSql("user/get", args: new { id = 1 });
+y.UnregisterDescriptor("user/get");
 ```
 
 ### Database URLs
