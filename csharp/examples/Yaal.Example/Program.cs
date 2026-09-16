@@ -19,12 +19,9 @@ await using (var con = new SqliteConnection("Data Source=" + dbPath))
 var y = new Yaal.Yaal(repoRoot, debug: true);
 y.SetupDataProvider("db", "sqlite3:///" + dbPath);
 
-var users = y.QueryList<User>("user/get");
-foreach (var u in users)
-    Console.WriteLine($"{u.Id} {u.Name}");
-
-public class User
+var users = y.Query("user/get");
+foreach (var row in (System.Collections.IEnumerable)users!)
 {
-    public int Id { get; set; }
-    public string? Name { get; set; }
+    if (row is IDictionary<string, object?> dict)
+        Console.WriteLine($"{dict["id"]} {dict["name"]}");
 }

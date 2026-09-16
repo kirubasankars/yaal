@@ -38,66 +38,6 @@ var result = y.Query("user/get", args: new { id = 1 });
 string json = y.QueryJson("user/get", args: new { id = 1 });
 ```
 
-### Typed results (Dapper-style POCO mapping)
-
-Map shaped results directly to your types instead of dictionaries:
-
-```csharp
-public class User
-{
-    public int Id { get; set; }
-    public string? Name { get; set; }
-    public List<Role>? Roles { get; set; }
-}
-
-public class Role
-{
-    public int Id { get; set; }
-    public string? Name { get; set; }
-}
-
-// Object descriptor → single POCO
-var user = y.Query<User>("user/get", args: new { id = 1 });
-
-// Array descriptor → List<T>
-var users = y.QueryList<User>("user/list", args: new { active = 1 });
-// or: var users = y.Query<List<User>>("user/list", args: new { active = 1 });
-
-// Hydrate an existing instance (object descriptors only)
-var existing = new User { Name = "placeholder" };
-y.QueryInto("user/get", existing, args: new { id = 1 });
-
-// Materialize an already-fetched dictionary result
-var shaped = y.Query("user/get", args: new { id = 1 });
-var mapped = Yaal.Materialize<User>(shaped);
-```
-
-SQL/shaped keys (`id`, `name`, `page_size`) map to PascalCase properties (`Id`, `Name`, `PageSize`) case-insensitively. **Strict mapping** is the default for `Query<T>`, `QueryList<T>`, and `Materialize<T>`: every public writable property must appear in the result unless marked `[YaalIgnore]`. `QueryInto` / `MaterializeInto` stay lenient (skip missing columns).
-
-```csharp
-public class User
-{
-    public int Id { get; set; }
-    public string? Name { get; set; }
-
-    [YaalIgnore]
-    public string? DisplayLabel { get; set; }  // client-only; not in SQL
-}
-```
-
-Minimal SQL-only descriptor (no `$.output.yaml`):
-
-```sql
--- api/user/get/$.sql
-select 1 as id, 'kiruba' as name
-```
-
-```csharp
-var users = y.QueryList<User>("user/get");  // [{ Id = 1, Name = "kiruba" }]
-```
-
-Typed queries throw `YaalQueryException` on validation or execution errors; use untyped `Query()` if you need the `errors` dictionary.
-
 ### Precompiled descriptors
 
 Compile SQL/YAML ahead of time so startup skips lexing sources. Optional-filter elision still runs per request.
