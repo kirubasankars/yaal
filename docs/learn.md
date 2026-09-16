@@ -1,6 +1,6 @@
 # Learn Yaal — step by step
 
-Yaal is a **subtractive SQL ORM**: you write SQL + YAML descriptors; Yaal binds parameters, removes unused `optional(...)` filters, runs queries (optionally across databases), and shapes flat rows into **nested JSON**.
+Yaal is a **subtractive SQL ORM**: you write SQL + JSON descriptors; Yaal binds parameters, removes unused `optional(...)` filters, runs queries (optionally across databases), and shapes flat rows into **nested JSON**.
 
 This guide walks the shared fixtures under [`tests/fixtures/api/`](../tests/fixtures/api/). Seed data: [`docker/sqlite/schema.sql`](../docker/sqlite/schema.sql). Examples are **read-only** (no inserts/updates).
 
@@ -47,7 +47,7 @@ When `--db` is omitted, the CLI seeds a temp SQLite DB from `docker/sqlite/schem
 descriptor folder  →  SQL (+ optional child/sibling .sql)  →  bind {{params}}
                    →  subtract optional(...) when null
                    →  execute twigs (maybe named DBs)
-                   →  shape with $.output.yaml  →  nested JSON
+                   →  shape with $.output.json  →  nested JSON
 ```
 
 Key ideas:
@@ -55,8 +55,8 @@ Key ideas:
 - **Descriptors are folders**, not HTTP routes. Call path = folder path (`user/get`).
 - **SQL is the source of truth.** No query builder; aggregations and `WITH` are normal SQL.
 - **Subtractive, not additive:** unused filters are removed, not generated from models.
-- **`$` files:** trunk `$.sql` when present; branches like `$.roles.sql` / `$.paging.sql`; shape in `$.output.yaml`.
-- Discovery is **filesystem-first** (list `*.sql`), then output YAML shapes each branch. See [descriptors — SQL files and output](descriptors.md#how-sql-files-and-outputyaml-relate).
+- **`$` files:** trunk `$.sql` when present; branches like `$.roles.sql` / `$.paging.sql`; shape in `$.output.json`.
+- Discovery is **filesystem-first** (list `*.sql`), then output JSON shapes each branch. See [descriptors — SQL files and output](descriptors.md#how-sql-files-and-outputjson-relate).
 
 ---
 
@@ -72,11 +72,11 @@ yaal explain user/get --arg id=1
 Open:
 
 - [`tests/fixtures/api/user/get/$.sql`](../tests/fixtures/api/user/get/$.sql)
-- [`tests/fixtures/api/user/get/$.output.yaml`](../tests/fixtures/api/user/get/$.output.yaml)
+- [`tests/fixtures/api/user/get/$.output.json`](../tests/fixtures/api/user/get/$.output.json)
 
 Notice:
 
-1. Parameter header `--($args.id integer)--` is the input model (no `$.input.yaml`).
+1. Parameter header `--($args.id integer)--` is the input model (no `$.input.json`).
 2. Bind with `{{$args.id}}`.
 3. Output `partition_by` + `parent_rows` collapses join fan-out into nested `roles`.
 
@@ -128,7 +128,7 @@ That is the core of “subtractive.” Details: [examples — Optional list](exa
 
 ## Step 4 — Output shaping vocabulary
 
-In `$.output.yaml`:
+In `$.output.json`:
 
 | Key | Meaning |
 |---|---|
@@ -189,7 +189,7 @@ Pagination walkthrough: [examples — Paginated nest](examples.md#paginated-nest
 yaal query report/summary
 ```
 
-Open [`report/summary/$.sql`](../tests/fixtures/api/report/summary/$.sql). No query-builder escape hatch—write the SQL you want, map columns in `$.output.yaml`.
+Open [`report/summary/$.sql`](../tests/fixtures/api/report/summary/$.sql). No query-builder escape hatch—write the SQL you want, map columns in `$.output.json`.
 
 Walkthrough: [examples — Real SQL](examples.md#real-sql--reportsummary).
 
@@ -232,7 +232,7 @@ Checklist for a new operation folder:
 1. Create `api/<area>/<op>/`
 2. Add at least one `*.sql` (`$.sql` and/or siblings / children)
 3. Add parameter headers and `{{...}}` binds
-4. Add `$.output.yaml` with `mapped` / nesting
+4. Add `$.output.json` with `mapped` / nesting
 5. `yaal query <area>/<op> --api ... --db ...`
 
 More: [examples — Your own API tree](examples.md#your-own-api-tree) · [examples — Experiment sandbox](examples.md#experiment-sandbox).
@@ -283,7 +283,7 @@ make example-csharp
 
 | Need | Doc |
 |---|---|
-| Full SQL/YAML/JSON samples | [examples.md](examples.md) |
+| Full SQL/JSON samples | [examples.md](examples.md) |
 | Trunk/branch/twig, `$mode`, errors, API | [descriptors.md](descriptors.md) |
 | Install / features overview | [README.md](../README.md) |
 | .NET port | [csharp/README.md](../csharp/README.md) |

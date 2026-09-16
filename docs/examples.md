@@ -42,7 +42,7 @@ Join rows become one user object with a nested `roles` array.
 ```text
 user/get/
   $.sql
-  $.output.yaml
+  $.output.json
 ```
 
 **`$.sql`**
@@ -64,25 +64,26 @@ where u.active = 1
 order by u.user_id, r.role_id
 ```
 
-**`$.output.yaml`**
+**`$.output.json`**
 
-```yaml
-type: object
-partition_by: user_id
-properties:
-  id:
-    mapped: user_id
-  name:
-    mapped: user_name
-  roles:
-    type: array
-    partition_by: role_id
-    parent_rows: true
-    properties:
-      id:
-        mapped: role_id
-      name:
-        mapped: role_name
+```json
+{
+  "type": "object",
+  "partition_by": "user_id",
+  "properties": {
+    "id": { "mapped": "user_id" },
+    "name": { "mapped": "user_name" },
+    "roles": {
+      "type": "array",
+      "partition_by": "role_id",
+      "parent_rows": true,
+      "properties": {
+        "id": { "mapped": "role_id" },
+        "name": { "mapped": "role_name" }
+      }
+    }
+  }
+}
 ```
 
 ### Commands
@@ -127,7 +128,7 @@ How shaping works on the flat result set:
 
 ## Nested child SQL — `user/nested`
 
-Same JSON shape as `user/get`, but roles come from a **child SQL file** (`$.roles.sql`) instead of a join + `parent_rows`. Files are discovered on disk; the `roles` property in `$.output.yaml` supplies that branch’s output schema (not the other way around). See [descriptors](descriptors.md#how-sql-files-and-outputyaml-relate).
+Same JSON shape as `user/get`, but roles come from a **child SQL file** (`$.roles.sql`) instead of a join + `parent_rows`. Files are discovered on disk; the `roles` property in `$.output.json` supplies that branch’s output schema (not the other way around). See [descriptors](descriptors.md#how-sql-files-and-outputjson-relate).
 
 ### Descriptor
 
@@ -135,7 +136,7 @@ Same JSON shape as `user/get`, but roles come from a **child SQL file** (`$.role
 user/nested/
   $.sql
   $.roles.sql             # → branch $.roles → JSON property "roles"
-  $.output.yaml
+  $.output.json
 ```
 
 **`$.sql`** — parent users only:
@@ -168,24 +169,25 @@ where r.active = 1
 order by ur.user_id, r.role_id
 ```
 
-**`$.output.yaml`** — no `parent_rows`; the `roles` property matches the file suffix:
+**`$.output.json`** — no `parent_rows`; the `roles` property matches the file suffix:
 
-```yaml
-type: object
-partition_by: user_id
-properties:
-  id:
-    mapped: user_id
-  name:
-    mapped: user_name
-  roles:
-    type: array
-    partition_by: role_id
-    properties:
-      id:
-        mapped: role_id
-      name:
-        mapped: role_name
+```json
+{
+  "type": "object",
+  "partition_by": "user_id",
+  "properties": {
+    "id": { "mapped": "user_id" },
+    "name": { "mapped": "user_name" },
+    "roles": {
+      "type": "array",
+      "partition_by": "role_id",
+      "properties": {
+        "id": { "mapped": "role_id" },
+        "name": { "mapped": "role_name" }
+      }
+    }
+  }
+}
 ```
 
 Parent `partition_by: user_id` groups each user’s role rows from `$.roles.sql` onto that user.
@@ -250,18 +252,18 @@ order by
 
 The trailing `u.user_id asc` is a static tiebreaker — it stays even when `sort`/`dir` are omitted (only the dynamic term elides). `sort`/`dir` also each accept a comma-separated list for multi-column sort (`sort=name,id` + `dir=desc,asc`), and `dir` accepts `*_nulls_first`/`*_nulls_last` suffixes.
 
-**`$.output.yaml`**
+**`$.output.json`**
 
-```yaml
-type: array
-partition_by: user_id
-properties:
-  id:
-    mapped: user_id
-  name:
-    mapped: user_name
-  active:
-    mapped: active
+```json
+{
+  "type": "array",
+  "partition_by": "user_id",
+  "properties": {
+    "id": { "mapped": "user_id" },
+    "name": { "mapped": "user_name" },
+    "active": { "mapped": "active" }
+  }
+}
 ```
 
 ### Commands
@@ -332,7 +334,7 @@ order by
 
 ## Paginated nest — `user/page`
 
-No trunk `$.sql` (allowed: at least one `*.sql` is enough). Sibling files `$.paging.sql` and `$.data.sql` become branches `paging` and `data`; `$.output.yaml` shapes those properties (and nested `data.roles` via `parent_rows`).
+No trunk `$.sql` (allowed: at least one `*.sql` is enough). Sibling files `$.paging.sql` and `$.data.sql` become branches `paging` and `data`; `$.output.json` shapes those properties (and nested `data.roles` via `parent_rows`).
 
 ### Layout
 
@@ -340,7 +342,7 @@ No trunk `$.sql` (allowed: at least one `*.sql` is enough). Sibling files `$.pag
 user/page/
   $.paging.sql            # sibling branch (no $.sql)
   $.data.sql
-  $.output.yaml
+  $.output.json
 ```
 
 **`$.paging.sql`** — `$mode=params` stores `total_count` on `$params`, then returns paging fields (see [descriptors — `$mode`](descriptors.md#mode-rows)):
@@ -384,37 +386,39 @@ INNER JOIN roles r ON r.role_id = ur.role_id
 ORDER BY u.user_id, r.role_id
 ```
 
-**`$.output.yaml`**
+**`$.output.json`**
 
-```yaml
-type: object
-properties:
-  paging:
-    type: object
-    properties:
-      page:
-        mapped: page
-      page_size:
-        mapped: page_size
-      total_count:
-        mapped: total_count
-  data:
-    type: array
-    partition_by: user_id
-    properties:
-      id:
-        mapped: user_id
-      name:
-        mapped: user_name
-      roles:
-        type: array
-        partition_by: role_id
-        parent_rows: true
-        properties:
-          id:
-            mapped: role_id
-          name:
-            mapped: role_name
+```json
+{
+  "type": "object",
+  "properties": {
+    "paging": {
+      "type": "object",
+      "properties": {
+        "page": { "mapped": "page" },
+        "page_size": { "mapped": "page_size" },
+        "total_count": { "mapped": "total_count" }
+      }
+    },
+    "data": {
+      "type": "array",
+      "partition_by": "user_id",
+      "properties": {
+        "id": { "mapped": "user_id" },
+        "name": { "mapped": "user_name" },
+        "roles": {
+          "type": "array",
+          "partition_by": "role_id",
+          "parent_rows": true,
+          "properties": {
+            "id": { "mapped": "role_id" },
+            "name": { "mapped": "role_name" }
+          }
+        }
+      }
+    }
+  }
+}
 ```
 
 ### Commands
@@ -466,7 +470,7 @@ Aggregations and `WITH` / CTEs are ordinary SQL in the descriptor—no query-bui
 ```text
 report/summary/
   $.sql
-  $.output.yaml
+  $.output.json
 ```
 
 **`$.sql`**
@@ -487,17 +491,17 @@ FROM users u
 LEFT JOIN role_counts rc ON rc.user_id = u.user_id
 ```
 
-**`$.output.yaml`**
+**`$.output.json`**
 
-```yaml
-type: object
-properties:
-  user_count:
-    mapped: user_count
-  active_count:
-    mapped: active_count
-  assignment_count:
-    mapped: assignment_count
+```json
+{
+  "type": "object",
+  "properties": {
+    "user_count": { "mapped": "user_count" },
+    "active_count": { "mapped": "active_count" },
+    "assignment_count": { "mapped": "assignment_count" }
+  }
+}
 ```
 
 ### Commands
@@ -536,7 +540,7 @@ One operation, two named providers. Sibling branches: `app` reads the default `"
 user/combine/
   $.app.sql
   $.flags.sql
-  $.output.yaml
+  $.output.json
 ```
 
 **`$.app.sql`** (connection `"db"`)
@@ -565,25 +569,28 @@ FROM external_flags f
 WHERE f.user_id = {{$args.id}}
 ```
 
-**`$.output.yaml`**
+**`$.output.json`**
 
-```yaml
-type: object
-properties:
-  app:
-    type: object
-    properties:
-      id:
-        mapped: user_id
-      name:
-        mapped: user_name
-  flags:
-    type: object
-    properties:
-      user_id:
-        mapped: user_id
-      vip:
-        mapped: vip
+```json
+{
+  "type": "object",
+  "properties": {
+    "app": {
+      "type": "object",
+      "properties": {
+        "id": { "mapped": "user_id" },
+        "name": { "mapped": "user_name" }
+      }
+    },
+    "flags": {
+      "type": "object",
+      "properties": {
+        "user_id": { "mapped": "user_id" },
+        "vip": { "mapped": "vip" }
+      }
+    }
+  }
+}
 ```
 
 ### Setup
@@ -615,7 +622,7 @@ y.Query("user/combine", args: new { id = 1 });
 
 ## Precompiled descriptors
 
-Compile SQL/YAML **once** (no database required). At runtime Yaal loads the artifact instead of re-lexing `*.sql` / `$.output.yaml`. **Optional-filter elision still runs per request** — compile time does not bake in arg values.
+Compile SQL/JSON **once** (no database required). At runtime Yaal loads the artifact instead of re-lexing `*.sql` / `$.output.json`. **Optional-filter elision still runs per request** — compile time does not bake in arg values.
 
 ### Artifact layout (JSON)
 
@@ -677,7 +684,7 @@ When `debug=false` (default), descriptor resolution is:
 1. `RegisterDescriptor` / `UnregisterDescriptor` in-memory map
 2. Per-process memory cache (`ClearCache` clears this only)
 3. `precompiled` directory (JSON files)
-4. Live SQL/YAML from disk
+4. Live SQL/JSON from disk
 
 `debug=true` **skips** precompiled and registered shortcuts for descriptor *loading* — forces live parse every time (useful when editing descriptors). It does not disable SQL elision at execution time.
 
@@ -829,7 +836,7 @@ Demonstrates multiple `--sql--` twigs in one operation: insert user, insert role
 ```text
 user/create/
   $.sql
-  $.output.yaml
+  $.output.json
 ```
 
 **`$.sql`**
@@ -859,7 +866,7 @@ ORDER BY r.role_id
 
 Payload fields (`id`, `name`) come from the SQL header without `$args.` prefix. Required `!` marks enforce presence.
 
-**`$.output.yaml`** — same nested shape as `user/get`.
+**`$.output.json`** — same nested shape as `user/get`.
 
 ### Commands
 
@@ -946,7 +953,7 @@ Typical relative order (machine-dependent):
 
 | Method | What it measures |
 |---|---|
-| Live SQL parse (`CreateDescriptor`) | Read + lex `*.sql` / YAML from disk |
+| Live SQL parse (`CreateDescriptor`) | Read + lex `*.sql` / `$.output.json` from disk |
 | JSON file load | Read `list.json` + `System.Text.Json` deserialize |
 | JSON string deserialize | In-memory JSON only |
 | CS static descriptor | Touch `UserList.Descriptor` (generated) |
@@ -1021,7 +1028,7 @@ my-api/
   orders/
     list/
       $.sql
-      $.output.yaml
+      $.output.json
 ```
 
 ```bash

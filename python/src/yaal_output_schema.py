@@ -2,7 +2,7 @@
 # Use of this source code is governed by a MIT style
 # license that can be found in the LICENSE file.
 
-"""Validate Yaal output YAML schemas (flat-only field maps)."""
+"""Validate Yaal output JSON schemas (flat-only field maps)."""
 
 
 _ERR_BARE_TYPE = (

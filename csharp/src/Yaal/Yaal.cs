@@ -80,7 +80,7 @@ public sealed class Yaal
         return descriptor;
     }
 
-    /// <summary>Clear cached descriptors (reload SQL/YAML on next query).</summary>
+    /// <summary>Clear cached descriptors (reload SQL/JSON on next query).</summary>
     public void ClearCache()
     {
         _descriptors.Clear();

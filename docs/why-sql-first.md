@@ -96,7 +96,7 @@ Reporting and dashboard UIs are defined by a query *shape*, not a specific engin
   SELECT {{$args.page}} AS page, {{$args.page_size}} AS page_size, {{$params.total_count}} AS total_count
   ```
 
-- **Multi-source reports** — `--sql(name)--` twigs run against a second named connection (a flags DB, an analytics replica, a warehouse) and combine into one shape in a single operation ([`user/combine`](../tests/fixtures/api/user/combine/$.output.yaml)), instead of requiring a separate query outside the ORM's own `DbContext`/session.
+- **Multi-source reports** — `--sql(name)--` twigs run against a second named connection (a flags DB, an analytics replica, a warehouse) and combine into one shape in a single operation ([`user/combine`](../tests/fixtures/api/user/combine/$.output.json)), instead of requiring a separate query outside the ORM's own `DbContext`/session.
 
 None of this is ClickHouse-specific — it's the same argument for a Postgres or MySQL reporting schema. The report-shaped parts of an app (ad hoc filters, dynamic sort, aggregation, multi-source joins, pagination) are exactly where additive ORMs are weakest, because that shape doesn't map onto entities and relations in the first place.
 

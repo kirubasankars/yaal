@@ -5,7 +5,7 @@
 namespace Yaal.Descriptors;
 
 /// <summary>
-/// Validate Yaal output YAML schemas (flat-only field maps).
+/// Validate Yaal output JSON schemas (flat-only field maps).
 /// </summary>
 public static class OutputSchema
 {

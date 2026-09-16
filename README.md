@@ -2,7 +2,7 @@
 
 **Yaal is a subtractive SQL ORM.**
 
-You author full SQL (plus YAML shapes). At bind time Yaal **subtracts** unused `optional(...)` / null-filter fragments, runs the remaining statements (optionally across named databases), and shapes flat rows into **nested JSON**. Aggregations, `WITH` / CTEs, and window functions stay ordinary SQL—not a query-builder escape hatch.
+You author full SQL (plus JSON shapes). At bind time Yaal **subtracts** unused `optional(...)` / null-filter fragments, runs the remaining statements (optionally across named databases), and shapes flat rows into **nested JSON**. Aggregations, `WITH` / CTEs, and window functions stay ordinary SQL—not a query-builder escape hatch.
 
 That is the opposite of additive ORMs that build SQL up from models. Yaal is not ActiveRecord: no entity tracking, migrations, or query-builder DSL. SQL files remain the source of truth.
 
@@ -65,14 +65,18 @@ yaal query user/get --arg id=1
 
 `mapped`, `partition_by`, `parent_rows`, or child SQL (`$.roles.sql`). [get](docs/examples.md#nested-get--userget) · [nested](docs/examples.md#nested-child-sql--usernested)
 
-```yaml
-roles:
-  type: array
-  partition_by: role_id
-  parent_rows: true
-  properties:
-    id: { mapped: role_id }
-    name: { mapped: role_name }
+```json
+{
+  "roles": {
+    "type": "array",
+    "partition_by": "role_id",
+    "parent_rows": true,
+    "properties": {
+      "id": { "mapped": "role_id" },
+      "name": { "mapped": "role_name" }
+    }
+  }
+}
 ```
 
 ### Multi-query + data passing
@@ -166,7 +170,7 @@ foreach (var (path, branch) in Yaal.Generated.YaalDescriptorRegistry.All)
     y.RegisterDescriptor(path, branch);
 ```
 
-Load order when `debug=false`: registered → cache → precompiled JSON → live SQL/YAML. See [descriptors.md — precompiled](docs/descriptors.md#precompiled-descriptors).
+Load order when `debug=false`: registered → cache → precompiled JSON → live SQL/JSON. See [descriptors.md — precompiled](docs/descriptors.md#precompiled-descriptors).
 
 ## Install
 
@@ -252,10 +256,10 @@ for twig in y.explain_sql("user/get", args={"id": 1}):
 
 ## Documentation
 
-Operations are folders of `*.sql` (+ `$.output.yaml`), discovered filesystem-first and called by path (`y.query("user/get", ...)`). Full reference (parameters, output shaping, multi-twig / `$mode`, pagination, precompile, database URLs, errors, public API) lives in [`docs/descriptors.md`](docs/descriptors.md) — not duplicated here.
+Operations are folders of `*.sql` (+ `$.output.json`), discovered filesystem-first and called by path (`y.query("user/get", ...)`). Full reference (parameters, output shaping, multi-twig / `$mode`, pagination, precompile, database URLs, errors, public API) lives in [`docs/descriptors.md`](docs/descriptors.md) — not duplicated here.
 
 - [`docs/learn.md`](docs/learn.md) — step-by-step learning guide
-- [`docs/examples.md`](docs/examples.md) — end-to-end walkthroughs (SQL, YAML, sample JSON, CLI/Python/C#)
+- [`docs/examples.md`](docs/examples.md) — end-to-end walkthroughs (SQL, output JSON, sample results, CLI/Python/C#)
 - [`docs/descriptors.md`](docs/descriptors.md) — the full reference above
 - [`docs/why-sql-first.md`](docs/why-sql-first.md) — why SQL-first fits ClickHouse-like engines and complex reporting apps
 - [`docs/README.md`](docs/README.md) — full docs index (also covers the .NET port and runnable demos)

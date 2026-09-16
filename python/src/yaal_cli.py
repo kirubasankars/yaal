@@ -122,7 +122,7 @@ def _build_parser():
     parser.add_argument(
         "--debug",
         action="store_true",
-        help="Disable descriptor caching / force live SQL+YAML (ignores --precompiled)",
+        help="Disable descriptor caching / force live SQL+JSON (ignores --precompiled)",
     )
     parser.add_argument(
         "--precompiled",

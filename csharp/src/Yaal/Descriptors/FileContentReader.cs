@@ -78,14 +78,6 @@ public sealed class FileContentReader : IContentReader
 
     private static Dictionary<string, object?>? GetConfigFile(string filePath)
     {
-        var yamlPath = filePath + ".yaml";
-        if (File.Exists(yamlPath))
-        {
-            var configStr = Get(yamlPath);
-            if (!string.IsNullOrEmpty(configStr))
-                return JsonUtil.YamlToDict(configStr);
-        }
-
         var jsonPath = filePath + ".json";
         if (File.Exists(jsonPath))
         {

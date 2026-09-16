@@ -9,8 +9,6 @@ import re
 import uuid
 from urllib.parse import parse_qsl, unquote_plus
 
-import yaml
-
 from yaal_builder import create_trunk
 from yaal_errors import (
     DescriptorNotFoundError,
@@ -198,12 +196,6 @@ class FileContentReader:
         )
 
     def _get_config(self, file_path):
-        yaml_path = file_path + ".yaml"
-        if os.path.exists(yaml_path):
-            config_str = self._get(yaml_path)
-            if config_str is not None and config_str != '':
-                return yaml.safe_load(config_str)
-
         json_path = file_path + ".json"
         if os.path.exists(json_path):
             config_str = self._get(json_path)
@@ -310,7 +302,7 @@ class Yaal:
         return descriptor
 
     def clear_cache(self):
-        """Clear cached descriptors (reload SQL/YAML on next query)."""
+        """Clear cached descriptors (reload SQL/JSON on next query)."""
         self._descriptors = {}
 
     def _descriptor_key(self, descriptor_path, output_mapper=None):
@@ -323,7 +315,7 @@ class Yaal:
         if not self._debug and cache_key in self._descriptors:
             return self._descriptors[cache_key]
 
-        # debug=True forces live SQL/YAML; otherwise prefer precompiled artifacts.
+        # debug=True forces live SQL/JSON; otherwise prefer precompiled artifacts.
         if self._precompiled and not self._debug:
             descriptor = self._load_precompiled(descriptor_path, output_mapper)
         else:

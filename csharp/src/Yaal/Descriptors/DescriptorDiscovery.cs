@@ -35,20 +35,16 @@ public static class DescriptorDiscovery
             return mappers;
 
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var pattern in new[] { "$.output.*.yaml", "$.output.*.json" })
+        foreach (var file in Directory.EnumerateFiles(folder, "$.output.*.json"))
         {
-            foreach (var file in Directory.EnumerateFiles(folder, pattern))
-            {
-                var name = Path.GetFileName(file);
-                if (!name.StartsWith("$.output.", StringComparison.Ordinal))
-                    continue;
-                var ext = name.EndsWith(".yaml", StringComparison.OrdinalIgnoreCase) ? ".yaml" : ".json";
-                if (!name.EndsWith(ext, StringComparison.OrdinalIgnoreCase))
-                    continue;
-                var mapper = name["$.output.".Length..^ext.Length];
-                if (mapper.Length > 0 && seen.Add(mapper))
-                    mappers.Add(mapper);
-            }
+            var name = Path.GetFileName(file);
+            if (!name.StartsWith("$.output.", StringComparison.Ordinal))
+                continue;
+            if (!name.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                continue;
+            var mapper = name["$.output.".Length..^".json".Length];
+            if (mapper.Length > 0 && seen.Add(mapper))
+                mappers.Add(mapper);
         }
 
         return mappers;

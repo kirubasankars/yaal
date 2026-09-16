@@ -37,24 +37,20 @@ def _strip_validators(descriptor):
 
 
 def discover_output_mappers(api_root, path):
-    """Return [None, ...] including alternate mappers from $.output.<name>.yaml/json."""
+    """Return [None, ...] including alternate mappers from $.output.<name>.json."""
     folder = Path(api_root) / path
     mappers = [None]
     if not folder.is_dir():
         return mappers
     seen = set()
-    for pattern in ("$.output.*.yaml", "$.output.*.json"):
-        for f in folder.glob(pattern):
-            # $.output.summary.yaml -> summary
-            stem = f.name
-            if stem.startswith("$.output.") and (
-                stem.endswith(".yaml") or stem.endswith(".json")
-            ):
-                name = stem[len("$.output.") :]
-                name = name.rsplit(".", 1)[0]
-                if name and name not in seen:
-                    seen.add(name)
-                    mappers.append(name)
+    for f in folder.glob("$.output.*.json"):
+        # $.output.summary.json -> summary
+        stem = f.name
+        if stem.startswith("$.output.") and stem.endswith(".json"):
+            name = stem[len("$.output.") : -len(".json")]
+            if name and name not in seen:
+                seen.add(name)
+                mappers.append(name)
     return mappers
 
 

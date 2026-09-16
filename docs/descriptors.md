@@ -1,13 +1,13 @@
 # Descriptor reference
 
-Operations are folders of SQL + YAML. You call them by path (`user/get`); Yaal binds parameters, runs queries, and reshapes flat rows into nested JSON.
+Operations are folders of SQL + JSON. You call them by path (`user/get`); Yaal binds parameters, runs queries, and reshapes flat rows into nested JSON.
 
 Worked fixtures with sample JSON: [examples.md](examples.md).
 
 ```mermaid
 flowchart TD
   op["operation folder"] --> sqlFiles["list *.sql on disk"]
-  op --> output["$.output.yaml"]
+  op --> output["$.output.json"]
   sqlFiles --> tree["branch tree under dollar"]
   output --> shapeSlots["object/array property slots"]
   tree --> load["load each method.sql if present"]
@@ -26,39 +26,39 @@ flowchart TD
 | **Branch** | Nested method under `$`, e.g. `$.paging` / `$.roles` → files `$.paging.sql` / `$.roles.sql` |
 | **Twig** | One statement inside a SQL file, split by `--sql--` or `--sql(connection)--` |
 
-### How SQL files and `$.output.yaml` relate
+### How SQL files and `$.output.json` relate
 
-Discovery is **filesystem-first**, then shaped by output YAML:
+Discovery is **filesystem-first**, then shaped by output JSON:
 
 1. **List** every `*.sql` in the operation folder. At least one is required or the descriptor is not found.
 2. **Strip** `.sql` → names like `$`, `$.paging`, `$.roles` (deeper dots allowed: `$.data.items`).
 3. **Build** a branch tree under `$`. `$.sql` is the trunk file when present; it is **not** required — sibling-only ops use only `$.paging.sql`, `$.data.sql`, etc.
-4. **Load** `$.output.yaml` (or `$.output.<mapper>.yaml`). For each branch, the matching nested object/array property is that branch’s output model (`mapped`, `partition_by`, `parent_rows`, …).
+4. **Load** `$.output.json` (or `$.output.<mapper>.json`). For each branch, the matching nested object/array property is that branch’s output model (`mapped`, `partition_by`, `parent_rows`, …).
 5. **Object/array properties** in output also open child branch slots (needed for `parent_rows` with no child SQL file). File-derived children that are missing from that map are merged in.
 6. Nested child SQL is looked up as `$.{property}.sql` for property `property`. Output does **not** invent SQL filenames; it shapes whatever SQL (or parent rows) that branch has.
 
 | Pattern | Files | Output role |
 |---|---|---|
-| Trunk + shape | `$.sql` + `$.output.yaml` | Root `type` / `properties` shape the trunk result |
-| Nested child SQL | `$.sql` + `$.roles.sql` + `$.output.yaml` | Property `roles` must match the file suffix; its schema shapes the child |
-| `parent_rows` only | `$.sql` + `$.output.yaml` (no `$.roles.sql`) | Property `roles` with `parent_rows: true` nests from parent rows |
-| Sibling branches | `$.paging.sql` + `$.data.sql` + `$.output.yaml` (no `$.sql`) | Properties `paging` / `data` match suffixes |
+| Trunk + shape | `$.sql` + `$.output.json` | Root `type` / `properties` shape the trunk result |
+| Nested child SQL | `$.sql` + `$.roles.sql` + `$.output.json` | Property `roles` must match the file suffix; its schema shapes the child |
+| `parent_rows` only | `$.sql` + `$.output.json` (no `$.roles.sql`) | Property `roles` with `parent_rows: true` nests from parent rows |
+| Sibling branches | `$.paging.sql` + `$.data.sql` + `$.output.json` (no `$.sql`) | Properties `paging` / `data` match suffixes |
 
 ```text
 api/user/get/
   $.sql
-  $.output.yaml
-  $.output.summary.yaml     # optional alternate shape (output_mapper="summary")
+  $.output.json
+  $.output.summary.json     # optional alternate shape (output_mapper="summary")
 
 api/user/nested/
   $.sql                     # parent rows
   $.roles.sql               # child SQL → output property "roles"
-  $.output.yaml
+  $.output.json
 
 api/user/page/
   $.paging.sql              # sibling branch (no trunk $.sql)
   $.data.sql
-  $.output.yaml
+  $.output.json
 ```
 
 Call path = folder path: `y.query("user/page", args={"page": 1, "page_size": 10})`.
@@ -199,33 +199,39 @@ yaal query user/list --arg sort=id --arg dir=asc
 
 Root `type` is `object` (one result) or `array` (list). Fields are a flat map under `properties`. Named nested branches use their own `type` + `properties`.
 
-```yaml
-type: array
-partition_by: id
-properties:
-  id:
-    mapped: id
-  details:
-    type: object
-    parent_rows: true
-    properties:
-      name:
-        mapped: name
+```json
+{
+  "type": "array",
+  "partition_by": "id",
+  "properties": {
+    "id": { "mapped": "id" },
+    "details": {
+      "type": "object",
+      "parent_rows": true,
+      "properties": {
+        "name": { "mapped": "name" }
+      }
+    }
+  }
+}
 ```
 
-```yaml
-type: object
-partition_by: user_id
-properties:
-  id:
-    mapped: user_id
-  roles:
-    type: array
-    partition_by: role_id
-    parent_rows: true
-    properties:
-      id:
-        mapped: role_id
+```json
+{
+  "type": "object",
+  "partition_by": "user_id",
+  "properties": {
+    "id": { "mapped": "user_id" },
+    "roles": {
+      "type": "array",
+      "partition_by": "role_id",
+      "parent_rows": true,
+      "properties": {
+        "id": { "mapped": "role_id" }
+      }
+    }
+  }
+}
 ```
 
 Invalid: bare `type: object` / `type: array` under `properties` (including a nested item wrapper). Root `type` already sets array/object. A JSON field named `type` uses `type: { mapped: col }`.
@@ -266,7 +272,7 @@ Readonly fixture: [`user/page`](../tests/fixtures/api/user/page/) (`$.paging.sql
 
 ## Multi-file branches
 
-Branch map seed = **SQL files on disk** + **object/array properties in `$.output.yaml`** (see [How SQL files and `$.output.yaml` relate](#how-sql-files-and-outputyaml-relate)).
+Branch map seed = **SQL files on disk** + **object/array properties in `$.output.json`** (see [How SQL files and `$.output.json` relate](#how-sql-files-and-outputjson-relate)).
 
 - File `$.{name}.sql` → branch method `$.{name}` → JSON property `name` (must appear under `properties` in the parent output model when you want it shaped).
 - Output property with `type: object|array` and no matching SQL file → branch slot for `parent_rows` (or an empty child until a file is added).
@@ -288,7 +294,7 @@ When using `LIMIT`/`OFFSET` with join fan-out + `parent_rows`, page the parent e
 | `break` | Return these rows as the branch result immediately (column `$mode` stripped) |
 | `json` | Treat the `json` column as the branch result (string → parse; otherwise pass through) |
 
-Ordinary SELECT twigs omit `$mode` entirely — rows go through normal `$.output.yaml` shaping.
+Ordinary SELECT twigs omit `$mode` entirely — rows go through normal `$.output.json` shaping.
 
 Use `$mode` for **in-SQL orchestration** across multi-twig files (stash values, soft business errors, early exit, engine JSON) without a second orchestration language in the host.
 
@@ -340,7 +346,7 @@ WHERE u.user_id = {{$args.id}}
 
 ### `json` — engine-produced JSON
 
-Uses the `json` column as the branch result. If the value is a string, it is parsed as JSON; otherwise it is passed through. Handy when the database already builds JSON (e.g. `json_group_array` / `jsonb_agg`). Bypasses `$.output.yaml` shaping for that branch.
+Uses the `json` column as the branch result. If the value is a string, it is parsed as JSON; otherwise it is passed through. Handy when the database already builds JSON (e.g. `json_group_array` / `jsonb_agg`). Bypasses `$.output.json` shaping for that branch.
 
 ```sql
 SELECT
@@ -352,18 +358,18 @@ WHERE active = 1
 
 ## `output_mapper`
 
-Alternate shapes use `$.output.<name>.yaml`:
+Alternate shapes use `$.output.<name>.json`:
 
 ```python
 y.query("user/get", args={"id": 1}, output_mapper="summary")
-# loads $.output.summary.yaml instead of $.output.yaml
+# loads $.output.summary.json instead of $.output.json
 ```
 
-There is no process-wide or cross-query result cache. `clear_cache()` only clears cached descriptors (reload SQL/YAML).
+There is no process-wide or cross-query result cache. `clear_cache()` only clears cached descriptors (reload SQL/JSON).
 
 ## Precompiled descriptors
 
-Compile SQL/YAML once to JSON (twig token arrays compacted: adjacent whitespace and static SQL merged; structural tokens such as parameters, braces, and `sort()`/`dir()` preserved), then load at runtime without re-lexing sources:
+Compile SQL and `$.output.json` once (twig token arrays compacted: adjacent whitespace and static SQL merged; structural tokens such as parameters, braces, and `sort()`/`dir()` preserved), then load at runtime without re-lexing sources:
 
 ```bash
 yaal --api path/to/api compile --out path/to/precompiled
@@ -375,7 +381,7 @@ y.setup_data_provider("db", "sqlite3:////tmp/app.db")
 y.query("user/get", args={"id": 1})
 ```
 
-`debug=True` forces live SQL/YAML and ignores `precompiled`. Artifacts are one JSON file per path (`user/get.json`; alternate mappers as `user/get#summary.json`). Optional-filter SQL elision still runs per request.
+`debug=True` forces live SQL/JSON and ignores `precompiled`. Artifacts are one JSON file per path (`user/get.json`; alternate mappers as `user/get#summary.json`). Optional-filter SQL elision still runs per request.
 
 **C# typed load:** precompiled JSON is deserialized into `Branch` / `Twig` via `System.Text.Json` (snake_case). No manual token-by-token parsing at load time.
 
@@ -400,7 +406,7 @@ y.RegisterDescriptor("user/get", myBranch);
 y.UnregisterDescriptor("user/get");
 ```
 
-Load order when `debug=false`: registered descriptor → memory cache → precompiled JSON directory → live SQL/YAML.
+Load order when `debug=false`: registered descriptor → memory cache → precompiled JSON directory → live SQL/JSON.
 
 ## Performance notes
 

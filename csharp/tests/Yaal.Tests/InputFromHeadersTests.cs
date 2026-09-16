@@ -116,7 +116,7 @@ public class InputFromHeadersTests
     }
 
     [Fact]
-    public void Fixture_user_get_without_input_yaml()
+    public void Fixture_user_get_without_input_schema()
     {
         var fixtureApi = Path.GetFullPath(Path.Combine(
             AppContext.BaseDirectory, "..", "..", "..", "..", "..", "..",

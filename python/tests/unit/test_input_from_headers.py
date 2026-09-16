@@ -99,7 +99,7 @@ class TestInputFromHeaders(unittest.TestCase):
         self.assertEqual(trunk["model"]["args"]["required"], ["id"])
         self.assertEqual(trunk["model"]["args"]["properties"]["id"]["type"], "integer")
 
-    def test_fixture_user_get_without_input_yaml(self):
+    def test_fixture_user_get_without_input_schema(self):
         from pathlib import Path
 
         api = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "api"

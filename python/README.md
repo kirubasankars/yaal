@@ -54,7 +54,7 @@ yaal --api tests/fixtures/api compile --out /tmp/yaal-precompiled
 y = Yaal("tests/fixtures/api", precompiled="/tmp/yaal-precompiled")
 ```
 
-`debug=True` forces live SQL/YAML and ignores `precompiled`. See [descriptors.md](../docs/descriptors.md#precompiled-descriptors).
+`debug=True` forces live SQL/JSON and ignores `precompiled`. See [descriptors.md](../docs/descriptors.md#precompiled-descriptors).
 
 Descriptors are shared with the .NET library under [`../tests/fixtures/api/`](../tests/fixtures/api/) (`user/get`, `user/nested`, `user/list`, `user/page`, `report/summary`, `user/combine`).
 

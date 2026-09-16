@@ -1,6 +1,6 @@
 # Yaal
 
-**Subtractive SQL→JSON for .NET 8.** You author full SQL (plus YAML shapes). At bind time Yaal **subtracts** unused `optional(...)` fragments, runs the remaining statements (optionally across named databases), and shapes flat rows into **nested JSON**.
+**Subtractive SQL→JSON for .NET 8.** You author full SQL (plus JSON shapes). At bind time Yaal **subtracts** unused `optional(...)` fragments, runs the remaining statements (optionally across named databases), and shapes flat rows into **nested JSON**.
 
 Yaal is not an additive ORM: no entity tracking, migrations, or query-builder DSL. SQL files stay the source of truth.
 
@@ -26,7 +26,7 @@ Requires **.NET 8**. License: [MIT](https://github.com/kirubasankars/yaal/blob/m
 
 ## Usage
 
-Point Yaal at a folder of descriptor operations (`*.sql` plus optional `$.output.yaml`). Call operations by path:
+Point Yaal at a folder of descriptor operations (`*.sql` plus optional `$.output.json`). Call operations by path:
 
 ```csharp
 using Yaal;
@@ -40,7 +40,7 @@ string json = y.QueryJson("user/get", args: new { id = 1 });
 
 ### Precompiled descriptors
 
-Compile SQL/YAML ahead of time so startup skips lexing sources. Optional-filter elision still runs per request.
+Compile SQL/JSON ahead of time so startup skips lexing sources. Optional-filter elision still runs per request.
 
 **JSON artifacts** (same layout as the Python CLI):
 
@@ -69,7 +69,7 @@ y.RegisterDescriptor("user/get", myBranch);
 y.UnregisterDescriptor("user/get");
 ```
 
-Load order when `debug=false`: registered → cache → precompiled JSON directory → live SQL/YAML. `debug=true` forces live SQL/YAML and ignores `precompiled`.
+Load order when `debug=false`: registered → cache → precompiled JSON directory → live SQL/JSON. `debug=true` forces live SQL/JSON and ignores `precompiled`.
 
 ### yaal CLI
 
@@ -142,7 +142,7 @@ y.SetupDataProvider("db", new MyContextManager(), scheme: "postgresql");
 ## Documentation
 
 - [Learning path](https://github.com/kirubasankars/yaal/blob/master/docs/learn.md)
-- [Examples](https://github.com/kirubasankars/yaal/blob/master/docs/examples.md) (SQL, YAML, sample JSON, C#)
+- [Examples](https://github.com/kirubasankars/yaal/blob/master/docs/examples.md) (SQL, output JSON, sample results, C#)
 - [Descriptor reference](https://github.com/kirubasankars/yaal/blob/master/docs/descriptors.md)
 - [Source repository](https://github.com/kirubasankars/yaal)
 

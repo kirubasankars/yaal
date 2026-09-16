@@ -1,8 +1,0 @@
-type: object
-properties:
-  user_count:
-    mapped: user_count
-  active_count:
-    mapped: active_count
-  assignment_count:
-    mapped: assignment_count
