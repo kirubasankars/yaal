@@ -114,71 +114,6 @@ public sealed class Yaal
         return GetResult(descriptor, context);
     }
 
-    /// <summary>
-    /// Run a query and materialize the shaped result to <typeparamref name="T"/>.
-    /// Object descriptors return a single POCO; array descriptors require <c>T</c> to be
-    /// <c>List&lt;TElement&gt;</c> or use <see cref="QueryList{TElement}"/>.
-    /// </summary>
-    public T Query<T>(
-        string descriptorPath,
-        object? payload = null,
-        object? args = null,
-        string? outputMapper = null) where T : notnull
-    {
-        var descriptor = LoadDescriptor(descriptorPath, outputMapper);
-        var context = ContextFactory.CreateContext(descriptor, payload, args);
-        var raw = GetResult(descriptor, context);
-        ObjectMaterializer.ThrowIfErrors(raw);
-        return MaterializeFromDescriptor<T>(descriptor, raw);
-    }
-
-    /// <summary>Run an array-output query and materialize rows to <see cref="List{T}"/>.</summary>
-    public List<T> QueryList<T>(
-        string descriptorPath,
-        object? payload = null,
-        object? args = null,
-        string? outputMapper = null)
-    {
-        var descriptor = LoadDescriptor(descriptorPath, outputMapper);
-        EnsureArrayOutput(descriptor, descriptorPath);
-        var context = ContextFactory.CreateContext(descriptor, payload, args);
-        var raw = GetResult(descriptor, context);
-        ObjectMaterializer.ThrowIfErrors(raw);
-        return ObjectMaterializer.MapList<T>(raw);
-    }
-
-    /// <summary>Run an object-output query and map the result into an existing instance.</summary>
-    public T QueryInto<T>(
-        string descriptorPath,
-        T into,
-        object? payload = null,
-        object? args = null,
-        string? outputMapper = null) where T : class
-    {
-        ArgumentNullException.ThrowIfNull(into);
-        var descriptor = LoadDescriptor(descriptorPath, outputMapper);
-        EnsureObjectOutput(descriptor, descriptorPath);
-        var context = ContextFactory.CreateContext(descriptor, payload, args);
-        var raw = GetResult(descriptor, context);
-        ObjectMaterializer.ThrowIfErrors(raw);
-        ObjectMaterializer.MapInto(raw, into);
-        return into;
-    }
-
-    /// <summary>Materialize an already-shaped <see cref="Query"/> result.</summary>
-    public static T Materialize<T>(object? shapedResult) where T : notnull
-    {
-        ObjectMaterializer.ThrowIfErrors(shapedResult);
-        return ObjectMaterializer.Map<T>(shapedResult!);
-    }
-
-    /// <summary>Map an already-shaped result into an existing instance.</summary>
-    public static void MaterializeInto(object? shapedResult, object into)
-    {
-        ObjectMaterializer.ThrowIfErrors(shapedResult);
-        ObjectMaterializer.MapInto(shapedResult, into);
-    }
-
     public string QueryJson(
         string descriptorPath,
         object? payload = null,
@@ -268,67 +203,6 @@ public sealed class Yaal
 
     private static string DescriptorKey(string descriptorPath, string? outputMapper) =>
         string.IsNullOrEmpty(outputMapper) ? descriptorPath : descriptorPath + "#" + outputMapper;
-
-    private static T MaterializeFromDescriptor<T>(Branch descriptor, object? raw) where T : notnull
-    {
-        if (string.Equals(descriptor.OutputType, YaalConst.Array, StringComparison.OrdinalIgnoreCase))
-        {
-            if (TryGetListElementType(typeof(T), out var elementType))
-            {
-                var list = typeof(ObjectMaterializer)
-                    .GetMethod(nameof(ObjectMaterializer.MapList), new[] { typeof(object) })!
-                    .MakeGenericMethod(elementType)
-                    .Invoke(null, new[] { raw });
-                return (T)list!;
-            }
-
-            throw new InvalidOperationException(
-                $"Descriptor '{descriptor.Path}' returns an array; use QueryList<{typeof(T).Name}>(...) " +
-                $"or Query<List<{typeof(T).Name}>>(...).");
-        }
-
-        return ObjectMaterializer.Map<T>(raw!);
-    }
-
-    private static bool TryGetListElementType(Type type, out Type elementType)
-    {
-        if (type.IsArray)
-        {
-            elementType = type.GetElementType()!;
-            return true;
-        }
-
-        if (type.IsGenericType)
-        {
-            var def = type.GetGenericTypeDefinition();
-            if (def == typeof(List<>) || def == typeof(IList<>) || def == typeof(IReadOnlyList<>))
-            {
-                elementType = type.GetGenericArguments()[0];
-                return true;
-            }
-        }
-
-        elementType = typeof(object);
-        return false;
-    }
-
-    private static void EnsureObjectOutput(Branch descriptor, string descriptorPath)
-    {
-        if (!string.Equals(descriptor.OutputType, YaalConst.Object, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException(
-                $"Descriptor '{descriptorPath}' returns an array; QueryInto supports object output only.");
-        }
-    }
-
-    private static void EnsureArrayOutput(Branch descriptor, string descriptorPath)
-    {
-        if (!string.Equals(descriptor.OutputType, YaalConst.Array, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException(
-                $"Descriptor '{descriptorPath}' returns an object; use Query<{descriptor.OutputType}>(...) instead.");
-        }
-    }
 
     private string DefaultPlaceholder()
     {

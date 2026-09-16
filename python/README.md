@@ -47,48 +47,6 @@ for twig in y.explain_sql("user/get", args={"id": 1}):
     print(twig["sql"])
 ```
 
-### Typed results (dataclass mapping)
-
-```python
-import dataclasses
-from typing import List, Optional
-
-@dataclasses.dataclass
-class Role:
-    id: int = 0
-    name: str = ""
-
-@dataclasses.dataclass
-class User:
-    id: int = 0
-    name: str = ""
-    roles: Optional[List[Role]] = None
-
-user = y.query_typed("user/get", User, args={"id": 1})
-users = y.query_list("user/list", User, args={"active": 1})
-
-existing = User(name="placeholder")
-y.query_into("user/get", existing, args={"id": 1})
-
-# Materialize an already-fetched dictionary result
-shaped = y.query("user/get", args={"id": 1})
-mapped = Yaal.materialize(User, shaped)
-```
-
-Typed queries raise `YaalQueryError` on validation/execution errors; use `query()` if you need the `errors` dict. Mapping lives in `yaal_materializer.py` (dataclasses, `__init__` annotations, or plain classes with type hints).
-
-**Strict mapping:** `query_typed`, `query_list`, and `materialize` require every dataclass field to appear in the shaped result. Use `yaal_ignore()` for client-only fields. `query_into` / `materialize_into` skip missing columns.
-
-```python
-from yaal_materializer import yaal_ignore
-
-@dataclasses.dataclass
-class User:
-    id: int = 0
-    name: str = ""
-    label: Optional[str] = yaal_ignore(default=None)
-```
-
 ### Precompiled descriptors
 
 ```bash

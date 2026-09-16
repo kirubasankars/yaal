@@ -127,31 +127,6 @@ yaal query report/summary
 # {"user_count":2,"active_count":2,"assignment_count":3}
 ```
 
-### Typed results
-
-Map shaped JSON to dataclasses (Python) or POCOs (C#) instead of dictionaries. Nested YAML properties map to nested types; array descriptors use `query_list` / `QueryList`. Typed queries raise `YaalQueryError` / `YaalQueryException` on validation or execution errors — use untyped `query()` / `Query()` if you need the `errors` dict.
-
-```python
-import dataclasses
-
-@dataclasses.dataclass
-class User:
-    id: int = 0
-    name: str = ""
-
-user = y.query_typed("user/get", User, args={"id": 1})
-users = y.query_list("user/list", User, args={"active": 1})
-```
-
-```csharp
-public class User { public int Id { get; set; } public string? Name { get; set; } }
-
-var user = y.Query<User>("user/get", args: new { id = 1 });
-var users = y.QueryList<User>("user/list", args: new { active = 1 });
-```
-
-Walkthroughs: [examples — typed results](docs/examples.md#typed-results). Package docs: [`python/README.md`](python/README.md) · [`csharp/README.md`](csharp/README.md).
-
 ### Dual runtime
 
 Python and .NET 8 share [`tests/fixtures/api/`](tests/fixtures/api/). [Full example →](docs/examples.md#dual-runtime-python--c)
@@ -260,14 +235,12 @@ y.setup_data_provider("db", "sqlite3:////tmp/app.db")
 
 result = y.query("user/get", args={"id": 1})
 # {'id': 1, 'name': 'admin', 'roles': [{'id': 1, 'name': 'Administrator'}, ...]}
-
-# Typed: y.query_typed("user/get", User, args={"id": 1})  # see python/README.md
 ```
 
 ```csharp
 var y = new Yaal.Yaal("tests/fixtures/api", debug: true);
 y.SetupDataProvider("db", "sqlite3:////tmp/app.db");
-var user = y.Query<User>("user/get", args: new { id = 1 });
+var user = y.Query("user/get", args: new { id = 1 });
 ```
 
 Preview compiled SQL (after null-filter elision):
@@ -325,7 +298,7 @@ Library, tests, and demo live under [`python/`](python/). See [`python/README.md
 
 ## C# (.NET 8)
 
-A full-parity .NET port lives under [`csharp/`](csharp/). Consume from nuget.org: [`Yaal`](https://www.nuget.org/packages/Yaal) — see [`csharp/README.md`](csharp/README.md) (the package listing). Includes typed `Query<T>` / `QueryList<T>`, JSON or C# source precompile, `RegisterDescriptor`, and the `yaal` CLI (`compile --format json|cs`). Tests run in a .NET SDK container (no local `dotnet` required):
+A full-parity .NET port lives under [`csharp/`](csharp/). Consume from nuget.org: [`Yaal`](https://www.nuget.org/packages/Yaal) — see [`csharp/README.md`](csharp/README.md) (the package listing). Includes JSON or C# source precompile, `RegisterDescriptor`, and the `yaal` CLI (`compile --format json|cs`). Tests run in a .NET SDK container (no local `dotnet` required):
 
 ```bash
 make test-csharp
