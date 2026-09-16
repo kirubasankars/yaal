@@ -12,7 +12,7 @@
     <!-- PackAsTool + ProjectReference: avoid duplicate "Yaal" entry in deps.json -->
     <GenerateDependencyFile>false</GenerateDependencyFile>
     <PackageId>Yaal.Cli</PackageId>
-    <Version>0.5.0</Version>
+    <Version>0.6.0</Version>
     <Description>CLI for compiling and inspecting Yaal SQL→JSON descriptors.</Description>
   </PropertyGroup>
 
