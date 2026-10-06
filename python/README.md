@@ -2,7 +2,7 @@
 
 Python implementation of the Yaal SQL→JSON library. Descriptor-driven queries, subtractive `optional()` / `optional_groups` SQL DSL, header array params (`integer[]` for `IN`), nested JSON shaping, and multi-engine providers.
 
-Package: `yaal` `0.7.0` (MIT). Database drivers are extras — add the client your app uses. SQLite is stdlib.
+Package: `yaal` `0.8.0` (MIT). Database drivers are extras — add the client your app uses. SQLite is stdlib.
 
 ```bash
 pip install yaal
