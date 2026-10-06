@@ -79,7 +79,7 @@
         }
       ]
     },
-    "expect_sql": "select * from t where (col in (?)) or (col in (?, ?, ?))",
+    "expect_sql": "select * from t where ((col in (?)) or (col in (?, ?, ?)))",
     "expect_param_names": [
       "cv",
       "cv",

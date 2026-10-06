@@ -129,7 +129,7 @@ That is the core of “subtractive.” When the only predicate in a `WHERE`, `PR
 
 **Optional `IN`:** declare `integer[]` (or `string[]`, …) in the header; `optional(col in ({{$args.ids}}))` expands to one `?` per list element. Omit or `[]` elides the block.
 
-**Optional groups:** declare `blob` and `optional_groups({{$args.pairs}}, …)` with body placeholders as keys in each row object. Multiple rows become `(pred) or (pred)`. Walkthrough: [examples — Optional groups](examples.md#optional-groups--usergroups).
+**Optional groups:** declare `blob` and `optional_groups({{$args.pairs}}, …)` with body placeholders as keys in each row object. Multiple rows become `((pred) or (pred))` — the outer parens keep the group a single boolean unit next to `AND`. Walkthrough: [examples — Optional groups](examples.md#optional-groups--usergroups).
 
 ```bash
 yaal explain user/groups --arg 'pairs=[{"id":1}]'

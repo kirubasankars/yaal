@@ -18,6 +18,10 @@ public class OptionalGroupsHardeningTests
     private const string GroupsInSql =
         "--(pairs blob)--\nselect * from t where optional_groups({{pairs}}, id in ({{ids}}))\n";
 
+    private const string TwoGroupsAndSql =
+        "--(pairs blob, pairs1 blob)--\nselect * from t where optional_groups({{pairs}}, id = {{id}})" +
+        " and optional_groups({{pairs1}}, id = {{id}})\n";
+
     private static string NormalizeWs(string sql) => Regex.Replace(sql, @"\s+", " ").Trim();
 
     private static Twig Twig(string sql) => SqlParser.Parse(Lexer.Lex(sql), "$")!.SqlStmts![0];
@@ -37,6 +41,53 @@ public class OptionalGroupsHardeningTests
         return (NormalizeWs(compiled.Content), values);
     }
 
+    private static (string Sql, List<object?> Values) CompileAndBindTwo(
+        object? pairs, object? pairs1)
+    {
+        var helper = new DataProviderHelper();
+        var shape = new Shape(data: new Dictionary<string, object?>
+        {
+            ["pairs"] = pairs,
+            ["pairs1"] = pairs1,
+        });
+        var compiled = helper.GetExecutableContent("?", Twig(TwoGroupsAndSql), shape);
+        var values = helper.BuildParameters(compiled, shape, (_, v) => v);
+        return (NormalizeWs(compiled.Content), values);
+    }
+
+    [Fact]
+    public void Multi_row_group_is_parenthesized_beside_and()
+    {
+        var (sql, values) = CompileAndBindTwo(
+            new List<object?> { Row("id", 1L), Row("id", 3L) },
+            new List<object?> { Row("id", 2L) });
+
+        sql.Should().Be("select * from t where ((id = ?) or (id = ?)) and (id = ?)");
+        values.Should().Equal(1L, 3L, 2L);
+    }
+
+    [Fact]
+    public void Single_row_group_is_not_double_wrapped()
+    {
+        var (sql, values) = CompileAndBindTwo(
+            new List<object?> { Row("id", 1L) },
+            new List<object?> { Row("id", 2L) });
+
+        sql.Should().Be("select * from t where (id = ?) and (id = ?)");
+        values.Should().Equal(1L, 2L);
+    }
+
+    [Fact]
+    public void Elided_group_leaves_other_group_intact()
+    {
+        var (sql, values) = CompileAndBindTwo(
+            new List<object?> { Row("id", 1L), Row("id", 3L) },
+            null);
+
+        sql.Should().Be("select * from t where ((id = ?) or (id = ?))");
+        values.Should().Equal(1L, 3L);
+    }
+
     [Fact]
     public void List_of_rows_compiles_and_binds()
     {
@@ -44,7 +95,7 @@ public class OptionalGroupsHardeningTests
             GroupsSql,
             new List<object?> { Row("id", 1L), Row("id", 2L) });
 
-        sql.Should().Be("select * from t where (id = ?) or (id = ?)");
+        sql.Should().Be("select * from t where ((id = ?) or (id = ?))");
         values.Should().Equal(1L, 2L);
     }
 
@@ -53,7 +104,7 @@ public class OptionalGroupsHardeningTests
     {
         var (sql, values) = CompileAndBind(GroupsSql, "[{\"id\": 1}, {\"id\": 2}]");
 
-        sql.Should().Be("select * from t where (id = ?) or (id = ?)");
+        sql.Should().Be("select * from t where ((id = ?) or (id = ?))");
         values.Should().Equal(1L, 2L);
     }
 
@@ -73,7 +124,7 @@ public class OptionalGroupsHardeningTests
         var (sql, values) = CompileAndBind(
             GroupsInSql, "[{\"ids\": [1, 2]}, {\"ids\": [3]}]");
 
-        sql.Should().Be("select * from t where (id in (?, ?)) or (id in (?))");
+        sql.Should().Be("select * from t where ((id in (?, ?)) or (id in (?)))");
         values.Should().Equal(1L, 2L, 3L);
     }
 

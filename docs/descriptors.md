@@ -161,8 +161,19 @@ Runtime `$args.pairs`:
 Compiled shape:
 
 ```sql
-where (col2 in (?, ?, ?) and col1 = ?) or (col2 in (?) and col1 = ?)
+where ((col2 in (?, ?, ?) and col1 = ?) or (col2 in (?) and col1 = ?))
 ```
+
+Each row becomes its own parenthesized predicate, and when there are two or more rows the whole OR-join is wrapped once more. That outer pair is what keeps a neighbouring `AND` from binding tighter than the group, so two groups side by side compile as separate units:
+
+```sql
+where optional_groups({{$args.pairs}}, id = {{id}})
+  and optional_groups({{$args.pairs1}}, id = {{id}})
+-- 2 rows in pairs, 1 row in pairs1:
+where ((id = ?) or (id = ?)) and (id = ?)
+```
+
+A single-row group is already one predicate in parens, so it is not wrapped again.
 
 | Blob field value | Placeholders |
 |---|---|

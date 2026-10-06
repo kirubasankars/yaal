@@ -1999,7 +1999,12 @@ def compile_sql(
                     )
                     branches.append("(" + "".join(bt) + ")")
                     branch_params.extend(bp)
-                tokens.append(" or ".join(branches))
+                joined = " or ".join(branches)
+                # Multiple rows leave a top-level "or"; parenthesize so an
+                # adjacent AND does not bind tighter than this group.
+                tokens.append(
+                    "(" + joined + ")" if len(branches) > 1 else joined
+                )
                 parameters.extend(branch_params)
                 idx = close_idx + 1
                 continue

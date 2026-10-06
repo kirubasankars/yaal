@@ -393,7 +393,7 @@ yaal query user/groups --arg 'pairs=[{"id":1},{"id":2}]'
 # [{"id":1},{"id":2}]
 
 yaal explain user/groups --arg 'pairs=[{"id":1},{"id":2}]'
-# where (id = ?) or (id = ?)  — binds: [1, 2]
+# where ((id = ?) or (id = ?))  — binds: [1, 2]
 ```
 
 ```python

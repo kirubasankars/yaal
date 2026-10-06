@@ -215,7 +215,10 @@ public static class SqlCompiler
                         branches.Add("(" + string.Concat(bt) + ")");
                         parameters.AddRange(bp);
                     }
-                    tokens.Add(string.Join(" or ", branches));
+                    var joined = string.Join(" or ", branches);
+                    // Multiple rows leave a top-level "or"; parenthesize so an
+                    // adjacent AND does not bind tighter than this group.
+                    tokens.Add(branches.Count > 1 ? "(" + joined + ")" : joined);
                     idx = closeIdx.Value + 1;
                     continue;
                 }

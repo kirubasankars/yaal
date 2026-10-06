@@ -537,7 +537,7 @@
         }
       ]
     },
-    "expect_sql": "select * from t where (col2 = ? and col1 = ?) or (col2 = ? and col1 = ?)",
+    "expect_sql": "select * from t where ((col2 = ? and col1 = ?) or (col2 = ? and col1 = ?))",
     "expect_param_names": [
       "cv",
       "cv1",
@@ -595,7 +595,7 @@
         }
       ]
     },
-    "expect_sql": "select * from t where (col2 in (?, ?, ?) and col1 = ?) or (col2 in (?) and col1 = ?)",
+    "expect_sql": "select * from t where ((col2 in (?, ?, ?) and col1 = ?) or (col2 in (?) and col1 = ?))",
     "expect_param_names": [
       "cv",
       "cv",
@@ -603,6 +603,60 @@
       "cv1",
       "cv",
       "cv1"
+    ]
+  },
+  {
+    "name": "optional_groups_and_two_blobs",
+    "sql": "--(pairs blob, pairs1 blob)--\nselect * from t where optional_groups({{pairs}}, id = {{id}}) and optional_groups({{pairs1}}, id = {{id}})\n",
+    "nulls": [],
+    "group_counts": {
+      "pairs": 2,
+      "pairs1": 1
+    },
+    "group_field_lengths": {
+      "pairs": [
+        {
+          "id": 1
+        },
+        {
+          "id": 1
+        }
+      ],
+      "pairs1": [
+        {
+          "id": 1
+        }
+      ]
+    },
+    "expect_sql": "select * from t where ((id = ?) or (id = ?)) and (id = ?)",
+    "expect_param_names": [
+      "id",
+      "id",
+      "id"
+    ]
+  },
+  {
+    "name": "optional_groups_multi_row_with_optional_scalar",
+    "sql": "--(pairs blob, flag integer)--\nselect * from t where optional_groups({{pairs}}, col1 = {{cv1}}) and optional(col2 = {{flag}})\n",
+    "nulls": [],
+    "group_counts": {
+      "pairs": 2
+    },
+    "group_field_lengths": {
+      "pairs": [
+        {
+          "cv1": 1
+        },
+        {
+          "cv1": 1
+        }
+      ]
+    },
+    "expect_sql": "select * from t where ((col1 = ?) or (col1 = ?)) and (col2 = ?)",
+    "expect_param_names": [
+      "cv1",
+      "cv1",
+      "flag"
     ]
   },
   {

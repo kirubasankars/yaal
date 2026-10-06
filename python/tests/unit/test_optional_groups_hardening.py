@@ -35,6 +35,11 @@ GROUPS_IN_SQL = (
     "--(pairs blob)--\n"
     "select * from t where optional_groups({{pairs}}, id in ({{ids}}))\n"
 )
+TWO_GROUPS_AND_SQL = (
+    "--(pairs blob, pairs1 blob)--\n"
+    "select * from t where optional_groups({{pairs}}, id = {{id}})"
+    " and optional_groups({{pairs1}}, id = {{id}})\n"
+)
 
 
 class _Shape:
@@ -62,17 +67,55 @@ def _compile_and_bind(sql, pairs):
     return compiled["content"].strip(), values
 
 
+class TestGroupPrecedence(unittest.TestCase):
+    """A group is one boolean unit: AND must not bind tighter than its OR rows."""
+
+    def _compile(self, sql, props):
+        twig = parser(lexer(sql), "$")["sql_stmts"][0]
+        shape = _Shape(props)
+        helper = DataProviderHelper()
+        compiled = helper.get_executable_content("?", twig, shape)
+        values = helper.build_parameters(compiled, shape, lambda _t, v: v)
+        return compiled["content"].strip(), values
+
+    def test_multi_row_group_is_parenthesized_beside_and(self):
+        sql, values = self._compile(
+            TWO_GROUPS_AND_SQL,
+            {"pairs": [{"id": 1}, {"id": 3}], "pairs1": [{"id": 2}]},
+        )
+        self.assertEqual(
+            sql, "select * from t where ((id = ?) or (id = ?)) and (id = ?)"
+        )
+        self.assertEqual(values, [1, 3, 2])
+
+    def test_single_row_group_is_not_double_wrapped(self):
+        sql, values = self._compile(
+            TWO_GROUPS_AND_SQL,
+            {"pairs": [{"id": 1}], "pairs1": [{"id": 2}]},
+        )
+        self.assertEqual(sql, "select * from t where (id = ?) and (id = ?)")
+        self.assertEqual(values, [1, 2])
+
+    def test_elided_group_leaves_other_group_intact(self):
+        sql, values = self._compile(
+            TWO_GROUPS_AND_SQL,
+            {"pairs": [{"id": 1}, {"id": 3}], "pairs1": None},
+        )
+        self.assertEqual(sql, "select * from t where ((id = ?) or (id = ?))")
+        self.assertEqual(values, [1, 3])
+
+
 class TestBlobSourceShapes(unittest.TestCase):
     """A blob can arrive as a list, a JSON string, or JSON bytes."""
 
     def test_list_of_rows(self):
         sql, values = _compile_and_bind(GROUPS_SQL, [{"id": 1}, {"id": 2}])
-        self.assertEqual(sql, "select * from t where (id = ?) or (id = ?)")
+        self.assertEqual(sql, "select * from t where ((id = ?) or (id = ?))")
         self.assertEqual(values, [1, 2])
 
     def test_json_string_compiles_and_binds(self):
         sql, values = _compile_and_bind(GROUPS_SQL, '[{"id": 1}, {"id": 2}]')
-        self.assertEqual(sql, "select * from t where (id = ?) or (id = ?)")
+        self.assertEqual(sql, "select * from t where ((id = ?) or (id = ?))")
         self.assertEqual(values, [1, 2])
 
     def test_json_bytes_compiles_and_binds(self):
@@ -85,7 +128,7 @@ class TestBlobSourceShapes(unittest.TestCase):
             GROUPS_IN_SQL, '[{"ids": [1, 2]}, {"ids": [3]}]'
         )
         self.assertEqual(
-            sql, "select * from t where (id in (?, ?)) or (id in (?))"
+            sql, "select * from t where ((id in (?, ?)) or (id in (?)))"
         )
         self.assertEqual(values, [1, 2, 3])
 
@@ -289,7 +332,7 @@ class TestOptionalGroupsEndToEnd(unittest.TestCase):
         explained = self._yaal.explain_sql(
             "user/groups", args={"pairs": [{"id": 1}, {"id": 2}]}
         )
-        self.assertIn("(id = ?) or (id = ?)", explained[0]["sql"])
+        self.assertIn("((id = ?) or (id = ?))", explained[0]["sql"])
         self.assertEqual(explained[0]["parameters"], [1, 2])
 
     def test_row_count_change_recompiles(self):
