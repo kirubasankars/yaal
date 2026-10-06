@@ -3,6 +3,8 @@
 // license that can be found in the LICENSE file.
 
 using Microsoft.Data.Sqlite;
+using System.Data.Common;
+using ClickHouse.Client.ADO;
 using Yaal;
 
 static string RepoRoot() =>
@@ -13,6 +15,26 @@ static void Print(string title, object? value)
     Console.WriteLine($"-- {title} --");
     Console.WriteLine(JsonUtil.Serialize(value));
     Console.WriteLine();
+}
+
+static void ShowInjectedClickHouseExamples(Yaal.Yaal y)
+{
+    var externalClient = new ClickHouseConnection(
+        "Host=127.0.0.1;Port=8123;Username=default;Password=;Database=default");
+
+    y.SetupDataProvider(
+        "ch_client",
+        "clickhouse://default:@127.0.0.1:8123/default",
+        externalClient);
+
+    y.SetupClickHouseDataProvider("ch_factory", () =>
+    {
+        DbConnection connection = new ClickHouseConnection(
+            "Host=127.0.0.1;Port=8123;Username=default;Password=;Database=default");
+        return connection;
+    });
+
+    Console.WriteLine("-- injected ClickHouse examples registered (ch_client, ch_factory) --");
 }
 
 static async Task SeedAsync(string dbPath, string schemaPath)
@@ -40,6 +62,7 @@ try
     var y = new Yaal.Yaal(api, debug: true);
     y.SetupDataProvider("db", "sqlite3:///" + dbPath);
     y.SetupDataProvider("flags", "sqlite3:///" + flagsPath);
+    ShowInjectedClickHouseExamples(y);
 
     Print("user/get id=1", y.Query("user/get", args: new { id = 1 }));
     Print("user/nested id=1", y.Query("user/nested", args: new { id = 1 }));

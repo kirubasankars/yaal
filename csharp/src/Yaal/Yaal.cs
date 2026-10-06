@@ -6,6 +6,9 @@ using Yaal.Descriptors;
 using Yaal.Execution;
 using Yaal.Providers;
 using Yaal.Sql;
+using ClickHouse.Client.ADO;
+
+using System.Data.Common;
 
 namespace Yaal;
 
@@ -47,6 +50,29 @@ public sealed class Yaal
                 $"Unsupported database URL scheme '{providerName}' for provider '{name}'. " +
                 "Supported schemes: sqlite3, postgresql, mysql, clickhouse"),
         };
+        _dataProviderSchemes[name] = providerName;
+    }
+
+    public void SetupClickHouseDataProvider(string name, Func<DbConnection> createConnection)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentNullException.ThrowIfNull(createConnection);
+
+        _dataProviders[name] = new ClickHouseContextManager(createConnection);
+        _dataProviderSchemes[name] = "clickhouse";
+    }
+
+
+    public void SetupDataProvider(string name, string databaseUri, ClickHouseConnection clickHouseClient)
+    {
+        var (providerName, options) = DatabaseUrl.Parse(databaseUri);
+        if (providerName != "clickhouse")
+        {
+            throw new UnsupportedDatabaseUrlException(
+                $"Injected ClickHouse client requires clickhouse URL scheme for provider '{name}'.");
+        }
+
+        _dataProviders[name] = ClickHouseProviderFactory.Create(options, clickHouseClient);
         _dataProviderSchemes[name] = providerName;
     }
 

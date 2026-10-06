@@ -1,6 +1,6 @@
 # Yaal
 
-**Subtractive SQL→JSON for .NET 8.** You author full SQL (plus JSON shapes). At bind time Yaal **subtracts** unused `optional(...)` and `optional_groups(...)` fragments (including empty `WHERE` / `PREWHERE` / `HAVING` cleanup), expands header `integer[]` (and sibling types) for `IN` lists, runs the remaining statements (optionally across named databases), and shapes flat rows into **nested JSON**.
+**Subtractive SQL→JSON for .NET 8.** You author full SQL (plus JSON shapes). At bind time Yaal **subtracts** unused `optional(...)` fragments, runs the remaining statements (optionally across named databases), and shapes flat rows into **nested JSON**.
 
 Yaal is not an additive ORM: no entity tracking, migrations, or query-builder DSL. SQL files stay the source of truth.
 
@@ -36,6 +36,50 @@ y.SetupDataProvider("db", "sqlite3:////tmp/app.db");
 
 var result = y.Query("user/get", args: new { id = 1 });
 string json = y.QueryJson("user/get", args: new { id = 1 });
+```
+
+### Inject external client/connection (ClickHouse)
+
+If your app already creates database clients (DI container, factory, secrets manager, etc.), you can inject them instead of letting Yaal create them.
+
+Add ClickHouse client package in your app:
+
+```bash
+dotnet add package ClickHouse.Client
+```
+
+Inject an already-created `ClickHouseConnection`:
+
+```csharp
+using ClickHouse.Client.ADO;
+using Yaal;
+
+var y = new Yaal("./api");
+
+var ch = new ClickHouseConnection(
+    "Host=127.0.0.1;Port=8123;Username=default;Password=;Database=default");
+
+y.SetupDataProvider(
+    "db",
+    "clickhouse://default:@127.0.0.1:8123/default",
+    ch);
+```
+
+Inject a connection factory (`Func<DbConnection>`) so the connection is created outside Yaal logic:
+
+```csharp
+using System.Data.Common;
+using ClickHouse.Client.ADO;
+using Yaal;
+
+var y = new Yaal("./api");
+
+y.SetupClickHouseDataProvider("db", () =>
+{
+    DbConnection con = new ClickHouseConnection(
+        "Host=127.0.0.1;Port=8123;Username=default;Password=;Database=default");
+    return con;
+});
 ```
 
 ### Precompiled descriptors

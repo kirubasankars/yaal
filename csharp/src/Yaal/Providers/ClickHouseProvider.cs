@@ -2,8 +2,11 @@
 // Use of this source code is governed by a MIT style
 // license that can be found in the LICENSE file.
 
+using System.Data.Common;
+
 using ClickHouse.Client.ADO;
 using ClickHouse.Client.ADO.Parameters;
+
 using Yaal.Execution;
 using Yaal.Sql;
 
@@ -11,9 +14,24 @@ namespace Yaal.Providers;
 
 public sealed class ClickHouseContextManager : IDataProviderContextManager
 {
-    private readonly string _connectionString;
+    private readonly Func<DbConnection> _createConnection;
 
     public ClickHouseContextManager(DatabaseOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        var connectionString = BuildConnectionString(options);
+        _createConnection = () => new ClickHouseConnection(connectionString);
+    }
+
+    public ClickHouseContextManager(Func<DbConnection> createConnection)
+    {
+        ArgumentNullException.ThrowIfNull(createConnection);
+        _createConnection = createConnection;
+    }
+
+    public IDataProvider GetContext() => new ClickHouseDataProvider(_createConnection);
+
+    private static string BuildConnectionString(DatabaseOptions options)
     {
         var host = options.Host ?? "127.0.0.1";
         var port = int.TryParse(options.Port, out var p) ? p : 8123;
@@ -41,46 +59,97 @@ public sealed class ClickHouseContextManager : IDataProviderContextManager
             builder.Protocol = "https";
         }
 
-        _connectionString = builder.ConnectionString;
+        return builder.ConnectionString;
     }
-
-    public IDataProvider GetContext() => new ClickHouseDataProvider(_connectionString);
 }
 
 public sealed class ClickHouseDataProvider : IDataProvider
 {
-    private readonly string _connectionString;
+    private readonly string? _connectionString;
+
+    private readonly bool _ownsClient;
     private ClickHouseConnection? _client;
+
+    private readonly Func<DbConnection>? _createConnection;
+    private DbConnection? _dbConnection;
 
     public ClickHouseDataProvider(string connectionString)
     {
         _connectionString = connectionString;
+        _ownsClient = true;
+    }
+
+    public ClickHouseDataProvider(Func<DbConnection> createConnection)
+    {
+        ArgumentNullException.ThrowIfNull(createConnection);
+        _createConnection = createConnection;
     }
 
     public void Begin()
     {
-        _client = new ClickHouseConnection(_connectionString);
-        _client.Open();
+        if (_ownsClient)
+        {
+            _client = new ClickHouseConnection(_connectionString!);
+        }
+        else
+        {
+            _dbConnection ??= _createConnection!();
+        }
+
+        if (_client != null && _client.State != System.Data.ConnectionState.Open)
+        {
+            _client.Open();
+            return;
+        }
+
+        if (_dbConnection != null && _dbConnection.State != System.Data.ConnectionState.Open)
+        {
+            _dbConnection.Open();
+            return;
+        }
     }
 
     public void End()
     {
         var client = _client;
         _client = null;
-        client?.Dispose();
+        var dbclient = _dbConnection;
+        _dbConnection = null;
+
+        if (_ownsClient)
+        {
+            client?.Dispose();
+            return;
+        }
+        else
+        {
+            dbclient?.Dispose();
+            return;
+        }
     }
 
     public void Error()
     {
         var client = _client;
         _client = null;
-        try { client?.Dispose(); } catch { /* ignore */ }
+        var dbclient = _dbConnection;
+        _dbConnection = null;
+
+        if (_ownsClient)
+        {
+            try { client?.Dispose(); } catch { /* ignore */ }
+        }
+        else
+        {
+            try { dbclient?.Dispose(); } catch { /* ignore */ }
+        }
     }
 
     public (IReadOnlyList<IDictionary<string, object?>> Rows, object? LastInsertedId) Execute(
         Twig twig, Shape inputShape, DataProviderHelper helper)
     {
-        var client = _client!;
+        var connection = (DbConnection?)_client ?? _dbConnection
+            ?? throw new InvalidOperationException("ClickHouse connection is not initialized. Call Begin() before Execute().");
         var sql = helper.GetExecutableContent("%s", twig, inputShape);
         var args = helper.BuildParameters(sql, inputShape, (_, v) => v);
         var (content, _) = PlaceholderUtil.ToNumbered(
@@ -88,7 +157,7 @@ public sealed class ClickHouseDataProvider : IDataProvider
             args.Count,
             i => "{p" + i + ":" + ClickHouseTypeName(args[i]) + "}");
 
-        using var cmd = client.CreateCommand();
+        using var cmd = connection.CreateCommand();
         cmd.CommandText = content;
         for (var i = 0; i < args.Count; i++)
         {

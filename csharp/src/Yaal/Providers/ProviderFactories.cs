@@ -33,6 +33,10 @@ internal static class ClickHouseProviderFactory
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static IDataProviderContextManager Create(DatabaseOptions options) =>
         ProviderFactory.CreateOrThrow(options, "ClickHouse", "ClickHouse.Client", static o => new ClickHouseContextManager(o));
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static IDataProviderContextManager Create(DatabaseOptions options, ClickHouse.Client.ADO.ClickHouseConnection client) =>
+        ProviderFactory.CreateOrThrow(options, "ClickHouse", "ClickHouse.Client", _ => new ClickHouseContextManager(() => client));
 }
 
 file static class ProviderFactory
