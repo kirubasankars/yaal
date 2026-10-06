@@ -159,4 +159,73 @@ public class SqliteIntegrationTests : IDisposable
         AsInt64(flags["user_id"]).Should().Be(1);
         AsInt64(flags["vip"]).Should().Be(1);
     }
+
+    [Fact]
+    public void Optional_in_elided_returns_all_users()
+    {
+        var rows = ((System.Collections.IEnumerable)_yaal.Query("user/optional_in")!)
+            .Cast<object>().ToList();
+        rows.Should().HaveCount(2);
+        Ids(rows).Should().Equal(1L, 2L);
+    }
+
+    [Fact]
+    public void Optional_in_filters_by_integer_array()
+    {
+        var rows = ((System.Collections.IEnumerable)_yaal.Query(
+            "user/optional_in", args: new { ids = new List<object?> { 2L } })!)
+            .Cast<object>().ToList();
+        rows.Should().HaveCount(1);
+        Ids(rows).Should().Equal(2L);
+    }
+
+    [Fact]
+    public void Optional_multi_all_bound_or_all_elided()
+    {
+        var filtered = ((System.Collections.IEnumerable)_yaal.Query(
+            "user/optional_multi",
+            args: new { active = 1, ids = new List<object?> { 1L }, name = "admin" })!)
+            .Cast<object>().ToList();
+        filtered.Should().HaveCount(1);
+        Ids(filtered).Should().Equal(1L);
+
+        var all = ((System.Collections.IEnumerable)_yaal.Query("user/optional_multi")!)
+            .Cast<object>().ToList();
+        all.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void Optional_multi_partial_args_errors()
+    {
+        var act = () => _yaal.Query("user/optional_multi", args: new { active = 1 });
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*partial parameters*");
+    }
+
+    [Fact]
+    public void Optional_groups_in_per_row_and_composed_with_optional()
+    {
+        var pairRows = new List<object?>
+        {
+            BlobRow("ids", new List<object?> { 1L }),
+            BlobRow("ids", new List<object?> { 2L }),
+        };
+        var rows = ((System.Collections.IEnumerable)_yaal.Query(
+            "user/groups_in", args: new { pairs = pairRows })!)
+            .Cast<object>().ToList();
+        Ids(rows).Should().Equal(1L, 2L);
+
+        var one = ((System.Collections.IEnumerable)_yaal.Query(
+            "user/groups_filter",
+            args: new { pairs = new List<object?> { BlobRow("ids", new List<object?> { 1L }) }, active = 1 })!)
+            .Cast<object>().ToList();
+        one.Should().HaveCount(1);
+        Ids(one).Should().Equal(1L);
+    }
+
+    private static List<long> Ids(List<object> rows) =>
+        rows.Select(r => AsInt64(((Dictionary<string, object?>)r)["id"])).ToList();
+
+    private static Dictionary<string, object?> BlobRow(string field, object? value) =>
+        new(StringComparer.OrdinalIgnoreCase) { [field] = value };
 }

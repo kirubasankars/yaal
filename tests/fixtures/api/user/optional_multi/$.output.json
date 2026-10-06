@@ -1,0 +1,8 @@
+{
+  "type": "array",
+  "properties": {
+    "id": { "mapped": "id" },
+    "name": { "mapped": "name" },
+    "active": { "mapped": "active" }
+  }
+}
