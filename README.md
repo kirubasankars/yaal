@@ -8,7 +8,7 @@ That is the opposite of additive ORMs that build SQL up from models. Yaal is not
 
 Pipeline: *write SQL → subtract optionals → run (any named DB) → shape → JSON*.
 
-License: [MIT](LICENSE). Version: `0.8.0` (Python package + NuGet metadata). Python and .NET 8 share the same descriptor files.
+License: [MIT](LICENSE). Version: `0.9.0` (Python package + NuGet metadata). Python and .NET 8 share the same descriptor files.
 
 ## Features
 
@@ -16,7 +16,7 @@ Learning path: [`docs/learn.md`](docs/learn.md). Full walkthroughs: [`docs/examp
 
 ### Subtractive filters
 
-`optional(...)` / null groups are **removed** when params are null, omitted, or (for list params) `[]`. Empty `WHERE`, `PREWHERE`, and `HAVING` clauses are dropped after elision—no bare `HAVING` or leftover `1 = 1`. [Full example →](docs/examples.md#optional-list--userlist)
+`optional(...)` / null groups are **removed** when params are null. [Full example →](docs/examples.md#optional-list--userlist)
 
 ```sql
 --($args.active integer)--
@@ -30,14 +30,9 @@ where 1 = 1
 | *(omitted)* | predicate removed; `where 1 = 1` | `[]` |
 | `active=1` | `and (u.active = ?)` | `[1]` |
 
-**Header array types** (`integer[]`, …): one `{{param}}` expands to `?, ?, ?` for `IN` lists. Inside `optional(...)`, use `optional(id in ({{$args.id}}))` with `--arg 'id=[1,2]'`. Multi-param `optional(...)` requires all listed params or none—partial args are a compile error. See [descriptors — optional filters](docs/descriptors.md#optional-filters).
-
-**Optional groups** repeat an AND-shaped filter per row of a `blob` arg (JSON array of objects), OR-joined; omit/`[]` elides the whole block. [Example →](docs/examples.md#optional-groups--usergroups)
-
 ```bash
 yaal explain user/list
 yaal explain user/list --arg active=1
-yaal explain user/groups --arg 'pairs=[{"id":1}]'
 ```
 
 ### Dynamic ORDER BY
