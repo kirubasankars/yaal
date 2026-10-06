@@ -523,11 +523,13 @@ def _matching_close_brace(tokens, open_index):
 def _optional_body_param_names(body):
     """Names that gate an optional(...).
 
-    A nested optional_groups(...) contributes only its blob source; its body
-    placeholders come from each blob row, never from request args.
+    A nested optional_groups(...) contributes nothing: its blob source elides the
+    group on its own, and its body placeholders come from each blob row.
+    Returns (names, saw_optional_groups).
     """
     names = []
     seen = set()
+    saw_groups = False
 
     def add(token):
         name = _parameter_name_from_token(token)
@@ -540,20 +542,17 @@ def _optional_body_param_names(body):
     while i < n:
         t = body[i]
         if t["type"] == "word" and t["value"].lower() == "optional_groups":
+            saw_groups = True
             j = _skip_ws_tokens(body, i + 1)
             if j < n and body[j]["type"] == "brace" and body[j]["value"] == "(":
                 k = _matching_close_brace(body, j)
                 if k is not None:
-                    for inner in body[j + 1:k]:
-                        if inner["type"] == "parameter":
-                            add(inner)
-                            break
                     i = k + 1
                     continue
         if t["type"] == "parameter":
             add(t)
         i += 1
-    return names
+    return names, saw_groups
 
 
 def _desugar_optional_tokens(tokens):
@@ -581,15 +580,20 @@ def _desugar_optional_tokens(tokens):
                     raise TypeError("unclosed optional(...)")
 
                 body = _desugar_optional_tokens(tokens[j + 1:k])
-                param_names = _optional_body_param_names(body)
+                param_names, saw_groups = _optional_body_param_names(body)
 
-                if len(param_names) == 0:
+                if len(param_names) == 0 and not saw_groups:
                     raise TypeError(
                         "optional(...) requires at least one {{param}} in its body"
                     )
 
                 open_paren = dict(open_tok)
-                open_paren["nullable_parameters"] = param_names
+                if param_names:
+                    open_paren["nullable_parameters"] = param_names
+                if saw_groups and not param_names:
+                    # Nothing but a group inside: the group elides itself, so the
+                    # wrapper parens must disappear with it rather than emit "()".
+                    open_paren["optional_groups_wrapper"] = True
                 result.append(open_paren)
                 result.extend(body)
                 result.append(tokens[k])
@@ -1612,6 +1616,8 @@ def parser(tokens, method):
                 n = token["group_source"].lower()
                 if n not in sql_stmt["nullable"]:
                     sql_stmt["nullable"].append(n)
+            elif token.get("optional_groups_wrapper"):
+                pass
             elif "content" in token:
                 m = _POSSIBLE_NULL_PARAMETER_RX.search(token["content"])
                 if m:
@@ -1839,6 +1845,25 @@ def _find_matching_close_paren(stmt, open_idx):
     return None
 
 
+def _wrapped_groups_all_elide(stmt, start, end, nulls_set, group_counts):
+    """True when every optional_groups(...) inside a wrapper optional(...) elides."""
+    for idx in range(start, end):
+        token = stmt[idx]
+        if token["type"] != "brace" or token.get("value") != "(":
+            continue
+        source = token.get("group_source")
+        if not source:
+            continue
+        if _nullable_group_should_elide(token, nulls_set):
+            continue
+        skey = source.lower()
+        # A missing count is an error the normal expansion path reports.
+        if skey in group_counts and group_counts[skey] == 0:
+            continue
+        return False
+    return True
+
+
 def _append_group_field_slots(
     field_name,
     count,
@@ -2062,6 +2087,18 @@ def compile_sql(
                     group = None
                 idx += 1
                 continue
+
+            if token.get("value") == "(" and token.get("optional_groups_wrapper"):
+                close_idx = _find_matching_close_paren(stmt, idx)
+                if close_idx is None:
+                    raise ValueError("unclosed optional(...)")
+                if _wrapped_groups_all_elide(
+                    stmt, idx + 1, close_idx, nulls_set, group_counts
+                ):
+                    # Only a group inside, and it is gone: drop the parens too.
+                    _strip_preceding_connector(tokens)
+                    idx = close_idx + 1
+                    continue
 
             if token.get("value") == "(" and token.get("group_source"):
                 if _nullable_group_should_elide(token, nulls_set):

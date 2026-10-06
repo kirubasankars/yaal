@@ -129,10 +129,14 @@ class TestOptionalFiltersIntegration(unittest.TestCase):
         rows = self._yaal.query("user/groups_in_optional")
         self.assertEqual([r["id"] for r in rows], [1, 2])
 
-    def test_groups_in_optional_partial_args_errors(self):
-        with self.assertRaises(ValueError) as ctx:
-            self._yaal.query("user/groups_in_optional", args={"active": 1})
-        self.assertIn("partial parameters", str(ctx.exception).lower())
+    def test_groups_in_optional_without_pairs_keeps_scalar_filter(self):
+        rows = self._yaal.query("user/groups_in_optional", args={"active": 1})
+        self.assertEqual([r["id"] for r in rows], [1, 2])
+        explained = self._yaal.explain_sql(
+            "user/groups_in_optional", args={"active": 1}
+        )
+        self.assertNotIn("()", explained[0]["sql"])
+        self.assertEqual(explained[0]["parameters"], [1])
 
 
 if __name__ == "__main__":

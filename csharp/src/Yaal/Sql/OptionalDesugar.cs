@@ -30,13 +30,15 @@ public static class OptionalDesugar
     }
 
     /// <summary>
-    /// Names that gate an optional(...). A nested optional_groups(...) contributes only its
-    /// blob source; its body placeholders come from each blob row, never from request args.
+    /// Names that gate an optional(...). A nested optional_groups(...) contributes nothing:
+    /// its blob source elides the group on its own, and its body placeholders come from
+    /// each blob row. Also reports whether a nested group was seen.
     /// </summary>
-    private static List<string> BodyParamNames(List<SqlToken> body)
+    private static (List<string> Names, bool SawGroups) BodyParamNames(List<SqlToken> body)
     {
         var names = new List<string>();
         var seen = new HashSet<string>();
+        var sawGroups = false;
 
         void Add(SqlToken token)
         {
@@ -52,20 +54,13 @@ public static class OptionalDesugar
             var t = body[i];
             if (t.Type == "word" && t.Value.Equals("optional_groups", StringComparison.OrdinalIgnoreCase))
             {
+                sawGroups = true;
                 var j = SkipWs(body, i + 1);
                 if (j < n && body[j].Type == "brace" && body[j].Value == "(")
                 {
                     var close = MatchingCloseBrace(body, j);
                     if (close is { } k)
                     {
-                        for (var m = j + 1; m < k; m++)
-                        {
-                            if (body[m].Type == "parameter")
-                            {
-                                Add(body[m]);
-                                break;
-                            }
-                        }
                         i = k + 1;
                         continue;
                     }
@@ -76,7 +71,7 @@ public static class OptionalDesugar
             i += 1;
         }
 
-        return names;
+        return (names, sawGroups);
     }
 
     public static List<SqlToken> Desugar(List<SqlToken>? tokens)
@@ -110,13 +105,22 @@ public static class OptionalDesugar
                         throw new InvalidOperationException("unclosed optional(...)");
 
                     var body = Desugar(tokens.GetRange(j + 1, k - (j + 1)));
-                    var paramNames = BodyParamNames(body);
+                    var (paramNames, sawGroups) = BodyParamNames(body);
 
-                    if (paramNames.Count == 0)
+                    if (paramNames.Count == 0 && !sawGroups)
                         throw new InvalidOperationException(
                             "optional(...) requires at least one {{param}} in its body");
 
-                    openTok.NullableParameters = paramNames;
+                    if (paramNames.Count > 0)
+                    {
+                        openTok.NullableParameters = paramNames;
+                    }
+                    else if (sawGroups)
+                    {
+                        // Nothing but a group inside: the group elides itself, so the
+                        // wrapper parens must disappear with it rather than emit "()".
+                        openTok.OptionalGroupsWrapper = true;
+                    }
                     result.Add(openTok);
                     result.AddRange(body);
                     result.Add(tokens[k]);

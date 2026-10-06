@@ -428,6 +428,9 @@ public static class SqlParser
                     if (!stmt.Nullable.Contains(lower))
                         stmt.Nullable.Add(lower);
                 }
+                else if (token.OptionalGroupsWrapper)
+                {
+                }
                 else if (token.Content is string contentStr)
                 {
                     var m = PossibleNullParameterRx.Match(contentStr);

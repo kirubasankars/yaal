@@ -153,6 +153,21 @@ public static class SqlCompiler
                     continue;
                 }
 
+                if (token.Value == "(" && token.OptionalGroupsWrapper)
+                {
+                    var wrapperCloseIdx = FindMatchingCloseParen(stmt, idx);
+                    if (wrapperCloseIdx == null)
+                        throw new InvalidOperationException("unclosed optional(...)");
+                    if (WrappedGroupsAllElide(
+                            stmt, idx + 1, wrapperCloseIdx.Value, nullsSet, groupCountMap))
+                    {
+                        // Only a group inside, and it is gone: drop the parens too.
+                        StripPrecedingConnector(tokens);
+                        idx = wrapperCloseIdx.Value + 1;
+                        continue;
+                    }
+                }
+
                 if (token.Value == "(" && token.GroupSource != null)
                 {
                     if (ShouldElideNullableGroup(token, nullsSet))
@@ -347,6 +362,31 @@ public static class SqlCompiler
                 ArrayElement = true,
             });
         }
+    }
+
+    /// <summary>True when every optional_groups(...) inside a wrapper optional(...) elides.</summary>
+    private static bool WrappedGroupsAllElide(
+        List<SqlToken> stmt,
+        int start,
+        int end,
+        HashSet<string> nullsSet,
+        Dictionary<string, int> groupCountMap)
+    {
+        for (var idx = start; idx < end; idx++)
+        {
+            var token = stmt[idx];
+            if (token.Type != "brace" || token.Value != "(")
+                continue;
+            if (token.GroupSource is not { } source)
+                continue;
+            if (ShouldElideNullableGroup(token, nullsSet))
+                continue;
+            // A missing count is an error the normal expansion path reports.
+            if (groupCountMap.TryGetValue(source.ToLowerInvariant(), out var count) && count == 0)
+                continue;
+            return false;
+        }
+        return true;
     }
 
     private static int? FindMatchingCloseParen(List<SqlToken> stmt, int openIdx)

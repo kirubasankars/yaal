@@ -235,7 +235,7 @@ NESTED_GROUPS_SQL = (
 
 
 class TestGroupsInsideOptional(unittest.TestCase):
-    """A nested group contributes its blob source to optional(...), not its row fields."""
+    """A nested group gates nothing on optional(...); its blob elides the group alone."""
 
     def _compile(self, sql, props):
         twig = parser(lexer(sql), "$")["sql_stmts"][0]
@@ -253,10 +253,8 @@ class TestGroupsInsideOptional(unittest.TestCase):
         )
         return open_tok["nullable_parameters"]
 
-    def test_row_fields_do_not_gate_the_optional(self):
-        self.assertEqual(
-            self._optional_params(NESTED_GROUPS_SQL), ["$args.x", "$args.pairs"]
-        )
+    def test_nested_group_does_not_gate_the_optional(self):
+        self.assertEqual(self._optional_params(NESTED_GROUPS_SQL), ["$args.x"])
 
     def test_multi_row_group_keeps_its_own_parentheses(self):
         sql, values = self._compile(
@@ -292,21 +290,41 @@ class TestGroupsInsideOptional(unittest.TestCase):
         self.assertEqual(sql, "select * from t where z = 1")
         self.assertEqual(values, [])
 
-    def test_blob_absent_with_other_param_given_is_partial(self):
-        with self.assertRaises(ValueError) as ctx:
-            self._compile(NESTED_GROUPS_SQL, {"$args.x": 5})
-        self.assertIn("partial parameters: $args.pairs", str(ctx.exception))
+    def test_blob_absent_keeps_the_rest_of_the_optional(self):
+        sql, values = self._compile(NESTED_GROUPS_SQL, {"$args.x": 5})
+        self.assertEqual(sql, "select * from t where z = 1 and (a = ?)")
+        self.assertEqual(values, [5])
 
     def test_optional_wrapping_only_a_group(self):
         sql = (
             "--($args.pairs blob)--\n"
-            "select * from t where optional(optional_groups({{$args.pairs}}, id = {{id}}))\n"
+            "select * from t where z = 1"
+            " and optional(optional_groups({{$args.pairs}}, id = {{id}}))\n"
         )
-        self.assertEqual(self._optional_params(sql), ["$args.pairs"])
         content, values = self._compile(sql, {"$args.pairs": [{"id": 1}, {"id": 2}]})
-        self.assertEqual(content, "select * from t where (((id = ?) or (id = ?)))")
+        self.assertEqual(
+            content, "select * from t where z = 1 and (((id = ?) or (id = ?)))"
+        )
         self.assertEqual(values, [1, 2])
-        content, values = self._compile(sql, {})
+
+    def test_optional_wrapping_only_a_group_elides_without_empty_parens(self):
+        sql = (
+            "--($args.pairs blob)--\n"
+            "select * from t where z = 1"
+            " and optional(optional_groups({{$args.pairs}}, id = {{id}}))\n"
+        )
+        for absent in ({}, {"$args.pairs": []}):
+            with self.subTest(absent=absent):
+                content, values = self._compile(sql, absent)
+                self.assertEqual(content, "select * from t where z = 1")
+                self.assertEqual(values, [])
+
+    def test_optional_wrapping_only_a_group_drops_sole_where(self):
+        content, values = self._compile(
+            "--($args.pairs blob)--\n"
+            "select * from t where optional(optional_groups({{$args.pairs}}, id = {{id}}))\n",
+            {},
+        )
         self.assertEqual(content, "select * from t")
         self.assertEqual(values, [])
 

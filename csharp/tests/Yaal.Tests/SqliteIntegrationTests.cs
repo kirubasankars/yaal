@@ -252,11 +252,12 @@ public class SqliteIntegrationTests : IDisposable
     }
 
     [Fact]
-    public void Optional_groups_inside_optional_partial_args_errors()
+    public void Optional_groups_inside_optional_without_pairs_keeps_scalar_filter()
     {
-        var act = () => _yaal.Query("user/groups_in_optional", args: new { active = 1 });
-        act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*partial parameters*");
+        var rows = ((System.Collections.IEnumerable)_yaal.Query(
+            "user/groups_in_optional", args: new { active = 1 })!)
+            .Cast<object>().ToList();
+        Ids(rows).Should().Equal(1L, 2L);
     }
 
     private static List<long> Ids(List<object> rows) =>

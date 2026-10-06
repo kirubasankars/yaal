@@ -221,15 +221,22 @@ where u.user_id > 0
                and optional_groups({{$args.pairs}}, u.user_id in ({{ids}})))
 ```
 
-The **blob parameter joins the optional's all-or-nothing set**, exactly like any other `{{param}}` listed there. Row fields (`ids` above) do not — they come from the blob, not from request args.
+A nested group is **independent of the optional's all-or-nothing set**: the blob parameter does not gate the block, and neither do the row fields (`ids` above). The group elides itself when its blob has no rows, and the surrounding `optional(...)` is still decided only by its own `{{$args.*}}` params — `$args.active` here.
 
 | Args | Result |
 |---|---|
 | `pairs` and `active` both given | `and (u.active = ? and ((u.user_id in (?)) or (u.user_id in (?))))` |
-| neither given | whole `optional(...)` block removed |
-| only one given | compile error (partial parameters) |
+| only `active` given | `and (u.active = ?)` — the group drops out, the block stays |
+| `active` omitted | whole `optional(...)` block removed, group included |
 
 The group keeps its own parentheses inside the block, so the OR-join still reads as one unit next to the optional's `AND`.
+
+An `optional(...)` may also wrap nothing but a group. It then has no params of its own, so it lives and dies with the group — when the blob has no rows the wrapper parentheses disappear too, rather than compiling to an empty `()`.
+
+```sql
+-- $args.pairs absent compiles to `select * from t where z = 1`
+select * from t where z = 1 and optional(optional_groups({{$args.pairs}}, id = {{id}}))
+```
 
 The reverse nesting also works: an `optional(...)` **inside** a group body elides per branch, but it must reference at least one header-declared `$args.*` param. One keyed only on row fields is a compile error, since row fields are always required.
 

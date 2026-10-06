@@ -875,12 +875,15 @@
     "expect_param_names": []
   },
   {
-    "name": "optional_with_groups_partial_errors",
+    "name": "optional_with_groups_id_only_keeps_scalar",
     "sql": "--($args.pairs blob, $args.x integer)--\nselect * from t where z = 1 and optional(a = {{$args.x}} and optional_groups({{$args.pairs}}, id = {{id}}))\n",
     "nulls": [
       "$args.pairs"
     ],
-    "expect_compile_error_contains": "partial parameters"
+    "expect_sql": "select * from t where z = 1 and (a = ?)",
+    "expect_param_names": [
+      "$args.x"
+    ]
   },
   {
     "name": "optional_wrapping_groups_only",
@@ -904,6 +907,24 @@
       "id",
       "id"
     ]
+  },
+  {
+    "name": "optional_wrapping_groups_only_elided",
+    "sql": "--($args.pairs blob)--\nselect * from t where optional(optional_groups({{$args.pairs}}, id = {{id}}))\n",
+    "nulls": [
+      "$args.pairs"
+    ],
+    "expect_sql": "select * from t",
+    "expect_param_names": []
+  },
+  {
+    "name": "optional_wrapping_groups_only_elided_beside_predicate",
+    "sql": "--($args.pairs blob)--\nselect * from t where z = 1 and optional(optional_groups({{$args.pairs}}, id = {{id}}))\n",
+    "nulls": [
+      "$args.pairs"
+    ],
+    "expect_sql": "select * from t where z = 1",
+    "expect_param_names": []
   },
   {
     "name": "optional_inside_groups_body_args_header",

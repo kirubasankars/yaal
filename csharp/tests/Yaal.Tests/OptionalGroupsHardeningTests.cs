@@ -219,9 +219,9 @@ public class OptionalGroupsHardeningTests
             .NullableParameters!;
 
     [Fact]
-    public void Nested_group_row_fields_do_not_gate_the_optional()
+    public void Nested_group_does_not_gate_the_optional()
     {
-        OptionalParamsOf(NestedGroupsSql).Should().Equal("$args.x", "$args.pairs");
+        OptionalParamsOf(NestedGroupsSql).Should().Equal("$args.x");
     }
 
     [Fact]
@@ -277,37 +277,61 @@ public class OptionalGroupsHardeningTests
     }
 
     [Fact]
-    public void Nested_group_blob_absent_with_other_param_given_is_partial()
+    public void Nested_group_blob_absent_keeps_the_rest_of_the_optional()
     {
-        Action act = () => CompileAndBindArgs(NestedGroupsSql, new Dictionary<string, object?>
+        var (sql, values) = CompileAndBindArgs(NestedGroupsSql, new Dictionary<string, object?>
         {
             ["x"] = 5L,
         });
 
-        act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*partial parameters: $args.pairs*");
+        sql.Should().Be("select * from t where z = 1 and (a = ?)");
+        values.Should().Equal(5L);
     }
+
+    private const string GroupOnlyOptionalSql =
+        "--($args.pairs blob)--\nselect * from t where z = 1 and" +
+        " optional(optional_groups({{$args.pairs}}, id = {{id}}))\n";
 
     [Fact]
     public void Optional_wrapping_only_a_group()
     {
-        const string sql =
+        var (sql, values) = CompileAndBindArgs(
+            GroupOnlyOptionalSql, new Dictionary<string, object?>
+            {
+                ["pairs"] = new List<object?> { Row("id", 1L), Row("id", 2L) },
+            });
+
+        sql.Should().Be("select * from t where z = 1 and (((id = ?) or (id = ?)))");
+        values.Should().Equal(1L, 2L);
+    }
+
+    [Fact]
+    public void Optional_wrapping_only_a_group_elides_without_empty_parens()
+    {
+        var (absent, absentValues) = CompileAndBindArgs(
+            GroupOnlyOptionalSql, new Dictionary<string, object?>());
+        absent.Should().Be("select * from t where z = 1");
+        absentValues.Should().BeEmpty();
+
+        var (empty, emptyValues) = CompileAndBindArgs(
+            GroupOnlyOptionalSql, new Dictionary<string, object?>
+            {
+                ["pairs"] = new List<object?>(),
+            });
+        empty.Should().Be("select * from t where z = 1");
+        emptyValues.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Optional_wrapping_only_a_group_drops_sole_where()
+    {
+        var (sql, values) = CompileAndBindArgs(
             "--($args.pairs blob)--\nselect * from t where" +
-            " optional(optional_groups({{$args.pairs}}, id = {{id}}))\n";
+            " optional(optional_groups({{$args.pairs}}, id = {{id}}))\n",
+            new Dictionary<string, object?>());
 
-        OptionalParamsOf(sql).Should().Equal("$args.pairs");
-
-        var (kept, keptValues) = CompileAndBindArgs(sql, new Dictionary<string, object?>
-        {
-            ["pairs"] = new List<object?> { Row("id", 1L), Row("id", 2L) },
-        });
-        kept.Should().Be("select * from t where (((id = ?) or (id = ?)))");
-        keptValues.Should().Equal(1L, 2L);
-
-        var (elided, elidedValues) = CompileAndBindArgs(
-            sql, new Dictionary<string, object?>());
-        elided.Should().Be("select * from t");
-        elidedValues.Should().BeEmpty();
+        sql.Should().Be("select * from t");
+        values.Should().BeEmpty();
     }
 
     [Fact]
