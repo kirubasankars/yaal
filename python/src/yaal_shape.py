@@ -176,14 +176,19 @@ class Shape:
 
         if self._array:
             shapes = []
-            item_schema = dict(schema)
-            item_schema[yaal_const.TYPE] = yaal_const.OBJECT
-            idx = 0
-            for item in self._data:
-                s = Shape(schema=item_schema, data=item, parent_shape=self, extras=extras)
-                s._index = idx
-                shapes.append(s)
-                idx = idx + 1
+            item_is_object = bool(self._input_properties) or (
+                bool(self._data)
+                and all(isinstance(x, dict) for x in self._data)
+            )
+            if item_is_object:
+                item_schema = dict(schema)
+                item_schema[yaal_const.TYPE] = yaal_const.OBJECT
+                idx = 0
+                for item in self._data:
+                    s = Shape(schema=item_schema, data=item, parent_shape=self, extras=extras)
+                    s._index = idx
+                    shapes.append(s)
+                    idx = idx + 1
         else:
             shapes = {}
             for k, v in self._input_properties.items():
@@ -248,8 +253,16 @@ class Shape:
                     raise KeyError("array path excepted as $index.")
                 return shapes[idx]
 
-            if prop in shapes:
-                return shapes[prop]
+            pl = prop.lower() if isinstance(prop, str) else prop
+            if pl in shapes:
+                child = shapes[pl]
+                if child._array:
+                    if pl in data:
+                        return data[pl]
+                    if self._parent is not None:
+                        return child
+                    return child._data
+                return child
 
             if prop in data:
                 return data[prop]
@@ -285,10 +298,17 @@ class Shape:
                     self._extras[path].set_prop(remaining_path, value)
         else:
             value = self._type_cast(prop, value)
-            self._data[prop.lower()] = value
+            key = prop.lower()
+            self._data[key] = value
 
-            if prop.lower() in self._o_data:
-                del self._o_data[prop.lower()]
+            if key in shapes:
+                child = shapes[key]
+                if child._array:
+                    child._data = value if value is not None else []
+                    child._o_data = child._data
+
+            if key in self._o_data:
+                del self._o_data[key]
             self._o_data[prop] = value
 
     def validate(self, include_extras=False):

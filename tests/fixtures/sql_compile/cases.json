@@ -133,12 +133,124 @@
   {
     "name": "optional_sugar_requires_one_param",
     "sql": "--(a integer)--\nselect * from a where optional(col = 1)\n",
-    "expect_error_contains": "exactly one"
+    "expect_error_contains": "at least one"
   },
   {
-    "name": "optional_sugar_rejects_multiple_params",
-    "sql": "--(a integer, b integer)--\nselect * from a where optional(col = {{a}} and other = {{b}})\n",
-    "expect_error_contains": "exactly one"
+    "name": "array_in_three_elements",
+    "sql": "--(cv integer[])--\nselect * from t where col in ({{cv}})\n",
+    "nulls": [],
+    "array_lengths": {
+      "cv": 3
+    },
+    "expect_sql": "select * from t where col in (?, ?, ?)",
+    "expect_param_names": [
+      "cv",
+      "cv",
+      "cv"
+    ]
+  },
+  {
+    "name": "array_in_one_element",
+    "sql": "--(cv integer[])--\nselect * from t where col in ({{cv}})\n",
+    "nulls": [],
+    "array_lengths": {
+      "cv": 1
+    },
+    "expect_sql": "select * from t where col in (?)",
+    "expect_param_names": [
+      "cv"
+    ]
+  },
+  {
+    "name": "array_in_empty_errors",
+    "sql": "--(cv integer[])--\nselect * from t where col in ({{cv}})\n",
+    "nulls": [],
+    "array_lengths": {
+      "cv": 0
+    },
+    "expect_compile_error_contains": "empty array"
+  },
+  {
+    "name": "optional_array_elide_null",
+    "sql": "--(cv integer[])--\nselect * from t where optional(col in ({{cv}}))\n",
+    "nulls": [
+      "cv"
+    ],
+    "expect_sql": "select * from t",
+    "expect_param_names": []
+  },
+  {
+    "name": "optional_array_expand_two",
+    "sql": "--(cv integer[])--\nselect * from t where optional(col in ({{cv}}))\n",
+    "nulls": [],
+    "array_lengths": {
+      "cv": 2
+    },
+    "expect_sql": "select * from t where (col in (?, ?))",
+    "expect_param_names": [
+      "cv",
+      "cv"
+    ]
+  },
+  {
+    "name": "optional_multi_with_array",
+    "sql": "--(a integer, cv integer[], b integer)--\nselect * from t where optional(col1 = {{a}} and col2 in ({{cv}}) and col3 = {{b}})\n",
+    "nulls": [],
+    "array_lengths": {
+      "cv": 2
+    },
+    "expect_sql": "select * from t where (col1 = ? and col2 in (?, ?) and col3 = ?)",
+    "expect_param_names": [
+      "a",
+      "cv",
+      "cv",
+      "b"
+    ],
+    "expect_nullable_contains": [
+      "a",
+      "cv",
+      "b"
+    ]
+  },
+  {
+    "name": "optional_multi_both_bound",
+    "sql": "--(a integer, b integer)--\nselect * from t where optional(col1 = {{a}} and col2 in ('x','y') and col3 = {{b}})\n",
+    "nulls": [],
+    "expect_sql": "select * from t where (col1 = ? and col2 in ('x','y') and col3 = ?)",
+    "expect_param_names": [
+      "a",
+      "b"
+    ],
+    "expect_nullable_contains": [
+      "a",
+      "b"
+    ]
+  },
+  {
+    "name": "optional_multi_all_null_elides",
+    "sql": "--(a integer, b integer)--\nselect * from t where optional(col1 = {{a}} and col3 = {{b}})\n",
+    "nulls": [
+      "a",
+      "b"
+    ],
+    "expect_sql": "select * from t",
+    "expect_param_names": []
+  },
+  {
+    "name": "optional_multi_partial_null_errors",
+    "sql": "--(a integer, b integer)--\nselect * from t where optional(col1 = {{a}} and col3 = {{b}})\n",
+    "nulls": [
+      "a"
+    ],
+    "expect_compile_error_contains": "partial parameters"
+  },
+  {
+    "name": "optional_multi_partial_null_errors_other_predicate",
+    "sql": "--(a integer, b integer)--\nselect * from t where x = 1 and optional(col1 = {{a}} and col3 = {{b}})\n",
+    "nulls": [
+      "b"
+    ],
+    "expect_compile_error_contains": "partial parameters"
   },
   {
     "name": "prewhere_optional_sole_null",
@@ -405,6 +517,133 @@
     "name": "header_unknown_type_errors",
     "sql": "--(a foobar)--\nselect {{a}}\n",
     "expect_error_contains": "unknown parameter type"
+  },
+  {
+    "name": "optional_groups_two_scalar_rows",
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups({{pairs}}, col2 = {{cv}} and col1 = {{cv1}})\n",
+    "nulls": [],
+    "group_counts": {
+      "pairs": 2
+    },
+    "group_field_lengths": {
+      "pairs": [
+        {
+          "cv": 1,
+          "cv1": 1
+        },
+        {
+          "cv": 1,
+          "cv1": 1
+        }
+      ]
+    },
+    "expect_sql": "select * from t where (col2 = ? and col1 = ?) or (col2 = ? and col1 = ?)",
+    "expect_param_names": [
+      "cv",
+      "cv1",
+      "cv",
+      "cv1"
+    ],
+    "expect_nullable_contains": [
+      "pairs"
+    ]
+  },
+  {
+    "name": "optional_groups_one_row_no_or",
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups({{pairs}}, col1 = {{cv1}})\n",
+    "nulls": [],
+    "group_counts": {
+      "pairs": 1
+    },
+    "group_field_lengths": {
+      "pairs": [
+        {
+          "cv1": 1
+        }
+      ]
+    },
+    "expect_sql": "select * from t where (col1 = ?)",
+    "expect_param_names": [
+      "cv1"
+    ]
+  },
+  {
+    "name": "optional_groups_elide_null",
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups({{pairs}}, col1 = {{cv1}})\n",
+    "nulls": [
+      "pairs"
+    ],
+    "expect_sql": "select * from t",
+    "expect_param_names": []
+  },
+  {
+    "name": "optional_groups_mixed_in_per_row",
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups({{pairs}}, col2 in ({{cv}}) and col1 = {{cv1}})\n",
+    "nulls": [],
+    "group_counts": {
+      "pairs": 2
+    },
+    "group_field_lengths": {
+      "pairs": [
+        {
+          "cv": 3,
+          "cv1": 1
+        },
+        {
+          "cv": 1,
+          "cv1": 1
+        }
+      ]
+    },
+    "expect_sql": "select * from t where (col2 in (?, ?, ?) and col1 = ?) or (col2 in (?) and col1 = ?)",
+    "expect_param_names": [
+      "cv",
+      "cv",
+      "cv",
+      "cv1",
+      "cv",
+      "cv1"
+    ]
+  },
+  {
+    "name": "optional_groups_empty_in_errors",
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups({{pairs}}, col2 in ({{cv}}))\n",
+    "nulls": [],
+    "group_counts": {
+      "pairs": 1
+    },
+    "group_field_lengths": {
+      "pairs": [
+        {
+          "cv": 0
+        }
+      ]
+    },
+    "expect_compile_error_contains": "empty array"
+  },
+  {
+    "name": "optional_groups_missing_lengths_errors",
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups({{pairs}}, col1 = {{cv1}})\n",
+    "nulls": [],
+    "group_counts": {
+      "pairs": 1
+    },
+    "expect_compile_error_contains": "missing optional_groups field lengths"
+  },
+  {
+    "name": "optional_groups_no_body_field_errors",
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups({{pairs}}, col1 = 1)\n",
+    "expect_error_contains": "at least one"
+  },
+  {
+    "name": "optional_groups_source_not_blob_errors",
+    "sql": "--(pairs integer)--\nselect * from t where optional_groups({{pairs}}, col1 = {{cv1}})\n",
+    "expect_error_contains": "must be declared blob"
+  },
+  {
+    "name": "optional_groups_field_in_header_errors",
+    "sql": "--(pairs blob, cv1 integer)--\nselect * from t where optional_groups({{pairs}}, col1 = {{cv1}})\n",
+    "expect_error_contains": "must not be declared"
   },
   {
     "name": "header_duplicate_param_errors",

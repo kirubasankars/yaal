@@ -2,11 +2,209 @@
 # Use of this source code is governed by a MIT style
 # license that can be found in the LICENSE file.
 
+import json
 import re
 
 from yaal_errors import SortDirError
 
 KNOWN_PARAM_TYPES = frozenset({"integer", "string", "float", "bool", "blob"})
+_ARRAY_PARAM_SUFFIX = "[]"
+
+
+def is_array_param_type(param_type):
+    return param_type.lower().endswith(_ARRAY_PARAM_SUFFIX)
+
+
+def param_element_type(param_type):
+    t = param_type.lower()
+    if is_array_param_type(t):
+        return t[: -len(_ARRAY_PARAM_SUFFIX)]
+    return t
+
+
+def is_known_param_type(param_type):
+    t = param_type.lower()
+    if t in KNOWN_PARAM_TYPES:
+        return True
+    if is_array_param_type(t):
+        return param_element_type(t) in KNOWN_PARAM_TYPES
+    return False
+
+
+def known_param_types_display():
+    scalars = sorted(KNOWN_PARAM_TYPES)
+    arrays = sorted(t + _ARRAY_PARAM_SUFFIX for t in scalars)
+    return scalars + arrays
+
+
+def nullable_value_is_absent(param_type, value):
+    if value is None:
+        return True
+    if param_type.lower() == "blob":
+        if isinstance(value, (str, bytes, bytearray)):
+            try:
+                value = coerce_optional_groups_blob(value, "")
+            except ValueError:
+                return False
+        return value == []
+    if is_array_param_type(param_type):
+        return value == []
+    return False
+
+
+def param_types_by_name(twig):
+    out = {}
+    for p in twig.get("parameters") or []:
+        out[p["name"].lower()] = p["type"]
+    return out
+
+
+def array_lengths_for_compile(twig, get_prop, nulls):
+    """Build array_lengths for compile_sql from runtime values (skips nulls-set names)."""
+    nulls_set = {n.lower() for n in nulls}
+    lengths = {}
+    for p in twig.get("parameters") or []:
+        if not is_array_param_type(p["type"]):
+            continue
+        name = p["name"]
+        if name.lower() in nulls_set:
+            continue
+        val = get_prop(name)
+        if val is None:
+            continue
+        if not isinstance(val, (list, tuple)):
+            raise ValueError(
+                "array parameter {{" + name + "}} must be a sequence, got "
+                + type(val).__name__
+            )
+        lengths[name.lower()] = len(val)
+    return lengths
+
+
+def _group_row_get_insensitive(row, field):
+    if field in row:
+        return row[field]
+    field_lower = field.lower()
+    for k, v in row.items():
+        if k.lower() == field_lower:
+            return v
+    raise KeyError(field)
+
+
+def _group_field_placeholder_count(raw, source, field):
+    if isinstance(raw, list):
+        if len(raw) == 0:
+            raise ValueError(
+                "empty array for optional_groups field {{" + field + "}} in "
+                + source
+                + "; IN list cannot be empty"
+            )
+        for item in raw:
+            _assert_group_scalar(item, source, field)
+        return len(raw)
+    if raw is None:
+        raise ValueError(
+            "missing optional_groups field {{" + field + "}} in " + source
+        )
+    _assert_group_scalar(raw, source, field)
+    return 1
+
+
+def _assert_group_scalar(value, source, field):
+    if isinstance(value, (bool, int, float, str, bytes)):
+        return
+    raise ValueError(
+        "optional_groups field {{"
+        + field
+        + "}} in "
+        + source
+        + " must be a scalar value, got "
+        + type(value).__name__
+    )
+
+
+def coerce_optional_groups_blob(value, source_name):
+    """Normalize blob args to a list of row objects (optional_groups compile/bind)."""
+    if value is None:
+        return None
+    if isinstance(value, (str, bytes, bytearray)):
+        try:
+            text = value.decode("utf-8") if not isinstance(value, str) else value
+        except UnicodeDecodeError:
+            raise ValueError(
+                "optional_groups {{"
+                + source_name
+                + "}} must be a JSON array of objects"
+            )
+        text = text.strip()
+        if not text:
+            return []
+        try:
+            value = json.loads(text)
+        except json.JSONDecodeError:
+            raise ValueError(
+                "optional_groups {{"
+                + source_name
+                + "}} must be a JSON array of objects"
+            )
+    if not isinstance(value, list):
+        raise ValueError(
+            "optional_groups {{"
+            + source_name
+            + "}} must be a JSON array of objects"
+        )
+    return value
+
+
+def group_shapes_for_compile(twig, get_prop, nulls):
+    """Build group_counts, group_field_lengths, group_field_is_array for compile_sql."""
+    nulls_set = {n.lower() for n in nulls}
+    counts = {}
+    field_lengths = {}
+    field_is_array = {}
+    for tok in twig.get("content") or []:
+        if tok.get("type") != "brace" or tok.get("value") != "(":
+            continue
+        source = tok.get("group_source")
+        if not source:
+            continue
+        key = source.lower()
+        if key in nulls_set:
+            continue
+        fields = tok.get("group_fields") or []
+        val = coerce_optional_groups_blob(get_prop(source), source)
+        if val is None:
+            raise ValueError(
+                "missing blob value for optional_groups {{" + source + "}}"
+            )
+        counts[key] = len(val)
+        if len(val) == 0:
+            field_lengths[key] = []
+            field_is_array[key] = []
+            continue
+        per_row = []
+        per_row_array = []
+        for row in val:
+            if not isinstance(row, dict):
+                raise ValueError(
+                    "optional_groups {{" + source + "}} rows must be objects"
+                )
+            row_lens = {}
+            row_arr = {}
+            for field in fields:
+                try:
+                    raw = _group_row_get_insensitive(row, field)
+                except KeyError:
+                    raise ValueError(
+                        "missing optional_groups field {{" + field + "}} in " + source
+                    )
+                row_lens[field] = _group_field_placeholder_count(raw, source, field)
+                row_arr[field] = isinstance(raw, list)
+            per_row.append(row_lens)
+            per_row_array.append(row_arr)
+        field_lengths[key] = per_row
+        field_is_array[key] = per_row_array
+    return counts, field_lengths, field_is_array
 
 _WS_TOKEN_TYPES = frozenset({"space", "newline"})
 
@@ -44,7 +242,7 @@ _DIR_VOCAB = {
 }
 
 _PARAMETER_RX = re.compile(
-    r"\s*(?P<name>[\$\_\.A-Za-z0-9\[\]]+)(?P<required>!)?\s+(?P<type>\w+)"
+    r"\s*(?P<name>[\$\_\.A-Za-z0-9\[\]]+)(?P<required>!)?\s+(?P<type>\w+(?:\[\])?)"
     r"(?:\s*=\s*(?P<default>.+))?\s*"
 )
 _SQL_RX = re.compile(r"--sql\(\s*(?P<name>\w+)?\s*\)--")
@@ -54,7 +252,7 @@ _POSSIBLE_NULL_PARAMETER_RX = re.compile(
 )
 
 _COMPACT_MERGE_RESERVED = frozenset({"order", "by", "or"})
-_COMPACT_STRUCTURAL = frozenset({"parameter", "brace", "sort", "dir"})
+_COMPACT_STRUCTURAL = frozenset({"parameter", "brace", "sort", "dir", "group_field"})
 
 
 def lex_dash(current, content):
@@ -280,8 +478,32 @@ def _match_is_null_or_after(tokens, param_index):
     return i
 
 
+def _nullable_group_should_elide(token, nulls_set):
+    """True when a parenthesized optional/nullable group should be dropped at compile time."""
+    group_source = token.get("group_source")
+    if group_source:
+        return group_source.lower() in nulls_set
+    params = token.get("nullable_parameters")
+    if params:
+        lowered = [n.lower() for n in params]
+        missing = [n for n in lowered if n in nulls_set]
+        if len(missing) == len(lowered):
+            return True
+        if len(missing) == 0:
+            return False
+        raise ValueError(
+            "optional(...) requires every parameter to be provided or all omitted; "
+            "partial parameters: "
+            + ", ".join(sorted(missing))
+        )
+    np = token.get("nullable_parameter")
+    if np:
+        return np.lower() in nulls_set
+    return False
+
+
 def _desugar_optional_tokens(tokens):
-    """Expand optional(expr) into ({{param}} is null or expr) for existing nullable elision."""
+    """Expand optional(expr) into (expr) with nullable_parameters metadata on '('."""
     if not tokens:
         return tokens
 
@@ -315,23 +537,101 @@ def _desugar_optional_tokens(tokens):
                             param_names.append(name)
 
                 if len(param_names) == 0:
-                    raise TypeError("optional(...) requires exactly one {{param}} in its body")
-                if len(param_names) > 1:
                     raise TypeError(
-                        "optional(...) requires exactly one {{param}} in its body, found: "
-                        + ", ".join(param_names)
+                        "optional(...) requires at least one {{param}} in its body"
                     )
 
-                p = param_names[0]
-                result.append(open_tok)
-                result.append({"type": "parameter", "value": "{{" + p + "}}"})
-                result.append({"type": "space", "value": " "})
-                result.append({"type": "word", "value": "is"})
-                result.append({"type": "space", "value": " "})
-                result.append({"type": "word", "value": "null"})
-                result.append({"type": "space", "value": " "})
-                result.append({"type": "word", "value": "or"})
-                result.append({"type": "space", "value": " "})
+                open_paren = dict(open_tok)
+                open_paren["nullable_parameters"] = param_names
+                result.append(open_paren)
+                result.extend(body)
+                result.append(tokens[k])
+                i = k + 1
+                continue
+
+        result.append(tok)
+        i += 1
+    return result
+
+
+def _ensure_no_nested_optional_groups(body):
+    for t in body:
+        if t["type"] == "word" and t["value"].lower() == "optional_groups":
+            raise TypeError("nested optional_groups(...) is not supported")
+
+
+def _mark_group_field_tokens(body):
+    """Return (body_with_group_field_tokens, field_names_in_order)."""
+    out = []
+    field_order = []
+    seen = set()
+    for t in body:
+        if t["type"] != "parameter":
+            out.append(t)
+            continue
+        name = _parameter_name_from_token(t)
+        if name not in seen:
+            seen.add(name)
+            field_order.append(name)
+        out.append({
+            "type": "group_field",
+            "name": name,
+            "value": t["value"],
+        })
+    return out, field_order
+
+
+def _desugar_optional_groups_tokens(tokens):
+    """Expand optional_groups(blob, body) into (body) with group metadata on '('."""
+    if not tokens:
+        return tokens
+
+    result = []
+    i = 0
+    n = len(tokens)
+    while i < n:
+        tok = tokens[i]
+        if tok["type"] == "word" and tok["value"].lower() == "optional_groups":
+            j = _skip_ws_tokens(tokens, i + 1)
+            if j < n and tokens[j]["type"] == "brace" and tokens[j]["value"] == "(":
+                open_tok = tokens[j]
+                group = open_tok["group"]
+                k = j + 1
+                while k < n:
+                    t = tokens[k]
+                    if t["type"] == "brace" and t["value"] == ")" and t.get("group") == group:
+                        break
+                    k += 1
+                else:
+                    raise TypeError("unclosed optional_groups(...)")
+
+                inner = tokens[j + 1:k]
+                p = _skip_ws_tokens(inner, 0)
+                if p >= len(inner) or inner[p]["type"] != "parameter":
+                    raise TypeError(
+                        "optional_groups(...) requires {{blob}} as the first argument"
+                    )
+                source_name = _parameter_name_from_token(inner[p])
+                p = _skip_ws_tokens(inner, p + 1)
+                if p >= len(inner) or inner[p]["type"] != "word" or inner[p]["value"] != ",":
+                    raise TypeError(
+                        "optional_groups(...) requires a comma after the blob parameter"
+                    )
+                body_start = _skip_ws_tokens(inner, p + 1)
+                body_raw = inner[body_start:]
+                _ensure_no_nested_optional_groups(body_raw)
+                body = _desugar_optional_groups_tokens(body_raw)
+                body = _desugar_optional_tokens(body)
+                body, field_order = _mark_group_field_tokens(body)
+                if not field_order:
+                    raise TypeError(
+                        "optional_groups(...) requires at least one {{field}} in its body"
+                    )
+
+                open_paren = dict(open_tok)
+                open_paren["group_source"] = source_name
+                open_paren["group_fields"] = field_order
+                result.append(open_paren)
                 result.extend(body)
                 result.append(tokens[k])
                 i = k + 1
@@ -603,6 +903,35 @@ def _split_order_by_terms(content, start_idx):
         return term
 
     return [_trim(term) for term in terms], i, trailing_ws
+
+
+def _validate_optional_groups(content, ast_parameters, method):
+    if not ast_parameters:
+        ast_parameters = {}
+    for tok in content:
+        if tok.get("type") != "brace" or tok.get("value") != "(":
+            continue
+        source = tok.get("group_source")
+        if not source:
+            continue
+        decl = ast_parameters.get(source)
+        if decl is None:
+            raise TypeError(
+                "type missing for {{" + source + "}} in the " + method + ".sql"
+            )
+        if decl.get("type", "").lower() != "blob":
+            raise TypeError(
+                "optional_groups(...) source {{" + source + "}} must be declared blob in "
+                + method
+                + ".sql"
+            )
+        for field in tok.get("group_fields") or []:
+            if field in ast_parameters:
+                raise TypeError(
+                    "optional_groups(...) field {{" + field + "}} must not be declared in the "
+                    + method
+                    + ".sql parameter header"
+                )
 
 
 def _validate_dynamic_order_by(content, method):
@@ -930,7 +1259,7 @@ def _parse_parameter_header(token_value, method):
         param_type = d["type"].lower()
         param_required = bool(d.get("required"))
         default_raw = d.get("default")
-        if param_type not in KNOWN_PARAM_TYPES:
+        if not is_known_param_type(param_type):
             raise TypeError(
                 "unknown parameter type '"
                 + param_type
@@ -939,8 +1268,16 @@ def _parse_parameter_header(token_value, method):
                 + "}} in "
                 + method
                 + ".sql (expected "
-                + ", ".join(sorted(KNOWN_PARAM_TYPES))
+                + ", ".join(known_param_types_display())
                 + ")"
+            )
+        if is_array_param_type(param_type) and default_raw is not None:
+            raise TypeError(
+                "default values are not supported for array parameter {{"
+                + param_name
+                + "}} in "
+                + method
+                + ".sql"
             )
         if param_required and default_raw is not None:
             raise TypeError(
@@ -1025,6 +1362,7 @@ def parser(tokens, method):
         return None
 
     tokens = _desugar_optional_tokens(tokens)
+    tokens = _desugar_optional_groups_tokens(tokens)
     tokens = _desugar_sort_dir_tokens(tokens)
 
     ast = {}
@@ -1052,6 +1390,9 @@ def parser(tokens, method):
 
         if token_type in ("sort", "dir"):
             sql_stmt["parameters"].append({"name": token["param"]})
+
+        if token_type == "group_field":
+            token["name"] = token.get("name") or _parameter_name_from_token(token)
 
         if token_type == "parameter":
             parameter_name = token_value[2:len(token_value) - 2].lstrip().rstrip().lower()
@@ -1145,17 +1486,30 @@ def parser(tokens, method):
 
         sql_stmt["nullable"] = []
         for token in sql_stmt["content"]:
-            if token["type"] == "brace" and "content" in token:
+            if token["type"] != "brace":
+                continue
+            if token.get("nullable_parameters"):
+                for name in token["nullable_parameters"]:
+                    n = name.lower()
+                    if n not in sql_stmt["nullable"]:
+                        sql_stmt["nullable"].append(n)
+            elif token.get("group_source"):
+                n = token["group_source"].lower()
+                if n not in sql_stmt["nullable"]:
+                    sql_stmt["nullable"].append(n)
+            elif "content" in token:
                 m = _POSSIBLE_NULL_PARAMETER_RX.search(token["content"])
                 if m:
                     name = m.groupdict()["name"].lower()
                     sql_stmt["nullable"].append(name)
                     token["nullable_parameter"] = name
-
+            if "content" in token:
                 del token["content"]
 
         if not sql_stmt["nullable"]:
             del sql_stmt["nullable"]
+
+        _validate_optional_groups(sql_stmt["content"], ast_parameters, method)
 
         _validate_dynamic_order_by(sql_stmt["content"], method)
 
@@ -1247,6 +1601,12 @@ def _cleanup_compiled_sql(tokens):
                 continue
 
             j, word = _next_significant(tokens, i + 1)
+            if word in ("and", "or"):
+                k, next_word = _next_significant(tokens, j + 1)
+                if k is not None and next_word not in _CLAUSE_BOUNDARY:
+                    del tokens[j:k]
+                    changed = True
+                    break
             if j is None or word in _CLAUSE_BOUNDARY:
                 # Empty WHERE/PREWHERE/HAVING at EOF, before ), ORDER/GROUP/WHERE/..., etc.
                 old_i = i
@@ -1350,13 +1710,214 @@ def _compile_order_by(stmt, order_idx, sort_map):
     return True, prefix + [", ".join(rendered), trailing_ws], end_idx
 
 
-def compile_sql(sql_stmt, nulls, char, sort_map=None):
+def _find_matching_close_paren(stmt, open_idx):
+    open_tok = stmt[open_idx]
+    grp = open_tok.get("group")
+    for j in range(open_idx + 1, len(stmt)):
+        t = stmt[j]
+        if (
+            t["type"] == "brace"
+            and t["value"] == ")"
+            and t.get("group") == grp
+        ):
+            return j
+    return None
+
+
+def _append_group_field_slots(
+    field_name,
+    count,
+    group_source,
+    group_index,
+    char,
+    tokens,
+    parameters,
+    field_is_array=False,
+):
+    if count == 0:
+        raise ValueError(
+            "empty array for optional_groups field {{" + field_name + "}}"
+        )
+    tokens.append(", ".join([char] * count))
+    for sub in range(count):
+        meta = {
+            "name": field_name,
+            "type": "string",
+            "group_source": group_source,
+            "group_field": field_name,
+            "group_index": group_index,
+        }
+        if field_is_array:
+            meta["group_subindex"] = sub
+        parameters.append(meta)
+
+
+def _compile_stmt_range(
+    stmt,
+    start,
+    end,
+    nulls_set,
+    parameters_meta,
+    array_lengths,
+    char,
+    sort_map,
+    group_source,
+    group_index,
+    group_row_lengths,
+    group_row_is_array=None,
+):
+    group_row_is_array = group_row_is_array or {}
+    tokens = []
+    parameters = []
+    group = None
+    skip_or_after_nullable = False
+    idx = start
+    while idx < end:
+        token = stmt[idx]
+        if _token_eq(token, "order"):
+            is_order_by, fragments, next_idx = _compile_order_by(stmt, idx, sort_map)
+            if is_order_by:
+                if fragments is not None:
+                    tokens.extend(fragments)
+                idx = min(next_idx, end)
+                continue
+
+        if token["type"] == "brace":
+            if group is not None:
+                if group == token["group"]:
+                    group = None
+                idx += 1
+                continue
+            if _nullable_group_should_elide(token, nulls_set):
+                _strip_preceding_connector(tokens)
+                group = token["group"]
+                skip_or_after_nullable = False
+                idx += 1
+                continue
+
+        if group is not None:
+            idx += 1
+            continue
+
+        if skip_or_after_nullable:
+            value = token.get("value", "")
+            if _is_whitespace_sql_fragment(value):
+                idx += 1
+                continue
+            if _token_eq(token, "or"):
+                idx += 1
+                continue
+            skip_or_after_nullable = False
+
+        if token["type"] == "sort":
+            expr = sort_map.get(token["param"])
+            if expr is not None:
+                tokens.append(expr)
+            idx += 1
+            continue
+
+        if token["type"] == "dir":
+            idx += 1
+            continue
+
+        if token["type"] == "group_field":
+            field = token["name"]
+            flen = group_row_lengths.get(field)
+            if flen is None:
+                flen = group_row_lengths.get(field.lower())
+            if flen is None:
+                raise ValueError(
+                    "missing optional_groups field length for {{" + field + "}}"
+                )
+            is_arr = group_row_is_array.get(field)
+            if is_arr is None:
+                is_arr = group_row_is_array.get(field.lower(), False)
+            if not is_arr and flen > 1:
+                is_arr = True
+            _append_group_field_slots(
+                field,
+                flen,
+                group_source,
+                group_index,
+                char,
+                tokens,
+                parameters,
+                field_is_array=is_arr,
+            )
+            idx += 1
+            continue
+
+        if token["type"] == "parameter":
+            if token.get("nullable"):
+                skip_or_after_nullable = True
+                idx += 1
+                continue
+            _compile_array_param(
+                token["name"],
+                parameters_meta,
+                array_lengths,
+                char,
+                tokens,
+                parameters,
+            )
+        else:
+            tokens.append(token.get("value", ""))
+
+        idx += 1
+
+    return tokens, parameters
+
+
+def _compile_array_param(
+    token_name, parameters_meta, array_lengths, char, tokens, parameters
+):
+    meta = parameters_meta[token_name]
+    ptype = meta["type"]
+    if not is_array_param_type(ptype):
+        tokens.append(char)
+        parameters.append(meta)
+        return
+    key = token_name.lower()
+    if array_lengths is None or key not in array_lengths:
+        raise ValueError(
+            "missing array value for {{" + token_name + "}}"
+        )
+    count = array_lengths[key]
+    if count == 0:
+        raise ValueError(
+            "empty array for {{" + token_name + "}}; IN list cannot be empty"
+        )
+    elem_type = param_element_type(ptype)
+    elem_meta = {"name": meta["name"], "type": elem_type, "array_element": True}
+    tokens.append(", ".join([char] * count))
+    for _ in range(count):
+        parameters.append(elem_meta)
+
+
+def compile_sql(
+    sql_stmt,
+    nulls,
+    char,
+    sort_map=None,
+    array_lengths=None,
+    group_counts=None,
+    group_field_lengths=None,
+    group_field_is_array=None,
+):
     if "parameters" in sql_stmt:
         parameters_meta = {x["name"]: x for x in sql_stmt["parameters"]}
     else:
         parameters_meta = None
 
     sort_map = sort_map or {}
+    array_lengths = {k.lower(): v for k, v in (array_lengths or {}).items()}
+    group_counts = {k.lower(): v for k, v in (group_counts or {}).items()}
+    group_field_lengths = {
+        k.lower(): v for k, v in (group_field_lengths or {}).items()
+    }
+    group_field_is_array = {
+        k.lower(): v for k, v in (group_field_is_array or {}).items()
+    }
     nulls_set = {n.lower() for n in nulls}
     stmt = sql_stmt["content"]
     tokens = []
@@ -1387,8 +1948,64 @@ def compile_sql(sql_stmt, nulls, char, sort_map=None):
                 idx += 1
                 continue
 
-            if "nullable_parameter" in token and token["nullable_parameter"] in nulls_set:
-                # Elide optional ({{param}} is null or ...) and a preceding AND/OR.
+            if token.get("value") == "(" and token.get("group_source"):
+                if _nullable_group_should_elide(token, nulls_set):
+                    _strip_preceding_connector(tokens)
+                    close_idx = _find_matching_close_paren(stmt, idx)
+                    if close_idx is None:
+                        raise ValueError("unclosed optional_groups(...)")
+                    idx = close_idx + 1
+                    continue
+                source = token["group_source"]
+                skey = source.lower()
+                if skey not in group_counts:
+                    raise ValueError(
+                        "missing optional_groups count for {{" + source + "}}"
+                    )
+                n_groups = group_counts[skey]
+                if n_groups == 0:
+                    _strip_preceding_connector(tokens)
+                    close_idx = _find_matching_close_paren(stmt, idx)
+                    if close_idx is None:
+                        raise ValueError("unclosed optional_groups(...)")
+                    idx = close_idx + 1
+                    continue
+                rows_lens = group_field_lengths.get(skey)
+                rows_array = group_field_is_array.get(skey) or []
+                if rows_lens is None or len(rows_lens) != n_groups:
+                    raise ValueError(
+                        "missing optional_groups field lengths for {{" + source + "}}"
+                    )
+                close_idx = _find_matching_close_paren(stmt, idx)
+                if close_idx is None:
+                    raise ValueError("unclosed optional_groups(...)")
+                branches = []
+                branch_params = []
+                for gi in range(n_groups):
+                    row_array = rows_array[gi] if gi < len(rows_array) else {}
+                    bt, bp = _compile_stmt_range(
+                        stmt,
+                        idx + 1,
+                        close_idx,
+                        nulls_set,
+                        parameters_meta,
+                        array_lengths,
+                        char,
+                        sort_map,
+                        source,
+                        gi,
+                        rows_lens[gi],
+                        row_array,
+                    )
+                    branches.append("(" + "".join(bt) + ")")
+                    branch_params.extend(bp)
+                tokens.append(" or ".join(branches))
+                parameters.extend(branch_params)
+                idx = close_idx + 1
+                continue
+
+            if _nullable_group_should_elide(token, nulls_set):
+                # Elide optional/nullable group and a preceding AND/OR.
                 # Sole remaining WHERE is cleaned up below (no 1 = 1 injection).
                 _strip_preceding_connector(tokens)
                 group = token["group"]
@@ -1434,8 +2051,14 @@ def compile_sql(sql_stmt, nulls, char, sort_map=None):
                 skip_or_after_nullable = True
                 idx += 1
                 continue
-            tokens.append(char)
-            parameters.append(parameters_meta[token["name"]])
+            _compile_array_param(
+                token["name"],
+                parameters_meta,
+                array_lengths,
+                char,
+                tokens,
+                parameters,
+            )
         else:
             tokens.append(token.get("value", ""))
 

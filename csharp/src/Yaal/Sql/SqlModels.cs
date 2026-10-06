@@ -15,6 +15,15 @@ public sealed class SqlToken
     public bool Nullable { get; set; }
     [JsonPropertyName("nullable_parameter")]
     public string? NullableParameter { get; set; }
+    [JsonPropertyName("nullable_parameters")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? NullableParameters { get; set; }
+    [JsonPropertyName("group_source")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? GroupSource { get; set; }
+    [JsonPropertyName("group_fields")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? GroupFields { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<ParamDecl>? Parameters { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -32,6 +41,21 @@ public sealed class ParamDecl
     public bool Required { get; set; }
     public object? Default { get; set; }
     public bool HasDefault { get; set; }
+    [JsonPropertyName("array_element")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool ArrayElement { get; set; }
+    [JsonPropertyName("group_source")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? GroupSource { get; set; }
+    [JsonPropertyName("group_field")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? GroupField { get; set; }
+    [JsonPropertyName("group_index")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? GroupIndex { get; set; }
+    [JsonPropertyName("group_subindex")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? GroupSubindex { get; set; }
 }
 
 public sealed class Twig

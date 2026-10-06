@@ -1,0 +1,182 @@
+[
+  {
+    "name": "experimental_groups_missing_comma_after_blob",
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups({{pairs}} col1 = {{cv1}})\n",
+    "expect_error_contains": "comma after the blob"
+  },
+  {
+    "name": "experimental_groups_nested_in_body",
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups({{pairs}}, optional_groups({{pairs}}, col1 = {{cv1}}))\n",
+    "expect_error_contains": "nested optional_groups"
+  },
+  {
+    "name": "experimental_groups_field_order_metadata",
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups({{pairs}}, col2 in ({{cv}}) and col1 = {{cv1}})\n",
+    "expect_group_fields": [
+      "cv",
+      "cv1"
+    ],
+    "nulls": [],
+    "group_counts": {
+      "pairs": 1
+    },
+    "group_field_lengths": {
+      "pairs": [
+        {
+          "cv": 2,
+          "cv1": 1
+        }
+      ]
+    },
+    "expect_sql": "select * from t where (col2 in (?, ?) and col1 = ?)",
+    "expect_param_names": [
+      "cv",
+      "cv",
+      "cv1"
+    ]
+  },
+  {
+    "name": "experimental_groups_elide_sole_where",
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups({{pairs}}, col1 = {{cv1}})\n",
+    "nulls": [
+      "pairs"
+    ],
+    "expect_sql": "select * from t",
+    "expect_param_names": []
+  },
+  {
+    "name": "experimental_groups_elide_keeps_trailing_predicate",
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups({{pairs}}, col1 = {{cv1}}) and x = 1\n",
+    "nulls": [
+      "pairs"
+    ],
+    "expect_sql": "select * from t where x = 1",
+    "expect_param_names": []
+  },
+  {
+    "name": "experimental_groups_elide_inside_subquery",
+    "sql": "--(pairs blob)--\nselect * from (select 1 as id) u where optional_groups({{pairs}}, col1 = {{cv1}})\n",
+    "nulls": [
+      "pairs"
+    ],
+    "expect_sql": "select * from (select 1 as id) u",
+    "expect_param_names": []
+  },
+  {
+    "name": "experimental_groups_scalar_vs_array_same_field_counts",
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups({{pairs}}, col in ({{cv}}))\n",
+    "nulls": [],
+    "group_counts": {
+      "pairs": 2
+    },
+    "group_field_lengths": {
+      "pairs": [
+        {
+          "cv": 1
+        },
+        {
+          "cv": 3
+        }
+      ]
+    },
+    "expect_sql": "select * from t where (col in (?)) or (col in (?, ?, ?))",
+    "expect_param_names": [
+      "cv",
+      "cv",
+      "cv",
+      "cv"
+    ]
+  },
+  {
+    "name": "experimental_groups_with_optional_scalar_elided",
+    "sql": "--(pairs blob, flag integer)--\nselect * from t where optional_groups({{pairs}}, col1 = {{cv1}}) and optional(col2 = {{flag}})\n",
+    "nulls": [
+      "flag"
+    ],
+    "group_counts": {
+      "pairs": 1
+    },
+    "group_field_lengths": {
+      "pairs": [
+        {
+          "cv1": 1
+        }
+      ]
+    },
+    "expect_sql": "select * from t where (col1 = ?)",
+    "expect_param_names": [
+      "cv1"
+    ]
+  },
+  {
+    "name": "experimental_groups_with_optional_scalar_kept",
+    "sql": "--(pairs blob, flag integer)--\nselect * from t where optional_groups({{pairs}}, col1 = {{cv1}}) and optional(col2 = {{flag}})\n",
+    "nulls": [
+      "pairs"
+    ],
+    "expect_sql": "select * from t where (col2 = ?)",
+    "expect_param_names": [
+      "flag"
+    ]
+  },
+  {
+    "name": "experimental_groups_prewhere",
+    "sql": "--(pairs blob)--\nselect * from t prewhere optional_groups({{pairs}}, col1 = {{cv1}})\n",
+    "nulls": [
+      "pairs"
+    ],
+    "expect_sql": "select * from t",
+    "expect_param_names": []
+  },
+  {
+    "name": "experimental_groups_having",
+    "sql": "--(pairs blob)--\nselect col from t group by col having optional_groups({{pairs}}, sum(col) > {{cv1}})\n",
+    "nulls": [
+      "pairs"
+    ],
+    "expect_sql": "select col from t group by col",
+    "expect_param_names": []
+  },
+  {
+    "name": "experimental_groups_with_order_by_sort",
+    "sql": "--(pairs blob, $args.sort string)--\nselect * from t where optional_groups({{pairs}}, col1 = {{cv1}}) order by sort({{$args.sort}}, id = id)\n",
+    "nulls": [],
+    "group_counts": {
+      "pairs": 1
+    },
+    "group_field_lengths": {
+      "pairs": [
+        {
+          "cv1": 1
+        }
+      ]
+    },
+    "expect_sql": "select * from t where (col1 = ?) order by id",
+    "expect_param_names": [
+      "cv1"
+    ],
+    "sort_map": {
+      "$args.sort": "id"
+    }
+  },
+  {
+    "name": "experimental_groups_shape_distinct_sql",
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups({{pairs}}, col in ({{cv}}))\n",
+    "nulls": [],
+    "group_counts": {
+      "pairs": 1
+    },
+    "group_field_lengths": {
+      "pairs": [
+        {
+          "cv": 2
+        }
+      ]
+    },
+    "expect_sql": "select * from t where (col in (?, ?))",
+    "expect_param_names": [
+      "cv",
+      "cv"
+    ]
+  }
+]

@@ -60,22 +60,11 @@ public static class OptionalDesugar
                     }
 
                     if (paramNames.Count == 0)
-                        throw new InvalidOperationException("optional(...) requires exactly one {{param}} in its body");
-                    if (paramNames.Count > 1)
                         throw new InvalidOperationException(
-                            "optional(...) requires exactly one {{param}} in its body, found: " +
-                            string.Join(", ", paramNames));
+                            "optional(...) requires at least one {{param}} in its body");
 
-                    var p = paramNames[0];
+                    openTok.NullableParameters = paramNames;
                     result.Add(openTok);
-                    result.Add(new SqlToken { Type = "parameter", Value = "{{" + p + "}}" });
-                    result.Add(new SqlToken { Type = "space", Value = " " });
-                    result.Add(new SqlToken { Type = "word", Value = "is" });
-                    result.Add(new SqlToken { Type = "space", Value = " " });
-                    result.Add(new SqlToken { Type = "word", Value = "null" });
-                    result.Add(new SqlToken { Type = "space", Value = " " });
-                    result.Add(new SqlToken { Type = "word", Value = "or" });
-                    result.Add(new SqlToken { Type = "space", Value = " " });
                     result.AddRange(body);
                     result.Add(tokens[k]);
                     i = k + 1;

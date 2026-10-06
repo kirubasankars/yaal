@@ -127,17 +127,24 @@ public sealed class Shape
         if (_array)
         {
             var shapes = new List<Shape>();
-            var itemSchema = new Dictionary<string, object?>(schema, StringComparer.OrdinalIgnoreCase);
-            itemSchema[YaalConst.Type] = YaalConst.Object;
-            var idx = 0;
-            foreach (var item in (IList<object?>)_data)
+            var itemIsObject = _inputProperties.Count > 0
+                || (_data is IList<object?> listData
+                    && listData.Count > 0
+                    && listData.All(x => x is IDictionary<string, object?> or Dictionary<string, object?>));
+            if (itemIsObject)
             {
-                var s = new Shape(schema: itemSchema, data: item, parentShape: this, extras: extras)
+                var itemSchema = new Dictionary<string, object?>(schema, StringComparer.OrdinalIgnoreCase);
+                itemSchema[YaalConst.Type] = YaalConst.Object;
+                var idx = 0;
+                foreach (var item in (IList<object?>)_data)
                 {
-                    _index = idx,
-                };
-                shapes.Add(s);
-                idx += 1;
+                    var s = new Shape(schema: itemSchema, data: item, parentShape: this, extras: extras)
+                    {
+                        _index = idx,
+                    };
+                    shapes.Add(s);
+                    idx += 1;
+                }
             }
             _shapes = shapes;
         }
@@ -219,10 +226,20 @@ public sealed class Shape
         }
 
         var shapesMap = (Dictionary<string, Shape>)_shapes;
-        if (shapesMap.TryGetValue(prop, out var nested))
-            return nested;
-
         var dataMap = (Dictionary<string, object?>)data;
+        if (shapesMap.TryGetValue(prop, out var nested))
+        {
+            if (nested._array)
+            {
+                if (dataMap.TryGetValue(prop, out var live))
+                    return live;
+                if (_parent != null)
+                    return nested;
+                return nested.GetData();
+            }
+            return nested;
+        }
+
         if (dataMap.TryGetValue(prop, out var value))
             return value;
 
@@ -253,8 +270,8 @@ public sealed class Shape
                 return;
             }
 
-            var shapesMap = (Dictionary<string, Shape>)shapes;
-            if (shapesMap.TryGetValue(path, out var nested))
+            var nestedShapes = (Dictionary<string, Shape>)shapes;
+            if (nestedShapes.TryGetValue(path, out var nested))
             {
                 nested.SetProp(remainingPath, value);
                 return;
@@ -266,11 +283,19 @@ public sealed class Shape
         }
 
         value = TypeCast(prop, value);
+        var key = prop.ToLowerInvariant();
         var dataMap = (Dictionary<string, object?>)_data;
-        dataMap[prop.ToLowerInvariant()] = value;
+        dataMap[key] = value;
+
+        var shapesMap = (Dictionary<string, Shape>)_shapes;
+        if (shapesMap.TryGetValue(key, out var child) && child._array)
+        {
+            child._data = value ?? Array.Empty<object?>();
+            child._oData = child._data;
+        }
 
         var oDataMap = (Dictionary<string, object?>)_oData;
-        oDataMap.Remove(prop.ToLowerInvariant());
+        oDataMap.Remove(key);
         oDataMap[prop] = value;
     }
 

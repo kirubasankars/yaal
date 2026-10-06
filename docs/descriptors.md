@@ -76,7 +76,9 @@ where optional(u.user_id = {{$args.id}})
   and u.user_name = {{name}}
 ```
 
-Allowed types: `integer`, `string`, `float`, `bool`, `blob`. Each name needs a type; duplicates and unknown types are errors. Trailing `!` on a name marks it **required** (`--($args.id! integer)--`). Optional `= <literal>` sets a **default** used when the caller omits the value:
+Allowed scalar types: `integer`, `string`, `float`, `bool`, `blob`. Array types use the same names with `[]` (e.g. `integer[]`, `string[]`): a single `{{param}}` in SQL expands at compile time to one bound placeholder per list element—typical pattern `col in ({{$args.ids}})` → `col in (?, ?, ?)`. An empty list `[]` is a compile error for a required filter; inside `optional(...)`, `null` and `[]` both count as omitted. Array types do not support header defaults.
+
+Each name needs a type; duplicates and unknown types are errors. Trailing `!` on a name marks it **required** (`--($args.id! integer)--`). Optional `= <literal>` sets a **default** used when the caller omits the value (scalar types only):
 
 ```sql
 --($args.sort string = id, $args.dir string = asc, $args.page integer = 1)--
@@ -112,9 +114,71 @@ and optional(u.user_id = {{$args.id}})
 | value present | `and (u.user_id = ?)` with a bind |
 | value null / omitted | clause removed |
 
+`optional(...)` may reference **multiple** `{{params}}` in one block—including array params (e.g. `optional(col1 = {{a}} and col2 in ({{ids}}) and col3 = {{b}})` with `ids integer[]`). The block is **kept** only when **every** listed param is provided (non-empty for arrays); it is **removed** when **all** are null, omitted, or `[]`. If only **some** are provided, compile fails with an error (partial parameters are not allowed).
+
+Optional **`IN`** with a single array arg (typical list filter):
+
+```sql
+--($args.id integer[])--
+select * from (select 1 as id union select 2) t
+where optional(id in ({{$args.id}}))
+```
+
+| CLI | Result |
+|---|---|
+| no `id` / `[]` | `WHERE` elided → both rows |
+| `--args '{"id": [1, 2]}'` or `--arg 'id=[1,2]'` | `where (id in (?, ?))` |
+
+Do not nest the args object inside `--arg id=…` (e.g. `--arg id='{"id":[1,2]}'` validates as an object, not an array).
+
 If the elided filter was the only predicate, the empty `WHERE`, ClickHouse `PREWHERE`, or `HAVING` is dropped — including before `)` or other clause starts (no leftover bare clause or `1 = 1`). Leading author `WHERE`/`PREWHERE`/`HAVING 1 = 1 AND|OR …` is cleaned the same way when the rest remains. When multiple filter clauses appear, each is cleaned independently. For why this SQL-first, engine-agnostic elision fits ClickHouse-style engines (and reporting-shaped queries generally) better than an ORM-owned dialect layer, see [Why SQL-first fits](why-sql-first.md).
 
 Long form still works and must be parenthesized: `({{param}} is null or col = {{param}})` (case and surrounding whitespace are flexible).
+
+### Optional groups (`optional_groups`)
+
+Repeat the same AND-shaped predicate for each row of a **blob** parameter (JSON array of objects). Copies are joined with **OR**; omit/null/`[]` on the blob removes the whole clause (like `optional`).
+
+```sql
+--($args.pairs blob)--
+select * from t
+where optional_groups(
+  {{$args.pairs}},
+  col2 in ({{cv}})
+  and col1 = {{cv1}}
+)
+```
+
+Runtime `$args.pairs`:
+
+```json
+[
+  {"cv": [1, 2, 3], "cv1": 10},
+  {"cv": [4], "cv1": 20}
+]
+```
+
+Compiled shape:
+
+```sql
+where (col2 in (?, ?, ?) and col1 = ?) or (col2 in (?) and col1 = ?)
+```
+
+| Blob field value | Placeholders |
+|---|---|
+| scalar (number, string, bool, bytes) | one `?` |
+| non-empty JSON array of scalars | `?, ?, …` (per-row `IN` arity) |
+| `[]` | compile error (empty `IN`) |
+| nested object or array | compile error (not bindable) |
+| missing key or `null` | compile error |
+
+Body placeholders (`cv`, `cv1`, …) are **keys** in each row object (case-insensitive at bind time). They must **not** appear in the SQL parameter header. The first argument must be a single `{{blob}}` declared `blob`. This is separate from multi-param `optional(...)` and from header `integer[]` (one list param for one `IN`).
+
+The blob argument itself may arrive as a **list of row objects**, a **JSON string**, or **UTF-8 JSON bytes** — all three compile and bind identically. Anything that is not a JSON array of objects (a bare object, a scalar, malformed JSON) is rejected. `null`, `[]`, `""`, and `"[]"` all count as **no rows** and elide the clause.
+
+`blob` args model as `{"type": "array", "items": {"type": "object"}}`, so list values are not coerced to strings on the way in.
+
+Minimal end-to-end fixture: `user/groups` under `tests/fixtures/api/` (and `experiment/api/`). CLI: `--arg 'pairs=[{"id":1}]'` or `--args '{"pairs":[{"id":1}]}'`.
 
 ```bash
 yaal explain user/list --arg active=1

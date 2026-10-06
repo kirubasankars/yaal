@@ -10,7 +10,15 @@ from collections import defaultdict
 
 from yaal_const import MODE
 from yaal_errors import SortDirError
-from yaal_parser import compile_sql, resolve_sort_dir_values
+from yaal_parser import (
+    array_lengths_for_compile,
+    coerce_optional_groups_blob,
+    compile_sql,
+    group_shapes_for_compile,
+    nullable_value_is_absent,
+    param_types_by_name,
+    resolve_sort_dir_values,
+)
 
 
 class DataProviderHelper:
@@ -24,24 +32,52 @@ class DataProviderHelper:
         self._param_cache = {}
 
     def get_executable_content(self, char, twig, input_shape):
+        ptypes = param_types_by_name(twig)
         nulls = []
         if "nullable" in twig:
             for n in twig["nullable"]:
-                if input_shape.get_prop(n) is None:
+                ptype = ptypes.get(n.lower(), "string")
+                if nullable_value_is_absent(ptype, input_shape.get_prop(n)):
                     nulls.append(n)
         if twig.get("has_sort_dir") is False:
             sort_map = {}
         else:
             sort_map = resolve_sort_dir_values(twig, input_shape)
+        get_prop = input_shape.get_prop if input_shape is not None else (lambda _n: None)
+        array_lengths = array_lengths_for_compile(twig, get_prop, nulls)
+        group_counts, group_field_lengths, group_field_is_array = group_shapes_for_compile(
+            twig, get_prop, nulls
+        )
         sort_key = tuple(sorted((p, v if v is not None else "") for p, v in sort_map.items()))
-        key = (id(twig), frozenset(nulls), char, sort_key)
+        array_key = tuple(sorted(array_lengths.items()))
+        group_key = (
+            tuple(sorted(group_counts.items())),
+            tuple(
+                (src, tuple(tuple(sorted(row.items())) for row in rows))
+                for src, rows in sorted(group_field_lengths.items())
+            ),
+            tuple(
+                (src, tuple(tuple(sorted(row.items())) for row in rows))
+                for src, rows in sorted(group_field_is_array.items())
+            ),
+        )
+        key = (id(twig), frozenset(nulls), char, sort_key, array_key, group_key)
         cached = self._compile_cache.get(key)
         if cached is not None:
             return {
                 "content": cached["content"],
                 "parameters": list(cached["parameters"]),
             }
-        compiled = compile_sql(twig, nulls, char, sort_map=sort_map)
+        compiled = compile_sql(
+            twig,
+            nulls,
+            char,
+            sort_map=sort_map,
+            array_lengths=array_lengths,
+            group_counts=group_counts,
+            group_field_lengths=group_field_lengths,
+            group_field_is_array=group_field_is_array,
+        )
         self._compile_cache[key] = {
             "content": compiled["content"],
             "parameters": list(compiled.get("parameters") or []),
@@ -54,13 +90,54 @@ class DataProviderHelper:
     def build_parameters(self, query, input_shape, get_value_converter):
         values = []
         _cache = self._param_cache
+        array_indexes = {}
+        group_blob_cache = {}
         if "parameters" in query:
             parameters = query["parameters"]
             for p in parameters:
                 param_name = p["name"]
                 param_type = p["type"]
 
-                if param_name in _cache:
+                if p.get("group_source"):
+                    src = p["group_source"]
+                    if src not in group_blob_cache:
+                        group_blob_cache[src] = coerce_optional_groups_blob(
+                            input_shape.get_prop(src), src
+                        )
+                    pairs = group_blob_cache[src]
+                    field = p["group_field"]
+                    gi = p["group_index"]
+                    if not isinstance(pairs, list) or gi >= len(pairs):
+                        raise ValueError(
+                            "optional_groups row missing for {{" + field + "}}"
+                        )
+                    row = pairs[gi]
+                    if not isinstance(row, dict):
+                        raise ValueError(
+                            "optional_groups {{" + src + "}} rows must be objects"
+                        )
+                    param_value = _row_get_insensitive(row, field)
+                    if "group_subindex" in p:
+                        if not isinstance(param_value, list):
+                            raise ValueError(
+                                "optional_groups field {{" + field + "}} must be an array"
+                            )
+                        sub = p["group_subindex"]
+                        if sub >= len(param_value):
+                            raise ValueError(
+                                "optional_groups field {{" + field + "}} index out of range"
+                            )
+                        param_value = param_value[sub]
+                    param_value = _group_scalar_value(param_value, src, field)
+                elif p.get("array_element"):
+                    list_key = param_name.lower()
+                    if list_key not in _cache:
+                        _cache[list_key] = input_shape.get_prop(param_name)
+                    seq = _cache[list_key]
+                    idx = array_indexes.get(list_key, 0)
+                    param_value = seq[idx] if seq is not None else None
+                    array_indexes[list_key] = idx + 1
+                elif param_name in _cache:
                     param_value = _cache[param_name]
                 else:
                     param_value = input_shape.get_prop(param_name)
@@ -69,7 +146,7 @@ class DataProviderHelper:
                         _cache[param_name] = param_value
 
                 try:
-                    if param_value is not None:
+                    if param_value is not None and not p.get("group_source"):
                         if param_type == "integer":
                             param_value = int(param_value)
                         elif param_type == "string":
@@ -81,6 +158,20 @@ class DataProviderHelper:
                     values.append(param_value)
 
         return values
+
+
+def _group_scalar_value(value, source, field):
+    """Reject row values a driver cannot bind (nested objects/arrays)."""
+    if value is None or isinstance(value, (bool, int, float, str, bytes)):
+        return value
+    raise ValueError(
+        "optional_groups field {{"
+        + field
+        + "}} in "
+        + source
+        + " must be a scalar value, got "
+        + type(value).__name__
+    )
 
 
 def _execute_twigs(branch, data_providers, context, data_provider_helper):

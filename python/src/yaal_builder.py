@@ -5,7 +5,12 @@
 import os
 import re
 
-from yaal_parser import lexer, parser
+from yaal_parser import (
+    is_array_param_type,
+    lexer,
+    param_element_type,
+    parser,
+)
 from yaal_shape import _to_lower_keys_deep, _to_lower_keys
 
 path_join = os.path.join
@@ -15,7 +20,6 @@ _SQL_TO_JSON_TYPE = {
     "string": "string",
     "float": "number",
     "bool": "boolean",
-    "blob": "string",
 }
 
 
@@ -167,6 +171,14 @@ array_rx = re.compile(r"^(?P<path>\w+)\[\d+\]$")
 
 def _json_type_for_param(param):
     sql_type = param["type"]
+    if sql_type == "blob":
+        return {"type": "array", "items": {"type": "object"}}
+    if is_array_param_type(sql_type):
+        elem = param_element_type(sql_type)
+        item_type = _SQL_TO_JSON_TYPE.get(elem)
+        if not item_type:
+            raise TypeError("unknown parameter type '" + sql_type + "'")
+        return {"type": "array", "items": {"type": item_type}}
     json_type = _SQL_TO_JSON_TYPE.get(sql_type)
     if not json_type:
         raise TypeError("unknown parameter type '" + sql_type + "'")
@@ -227,8 +239,11 @@ def _expand_parameter(model, prop, value):
             existing_type = existing.get("type") if isinstance(existing, dict) else None
             existing_has_default = isinstance(existing, dict) and "default" in existing
             existing_default = existing.get("default") if existing_has_default else None
+            new_type_label = (
+                json_type.get("type") if isinstance(json_type, dict) else json_type
+            )
             if (
-                existing_type != json_type
+                existing_type != new_type_label
                 or existing_required != new_required
                 or existing_has_default != new_has_default
                 or existing_default != new_default
@@ -243,7 +258,7 @@ def _expand_parameter(model, prop, value):
                     + " default="
                     + str(existing_default)
                     + ", new type="
-                    + json_type
+                    + str(new_type_label)
                     + " required="
                     + str(new_required)
                     + " default="
@@ -251,7 +266,10 @@ def _expand_parameter(model, prop, value):
                 )
             return
 
-        prop_schema = {"type": json_type}
+        if isinstance(json_type, dict):
+            prop_schema = dict(json_type)
+        else:
+            prop_schema = {"type": json_type}
         if new_has_default:
             prop_schema["default"] = new_default
         props[prop] = prop_schema

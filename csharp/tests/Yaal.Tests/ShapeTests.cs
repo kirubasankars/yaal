@@ -61,6 +61,24 @@ public class ShapeTests
     }
 
     [Fact]
+    public void Args_array_property_returns_list_not_shape()
+    {
+        var args = new Shape(
+            schema: new Dictionary<string, object?>
+            {
+                ["type"] = "object",
+                ["properties"] = new Dictionary<string, object?>
+                {
+                    ["id"] = new Dictionary<string, object?> { ["type"] = "array" },
+                },
+            },
+            data: new Dictionary<string, object?> { ["id"] = new List<object?> { 1, 2 } });
+        var extras = new Dictionary<string, Shape> { ["$args"] = args };
+        var shape = new Shape(extras: extras);
+        shape.GetProp("$args.id").Should().BeEquivalentTo(new List<object?> { 1, 2 });
+    }
+
+    [Fact]
     public void Length_and_index_for_arrays()
     {
         var schema = new Dictionary<string, object?>

@@ -217,6 +217,24 @@ public static class BranchCsEmitter
             sb.AppendLine($"{pad}    Nullable = true,");
         if (token.NullableParameter != null)
             EmitProp(sb, indent + 4, "NullableParameter", token.NullableParameter);
+        if (token.NullableParameters is { Count: > 0 } nullableParams)
+        {
+            sb.AppendLine($"{pad}    NullableParameters = new List<string>");
+            sb.AppendLine($"{pad}    {{");
+            foreach (var n in nullableParams)
+                sb.AppendLine($"{pad}        {CsString(n)},");
+            sb.AppendLine($"{pad}    }},");
+        }
+        if (token.GroupSource != null)
+            EmitProp(sb, indent + 4, "GroupSource", token.GroupSource);
+        if (token.GroupFields is { Count: > 0 } groupFields)
+        {
+            sb.AppendLine($"{pad}    GroupFields = new List<string>");
+            sb.AppendLine($"{pad}    {{");
+            foreach (var n in groupFields)
+                sb.AppendLine($"{pad}        {CsString(n)},");
+            sb.AppendLine($"{pad}    }},");
+        }
         if (token.Param != null)
             EmitProp(sb, indent + 4, "Param", token.Param);
         if (token.Choices is { Count: > 0 })
@@ -246,6 +264,16 @@ public static class BranchCsEmitter
             sb.AppendLine(",");
             sb.AppendLine($"{pad}    HasDefault = true,");
         }
+        if (decl.ArrayElement)
+            sb.AppendLine($"{pad}    ArrayElement = true,");
+        if (decl.GroupSource != null)
+            EmitProp(sb, indent + 4, "GroupSource", decl.GroupSource);
+        if (decl.GroupField != null)
+            EmitProp(sb, indent + 4, "GroupField", decl.GroupField);
+        if (decl.GroupIndex != null)
+            sb.AppendLine($"{pad}    GroupIndex = {decl.GroupIndex.Value},");
+        if (decl.GroupSubindex != null)
+            sb.AppendLine($"{pad}    GroupSubindex = {decl.GroupSubindex.Value},");
         sb.Append(pad + "}");
     }
 

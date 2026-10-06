@@ -17,7 +17,6 @@ public static class TrunkBuilder
         ["string"] = "string",
         ["float"] = "number",
         ["bool"] = "boolean",
-        ["blob"] = "string",
     };
 
     public static Branch? CreateTrunk(string path, string? outputMapper, IContentReader contentReader)
@@ -271,8 +270,38 @@ public static class TrunkBuilder
         };
     }
 
-    private static string JsonTypeForParam(ParamDecl param)
+    private static string ParamTypeSchemaLabel(object jsonType) =>
+        jsonType is Dictionary<string, object?> d && d.TryGetValue("type", out var t)
+            ? t?.ToString() ?? ""
+            : jsonType.ToString() ?? "";
+
+    private static object JsonTypeForParam(ParamDecl param)
     {
+        if (param.Type.Equals("blob", StringComparison.OrdinalIgnoreCase))
+        {
+            return new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["type"] = "array",
+                ["items"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["type"] = "object",
+                },
+            };
+        }
+        if (ParamTypeUtil.IsArrayType(param.Type))
+        {
+            var elem = ParamTypeUtil.ElementType(param.Type);
+            if (!SqlToJsonType.TryGetValue(elem, out var itemType))
+                throw new InvalidOperationException("unknown parameter type '" + param.Type + "'");
+            return new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["type"] = "array",
+                ["items"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["type"] = itemType,
+                },
+            };
+        }
         if (!SqlToJsonType.TryGetValue(param.Type, out var jsonType))
             throw new InvalidOperationException("unknown parameter type '" + param.Type + "'");
         return jsonType;
@@ -356,7 +385,8 @@ public static class TrunkBuilder
             var existingType = existing.TryGetValue("type", out var t) ? t?.ToString() : null;
             var existingHasDefault = existing.ContainsKey("default");
             var existingDefault = existingHasDefault ? existing["default"] : null;
-            if (!string.Equals(existingType, jsonType, StringComparison.OrdinalIgnoreCase) ||
+            var newTypeLabel = ParamTypeSchemaLabel(jsonType);
+            if (!string.Equals(existingType, newTypeLabel, StringComparison.OrdinalIgnoreCase) ||
                 existingRequired != newRequired ||
                 existingHasDefault != newHasDefault ||
                 !DefaultsEqual(existingDefault, newDefault))
@@ -365,16 +395,18 @@ public static class TrunkBuilder
                     "conflicting parameter declaration for '" + prop +
                     "': existing type=" + existingType + " required=" + existingRequired +
                     " default=" + existingDefault +
-                    ", new type=" + jsonType + " required=" + newRequired +
+                    ", new type=" + newTypeLabel + " required=" + newRequired +
                     " default=" + newDefault);
             }
             return;
         }
 
-        var propSchema = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["type"] = jsonType,
-        };
+        var propSchema = jsonType is Dictionary<string, object?> arrSchema
+            ? new Dictionary<string, object?>(arrSchema, StringComparer.OrdinalIgnoreCase)
+            : new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["type"] = jsonType,
+            };
         if (newHasDefault)
             propSchema["default"] = newDefault;
         props[prop] = propSchema;

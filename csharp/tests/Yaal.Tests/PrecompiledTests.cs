@@ -130,6 +130,8 @@ public class PrecompiledTests
                         if (tok.Nullable) tokd["nullable"] = true;
                         if (tok.NullableParameter != null)
                             tokd["nullable_parameter"] = tok.NullableParameter;
+                        if (tok.NullableParameters != null)
+                            tokd["nullable_parameters"] = tok.NullableParameters;
                         if (tok.Param != null)
                             tokd["param"] = tok.Param;
                         if (tok.Choices != null)

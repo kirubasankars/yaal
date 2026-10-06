@@ -5,22 +5,23 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using FluentAssertions;
+using Yaal.Execution;
 using Yaal.Sql;
 
 namespace Yaal.Tests;
 
-public class NullableFiltersTests
+public class OptionalGroupsExperimentalTests
 {
     private static string CasesPath =>
         Path.GetFullPath(Path.Combine(
             AppContext.BaseDirectory, "..", "..", "..", "..", "..", "..",
-            "tests", "fixtures", "sql_compile", "cases.json"));
+            "tests", "fixtures", "sql_compile", "optional_groups_experimental.json"));
 
     private static string NormalizeWs(string sql) =>
         Regex.Replace(sql, @"\s+", " ").Trim();
 
     [Fact]
-    public void Shared_sql_compile_goldens()
+    public void Experimental_sql_compile_goldens()
     {
         var json = File.ReadAllText(CasesPath);
         using var doc = JsonDocument.Parse(json);
@@ -43,10 +44,13 @@ public class NullableFiltersTests
             var ast = SqlParser.Parse(Lexer.Lex(sql), "$")!;
             var twig = ast.SqlStmts![0];
 
-            if (caseEl.TryGetProperty("expect_nullable_contains", out var nullableEl))
+            if (caseEl.TryGetProperty("expect_group_fields", out var gfEl))
             {
-                foreach (var n in nullableEl.EnumerateArray())
-                    twig.Nullable.Should().Contain(n.GetString(), because: name);
+                var open = twig.Content.FirstOrDefault(t =>
+                    t.Type == "brace" && t.Value == "(" && t.GroupSource != null);
+                open.Should().NotBeNull(because: name);
+                var expected = gfEl.EnumerateArray().Select(x => x.GetString()!).ToList();
+                open!.GroupFields.Should().Equal(expected, because: name);
             }
 
             var nulls = caseEl.TryGetProperty("nulls", out var nullsEl)
@@ -56,50 +60,30 @@ public class NullableFiltersTests
                 ? phEl.GetString() ?? "?"
                 : "?";
 
-            var arrayLengths = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-            if (caseEl.TryGetProperty("array_lengths", out var alEl))
-            {
-                foreach (var prop in alEl.EnumerateObject())
-                    arrayLengths[prop.Name] = prop.Value.GetInt32();
-            }
+            var arrayLengths = ReadIntMap(caseEl, "array_lengths");
+            var groupCounts = ReadIntMap(caseEl, "group_counts");
+            var groupFieldLengths = ReadGroupFieldLengths(caseEl);
 
-            var groupCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-            if (caseEl.TryGetProperty("group_counts", out var gcEl))
+            Dictionary<string, string?>? sortMap = null;
+            if (caseEl.TryGetProperty("sort_map", out var smEl))
             {
-                foreach (var prop in gcEl.EnumerateObject())
-                    groupCounts[prop.Name] = prop.Value.GetInt32();
-            }
-
-            var groupFieldLengths = new Dictionary<string, List<Dictionary<string, int>>>(
-                StringComparer.OrdinalIgnoreCase);
-            if (caseEl.TryGetProperty("group_field_lengths", out var gflEl))
-            {
-                foreach (var srcProp in gflEl.EnumerateObject())
-                {
-                    var rows = new List<Dictionary<string, int>>();
-                    foreach (var rowEl in srcProp.Value.EnumerateArray())
-                    {
-                        var row = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-                        foreach (var fieldProp in rowEl.EnumerateObject())
-                            row[fieldProp.Name] = fieldProp.Value.GetInt32();
-                        rows.Add(row);
-                    }
-                    groupFieldLengths[srcProp.Name] = rows;
-                }
+                sortMap = new Dictionary<string, string?>(StringComparer.Ordinal);
+                foreach (var prop in smEl.EnumerateObject())
+                    sortMap[prop.Name] = prop.Value.GetString();
             }
 
             if (caseEl.TryGetProperty("expect_compile_error_contains", out var compileErrEl))
             {
                 var needle = compileErrEl.GetString()!;
                 Action act = () => SqlCompiler.Compile(
-                    twig, nulls, placeholder, null, arrayLengths, groupCounts, groupFieldLengths);
+                    twig, nulls, placeholder, sortMap, arrayLengths, groupCounts, groupFieldLengths);
                 act.Should().Throw<Exception>(because: name)
                     .Where(ex => ex.Message.Contains(needle, StringComparison.OrdinalIgnoreCase));
                 continue;
             }
 
             var compiled = SqlCompiler.Compile(
-                twig, nulls, placeholder, null, arrayLengths, groupCounts, groupFieldLengths);
+                twig, nulls, placeholder, sortMap, arrayLengths, groupCounts, groupFieldLengths);
             NormalizeWs(compiled.Content).Should().Be(
                 NormalizeWs(caseEl.GetProperty("expect_sql").GetString()!),
                 because: name);
@@ -109,5 +93,35 @@ public class NullableFiltersTests
                 : Array.Empty<string>();
             compiled.Parameters.Select(p => p.Name).Should().Equal(expectParams, because: name);
         }
+    }
+
+    private static Dictionary<string, int> ReadIntMap(JsonElement caseEl, string propName)
+    {
+        var map = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        if (!caseEl.TryGetProperty(propName, out var el))
+            return map;
+        foreach (var prop in el.EnumerateObject())
+            map[prop.Name] = prop.Value.GetInt32();
+        return map;
+    }
+
+    private static Dictionary<string, List<Dictionary<string, int>>> ReadGroupFieldLengths(JsonElement caseEl)
+    {
+        var map = new Dictionary<string, List<Dictionary<string, int>>>(StringComparer.OrdinalIgnoreCase);
+        if (!caseEl.TryGetProperty("group_field_lengths", out var gflEl))
+            return map;
+        foreach (var srcProp in gflEl.EnumerateObject())
+        {
+            var rows = new List<Dictionary<string, int>>();
+            foreach (var rowEl in srcProp.Value.EnumerateArray())
+            {
+                var row = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                foreach (var fieldProp in rowEl.EnumerateObject())
+                    row[fieldProp.Name] = fieldProp.Value.GetInt32();
+                rows.Add(row);
+            }
+            map[srcProp.Name] = rows;
+        }
+        return map;
     }
 }

@@ -44,7 +44,31 @@ class TestNullableFilters(unittest.TestCase):
 
                 nulls = case.get("nulls") or []
                 placeholder = case.get("placeholder") or "?"
-                compiled = compile_sql(twig, nulls, placeholder)
+                expect_compile_err = case.get("expect_compile_error_contains")
+                array_lengths = case.get("array_lengths") or {}
+                group_counts = case.get("group_counts") or {}
+                group_field_lengths = case.get("group_field_lengths") or {}
+                compile_kwargs = {
+                    "array_lengths": array_lengths,
+                    "group_counts": group_counts,
+                    "group_field_lengths": group_field_lengths,
+                }
+                if expect_compile_err:
+                    with self.assertRaises((TypeError, ValueError)) as ctx:
+                        compile_sql(
+                            twig,
+                            nulls,
+                            placeholder,
+                            **compile_kwargs,
+                        )
+                    self.assertIn(expect_compile_err, str(ctx.exception))
+                    continue
+                compiled = compile_sql(
+                    twig,
+                    nulls,
+                    placeholder,
+                    **compile_kwargs,
+                )
                 self.assertEqual(
                     _normalize_ws(compiled["content"]),
                     _normalize_ws(case["expect_sql"]),

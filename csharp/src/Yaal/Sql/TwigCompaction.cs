@@ -14,7 +14,7 @@ public static class TwigCompaction
 
     private static readonly HashSet<string> Structural = new(StringComparer.OrdinalIgnoreCase)
     {
-        "parameter", "brace", "sort", "dir",
+        "parameter", "brace", "sort", "dir", "group_field",
     };
 
     public static List<SqlToken> Compact(List<SqlToken> content)

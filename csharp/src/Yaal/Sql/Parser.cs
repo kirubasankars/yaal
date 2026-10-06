@@ -8,13 +8,8 @@ namespace Yaal.Sql;
 
 public static class SqlParser
 {
-    private static readonly HashSet<string> KnownParamTypes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "integer", "string", "float", "bool", "blob",
-    };
-
     private static readonly Regex ParameterRx = new(
-        @"\s*(?<name>[$_.A-Za-z0-9\[\]]+)(?<required>!)?\s+(?<type>\w+)(?:\s*=\s*(?<default>.+))?\s*",
+        @"\s*(?<name>[$_.A-Za-z0-9\[\]]+)(?<required>!)?\s+(?<type>\w+(?:\[\])?)(?:\s*=\s*(?<default>.+))?\s*",
         RegexOptions.Compiled);
 
     private static readonly Regex IntegerDefaultRx = new(
@@ -198,11 +193,17 @@ public static class SqlParser
             var paramType = m.Groups["type"].Value.ToLowerInvariant();
             var paramRequired = m.Groups["required"].Success;
             var hasDefault = m.Groups["default"].Success;
-            if (!KnownParamTypes.Contains(paramType))
+            if (!ParamTypeUtil.IsKnownType(paramType))
             {
                 throw new InvalidOperationException(
                     "unknown parameter type '" + paramType + "' for {{" + paramName + "}} in " +
-                    method + ".sql (expected bool, blob, float, integer, string)");
+                    method + ".sql (expected bool, blob, float, integer, string, or scalar[] types)");
+            }
+            if (ParamTypeUtil.IsArrayType(paramType) && hasDefault)
+            {
+                throw new InvalidOperationException(
+                    "default values are not supported for array parameter {{" + paramName + "}} in " +
+                    method + ".sql");
             }
             if (paramRequired && hasDefault)
             {
@@ -248,6 +249,7 @@ public static class SqlParser
             return null;
 
         tokens = OptionalDesugar.Desugar(tokens);
+        tokens = GroupDesugar.Desugar(tokens);
         tokens = SortDirDesugar.Desugar(tokens);
 
         var ast = new SqlAst();
@@ -272,6 +274,9 @@ public static class SqlParser
 
             if (tokenType is "sort" or "dir")
                 sqlStmt.Parameters.Add(new ParamDecl { Name = token.Param! });
+
+            if (tokenType == "group_field")
+                token.Name = token.Name ?? OptionalDesugar.ParameterNameFromToken(token);
 
             if (tokenType == "parameter")
             {
@@ -378,7 +383,25 @@ public static class SqlParser
             stmt.Nullable = new List<string>();
             foreach (var token in stmt.Content)
             {
-                if (token.Type == "brace" && token.Content is string contentStr)
+                if (token.Type != "brace")
+                    continue;
+
+                if (token.NullableParameters is { Count: > 0 } nullableParams)
+                {
+                    foreach (var name in nullableParams)
+                    {
+                        var lower = name.ToLowerInvariant();
+                        if (!stmt.Nullable.Contains(lower))
+                            stmt.Nullable.Add(lower);
+                    }
+                }
+                else if (token.GroupSource != null)
+                {
+                    var lower = token.GroupSource.ToLowerInvariant();
+                    if (!stmt.Nullable.Contains(lower))
+                        stmt.Nullable.Add(lower);
+                }
+                else if (token.Content is string contentStr)
                 {
                     var m = PossibleNullParameterRx.Match(contentStr);
                     if (m.Success)
@@ -387,12 +410,15 @@ public static class SqlParser
                         stmt.Nullable.Add(name);
                         token.NullableParameter = name;
                     }
-                    token.Content = null;
                 }
+
+                token.Content = null;
             }
 
             if (stmt.Nullable.Count == 0)
                 stmt.Nullable = null;
+
+            ValidateOptionalGroups(stmt.Content, astParameters, method);
 
             SortDirDesugar.ValidateDynamicOrderBy(stmt.Content, method);
 
@@ -404,5 +430,38 @@ public static class SqlParser
             ast.SqlStmts = sqlStmts;
 
         return ast;
+    }
+
+    private static void ValidateOptionalGroups(
+        List<SqlToken> content,
+        Dictionary<string, ParamDecl>? astParameters,
+        string method)
+    {
+        astParameters ??= new Dictionary<string, ParamDecl>();
+        foreach (var tok in content)
+        {
+            if (tok.Type != "brace" || tok.Value != "(" || tok.GroupSource == null)
+                continue;
+            if (!astParameters.TryGetValue(tok.GroupSource, out var decl))
+            {
+                throw new InvalidOperationException(
+                    "type missing for {{" + tok.GroupSource + "}} in the " + method + ".sql");
+            }
+            if (!decl.Type.Equals("blob", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "optional_groups(...) source {{" + tok.GroupSource + "}} must be declared blob in " +
+                    method + ".sql");
+            }
+            foreach (var field in tok.GroupFields ?? Enumerable.Empty<string>())
+            {
+                if (astParameters.ContainsKey(field))
+                {
+                    throw new InvalidOperationException(
+                        "optional_groups(...) field {{" + field + "}} must not be declared in the " +
+                        method + ".sql parameter header");
+                }
+            }
+        }
     }
 }
