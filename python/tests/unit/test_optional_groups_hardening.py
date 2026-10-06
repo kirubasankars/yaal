@@ -105,6 +105,251 @@ class TestGroupPrecedence(unittest.TestCase):
         self.assertEqual(values, [1, 3])
 
 
+ARGS_TEMPLATE_SQL = (
+    "--($args.pairs blob, $args.flag integer)--\n"
+    "select * from t where optional_groups({{$args.pairs}},"
+    " id = {{id}} and flag = {{$args.flag}})\n"
+)
+
+
+class TestGroupBodyBinding(unittest.TestCase):
+    """Row fields are always bare; `$args.x` always binds from the runtime args."""
+
+    def _compile(self, sql, props):
+        twig = parser(lexer(sql), "$")["sql_stmts"][0]
+        shape = _Shape(props)
+        helper = DataProviderHelper()
+        compiled = helper.get_executable_content("?", twig, shape)
+        values = helper.build_parameters(compiled, shape, lambda _t, v: v)
+        return compiled["content"].strip(), values
+
+    def test_undeclared_args_name_in_body_errors(self):
+        with self.assertRaises(TypeError) as ctx:
+            parser(
+                lexer(
+                    "--($args.pairs blob)--\n"
+                    "select * from t where optional_groups({{$args.pairs}},"
+                    " id = {{id}} and other = {{$args.nope}})\n"
+                ),
+                "$",
+            )
+        self.assertIn("type missing for {{$args.nope}}", str(ctx.exception))
+
+    def test_body_with_only_args_placeholders_errors(self):
+        with self.assertRaises(TypeError) as ctx:
+            parser(
+                lexer(
+                    "--($args.pairs blob)--\n"
+                    "select * from t where optional_groups({{$args.pairs}},"
+                    " id = {{$args.id}})\n"
+                ),
+                "$",
+            )
+        self.assertIn("at least one", str(ctx.exception))
+
+    def test_bare_field_beside_declared_args_param(self):
+        twig = parser(
+            lexer(
+                "--($args.pairs blob, $args.id integer)--\n"
+                "select * from t where optional_groups({{$args.pairs}}, a = {{id}})\n"
+            ),
+            "$",
+        )["sql_stmts"][0]
+        open_tok = next(
+            t for t in twig["content"]
+            if t.get("type") == "brace" and t.get("group_source")
+        )
+        self.assertEqual(open_tok["group_fields"], ["id"])
+
+    def test_declared_header_param_repeats_per_branch(self):
+        sql, values = self._compile(
+            ARGS_TEMPLATE_SQL,
+            {"$args.pairs": [{"id": 1}, {"id": 2}], "$args.flag": 9},
+        )
+        self.assertEqual(
+            sql,
+            "select * from t where ((id = ? and flag = ?) or (id = ? and flag = ?))",
+        )
+        self.assertEqual(values, [1, 9, 2, 9])
+
+    def test_header_param_is_not_a_row_key(self):
+        twig = parser(lexer(ARGS_TEMPLATE_SQL), "$")["sql_stmts"][0]
+        open_tok = next(
+            t for t in twig["content"]
+            if t.get("type") == "brace" and t.get("group_source")
+        )
+        self.assertEqual(open_tok["group_fields"], ["id"])
+
+    def test_row_key_with_per_row_in_list(self):
+        sql, values = self._compile(
+            "--($args.pairs blob)--\n"
+            "select * from t where optional_groups({{$args.pairs}}, id in ({{ids}}))\n",
+            {"$args.pairs": [{"ids": [1, 2]}, {"ids": [3]}]},
+        )
+        self.assertEqual(
+            sql, "select * from t where ((id in (?, ?)) or (id in (?)))"
+        )
+        self.assertEqual(values, [1, 2, 3])
+
+    def test_blob_source_in_body_rejected(self):
+        with self.assertRaises(TypeError) as ctx:
+            parser(
+                lexer(
+                    "--($args.pairs blob)--\n"
+                    "select * from t where optional_groups({{$args.pairs}},"
+                    " id = {{$args.pairs}})\n"
+                ),
+                "$",
+            )
+        self.assertIn("must not be used in its body", str(ctx.exception))
+
+    def test_array_header_param_in_body_rejected(self):
+        with self.assertRaises(TypeError) as ctx:
+            parser(
+                lexer(
+                    "--($args.pairs blob, $args.ids integer[])--\n"
+                    "select * from t where optional_groups({{$args.pairs}},"
+                    " id in ({{$args.ids}}))\n"
+                ),
+                "$",
+            )
+        self.assertIn("cannot use array parameter", str(ctx.exception))
+
+    def test_bare_row_key_declared_bare_in_header_rejected(self):
+        with self.assertRaises(TypeError) as ctx:
+            parser(
+                lexer(
+                    "--(pairs blob, id integer)--\n"
+                    "select * from t where optional_groups({{pairs}}, col1 = {{id}})\n"
+                ),
+                "$",
+            )
+        self.assertIn("must not be declared", str(ctx.exception))
+
+
+NESTED_GROUPS_SQL = (
+    "--($args.pairs blob, $args.x integer)--\n"
+    "select * from t where z = 1 and optional(a = {{$args.x}}"
+    " and optional_groups({{$args.pairs}}, id = {{id}}))\n"
+)
+
+
+class TestGroupsInsideOptional(unittest.TestCase):
+    """A nested group contributes its blob source to optional(...), not its row fields."""
+
+    def _compile(self, sql, props):
+        twig = parser(lexer(sql), "$")["sql_stmts"][0]
+        shape = _Shape(props)
+        helper = DataProviderHelper()
+        compiled = helper.get_executable_content("?", twig, shape)
+        values = helper.build_parameters(compiled, shape, lambda _t, v: v)
+        return compiled["content"].strip(), values
+
+    def _optional_params(self, sql):
+        twig = parser(lexer(sql), "$")["sql_stmts"][0]
+        open_tok = next(
+            t for t in twig["content"]
+            if t.get("type") == "brace" and t.get("nullable_parameters")
+        )
+        return open_tok["nullable_parameters"]
+
+    def test_row_fields_do_not_gate_the_optional(self):
+        self.assertEqual(
+            self._optional_params(NESTED_GROUPS_SQL), ["$args.x", "$args.pairs"]
+        )
+
+    def test_multi_row_group_keeps_its_own_parentheses(self):
+        sql, values = self._compile(
+            NESTED_GROUPS_SQL,
+            {"$args.pairs": [{"id": 1}, {"id": 2}], "$args.x": 5},
+        )
+        self.assertEqual(
+            sql, "select * from t where z = 1 and (a = ? and ((id = ?) or (id = ?)))"
+        )
+        self.assertEqual(values, [5, 1, 2])
+
+    def test_single_row_group_is_not_double_wrapped(self):
+        sql, values = self._compile(
+            NESTED_GROUPS_SQL, {"$args.pairs": [{"id": 1}], "$args.x": 5}
+        )
+        self.assertEqual(sql, "select * from t where z = 1 and (a = ? and (id = ?))")
+        self.assertEqual(values, [5, 1])
+
+    def test_group_leading_inside_the_optional(self):
+        sql, values = self._compile(
+            "--($args.pairs blob, $args.x integer)--\n"
+            "select * from t where optional(optional_groups({{$args.pairs}}, id = {{id}})"
+            " and a = {{$args.x}})\n",
+            {"$args.pairs": [{"id": 1}, {"id": 7}], "$args.x": 5},
+        )
+        self.assertEqual(
+            sql, "select * from t where (((id = ?) or (id = ?)) and a = ?)"
+        )
+        self.assertEqual(values, [1, 7, 5])
+
+    def test_all_absent_elides_the_whole_optional(self):
+        sql, values = self._compile(NESTED_GROUPS_SQL, {})
+        self.assertEqual(sql, "select * from t where z = 1")
+        self.assertEqual(values, [])
+
+    def test_blob_absent_with_other_param_given_is_partial(self):
+        with self.assertRaises(ValueError) as ctx:
+            self._compile(NESTED_GROUPS_SQL, {"$args.x": 5})
+        self.assertIn("partial parameters: $args.pairs", str(ctx.exception))
+
+    def test_optional_wrapping_only_a_group(self):
+        sql = (
+            "--($args.pairs blob)--\n"
+            "select * from t where optional(optional_groups({{$args.pairs}}, id = {{id}}))\n"
+        )
+        self.assertEqual(self._optional_params(sql), ["$args.pairs"])
+        content, values = self._compile(sql, {"$args.pairs": [{"id": 1}, {"id": 2}]})
+        self.assertEqual(content, "select * from t where (((id = ?) or (id = ?)))")
+        self.assertEqual(values, [1, 2])
+        content, values = self._compile(sql, {})
+        self.assertEqual(content, "select * from t")
+        self.assertEqual(values, [])
+
+    def test_optional_inside_a_group_body_keys_off_header_param(self):
+        sql = (
+            "--($args.pairs blob, $args.flag integer)--\n"
+            "select * from t where optional_groups({{$args.pairs}},"
+            " col1 = {{cv1}} and optional(col2 = {{$args.flag}}))\n"
+        )
+        self.assertEqual(self._optional_params(sql), ["$args.flag"])
+        content, values = self._compile(
+            sql, {"$args.pairs": [{"cv1": 7}, {"cv1": 8}], "$args.flag": 1}
+        )
+        self.assertEqual(
+            content,
+            "select * from t where ((col1 = ? and (col2 = ?))"
+            " or (col1 = ? and (col2 = ?)))",
+        )
+        self.assertEqual(values, [7, 1, 8, 1])
+
+    def test_optional_inside_a_group_body_elides_in_every_branch(self):
+        content, values = self._compile(
+            "--($args.pairs blob, $args.flag integer)--\n"
+            "select * from t where optional_groups({{$args.pairs}},"
+            " col1 = {{cv1}} and optional(col2 = {{$args.flag}}))\n",
+            {"$args.pairs": [{"cv1": 7}, {"cv1": 8}]},
+        )
+        self.assertEqual(content, "select * from t where ((col1 = ?) or (col1 = ?))")
+        self.assertEqual(values, [7, 8])
+
+    def test_optional_inside_a_group_body_on_row_fields_only_rejected(self):
+        with self.assertRaises(TypeError) as ctx:
+            parser(
+                lexer(
+                    "--(pairs blob)--\n"
+                    "select * from t where optional_groups({{pairs}},"
+                    " optional(col1 = {{cv1}}))\n"
+                ),
+                "$",
+            )
+        self.assertIn("inside optional_groups", str(ctx.exception))
+
+
 class TestBlobSourceShapes(unittest.TestCase):
     """A blob can arrive as a list, a JSON string, or JSON bytes."""
 

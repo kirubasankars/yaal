@@ -102,6 +102,38 @@ class TestOptionalFiltersIntegration(unittest.TestCase):
         )
         self.assertEqual(rows, [{"id": 2, "name": "guest"}])
 
+    def test_groups_in_optional_both_bound(self):
+        rows = self._yaal.query(
+            "user/groups_in_optional",
+            args={"pairs": [{"ids": [1]}, {"ids": [2]}], "active": 1},
+        )
+        self.assertEqual([r["id"] for r in rows], [1, 2])
+
+    def test_groups_in_optional_multi_row_keeps_group_parenthesized(self):
+        explained = self._yaal.explain_sql(
+            "user/groups_in_optional",
+            args={"pairs": [{"ids": [1]}, {"ids": [2]}], "active": 1},
+        )
+        sql = explained[0]["sql"].lower()
+        self.assertIn(") or (", sql)
+        self.assertEqual(explained[0]["parameters"], [1, 1, 2])
+
+    def test_groups_in_optional_single_row(self):
+        rows = self._yaal.query(
+            "user/groups_in_optional",
+            args={"pairs": [{"ids": [1]}], "active": 1},
+        )
+        self.assertEqual(rows, [{"id": 1, "name": "admin"}])
+
+    def test_groups_in_optional_all_absent_elides(self):
+        rows = self._yaal.query("user/groups_in_optional")
+        self.assertEqual([r["id"] for r in rows], [1, 2])
+
+    def test_groups_in_optional_partial_args_errors(self):
+        with self.assertRaises(ValueError) as ctx:
+            self._yaal.query("user/groups_in_optional", args={"active": 1})
+        self.assertIn("partial parameters", str(ctx.exception).lower())
+
 
 if __name__ == "__main__":
     unittest.main()

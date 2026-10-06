@@ -223,6 +223,42 @@ public class SqliteIntegrationTests : IDisposable
         Ids(one).Should().Equal(1L);
     }
 
+    [Fact]
+    public void Optional_groups_inside_optional_binds_both()
+    {
+        var pairRows = new List<object?>
+        {
+            BlobRow("ids", new List<object?> { 1L }),
+            BlobRow("ids", new List<object?> { 2L }),
+        };
+        var rows = ((System.Collections.IEnumerable)_yaal.Query(
+            "user/groups_in_optional", args: new { pairs = pairRows, active = 1 })!)
+            .Cast<object>().ToList();
+        Ids(rows).Should().Equal(1L, 2L);
+
+        var one = ((System.Collections.IEnumerable)_yaal.Query(
+            "user/groups_in_optional",
+            args: new { pairs = new List<object?> { BlobRow("ids", new List<object?> { 1L }) }, active = 1 })!)
+            .Cast<object>().ToList();
+        Ids(one).Should().Equal(1L);
+    }
+
+    [Fact]
+    public void Optional_groups_inside_optional_all_absent_elides()
+    {
+        var rows = ((System.Collections.IEnumerable)_yaal.Query("user/groups_in_optional")!)
+            .Cast<object>().ToList();
+        Ids(rows).Should().Equal(1L, 2L);
+    }
+
+    [Fact]
+    public void Optional_groups_inside_optional_partial_args_errors()
+    {
+        var act = () => _yaal.Query("user/groups_in_optional", args: new { active = 1 });
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*partial parameters*");
+    }
+
     private static List<long> Ids(List<object> rows) =>
         rows.Select(r => AsInt64(((Dictionary<string, object?>)r)["id"])).ToList();
 

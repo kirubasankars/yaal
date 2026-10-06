@@ -36,6 +36,33 @@
     ]
   },
   {
+    "name": "experimental_groups_bare_fields_with_args_header_param",
+    "sql": "--($args.pairs blob, $args.flag integer)--\nselect * from t where optional_groups({{$args.pairs}}, col2 in ({{cv}}) and col1 = {{cv1}} and col3 = {{$args.flag}})\n",
+    "expect_group_fields": [
+      "cv",
+      "cv1"
+    ],
+    "nulls": [],
+    "group_counts": {
+      "$args.pairs": 1
+    },
+    "group_field_lengths": {
+      "$args.pairs": [
+        {
+          "cv": 2,
+          "cv1": 1
+        }
+      ]
+    },
+    "expect_sql": "select * from t where (col2 in (?, ?) and col1 = ? and col3 = ?)",
+    "expect_param_names": [
+      "cv",
+      "cv",
+      "cv1",
+      "$args.flag"
+    ]
+  },
+  {
     "name": "experimental_groups_elide_sole_where",
     "sql": "--(pairs blob)--\nselect * from t where optional_groups({{pairs}}, col1 = {{cv1}})\n",
     "nulls": [

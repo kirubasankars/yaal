@@ -183,7 +183,64 @@ A single-row group is already one predicate in parens, so it is not wrapped agai
 | nested object or array | compile error (not bindable) |
 | missing key or `null` | compile error |
 
-Body placeholders (`cv`, `cv1`, …) are **keys** in each row object (case-insensitive at bind time). They must **not** appear in the SQL parameter header. The first argument must be a single `{{blob}}` declared `blob`. This is separate from multi-param `optional(...)` and from header `integer[]` (one list param for one `IN`).
+Body placeholders (`cv`, `cv1`, …) are written **bare** and are **keys** in each row object (case-insensitive at bind time). A bare name must **not** be declared bare in the SQL parameter header. The first argument must be a single `{{blob}}` declared `blob`. This is separate from multi-param `optional(...)` and from header `integer[]` (one list param for one `IN`).
+
+#### `$args` in the body template
+
+A group body has two namespaces, and the `$args.` prefix is what tells them apart: **bare** names are blob row fields, `$args.` names are runtime args that must be **declared in the parameter header**.
+
+```sql
+--($args.pairs blob, $args.flag integer)--
+select * from t
+where optional_groups(
+  {{$args.pairs}},
+  col1 = {{cv1}}
+  and col2 = {{$args.flag}}
+)
+```
+
+| Body placeholder | Binds from |
+|---|---|
+| `{{cv1}}` | row key `cv1` in each blob row |
+| `{{$args.flag}}`, declared in the header | the runtime arg, repeated in **every** OR branch |
+| `{{$args.nope}}`, not declared | compile error (`type missing`) |
+
+With two rows and `flag = 9`, the example above compiles to `((col1 = ? and col2 = ?) or (col1 = ? and col2 = ?))` and binds `[cv1_row1, 9, cv1_row2, 9]`.
+
+Because the two namespaces are distinct, a row field `cv1` may coexist with a declared `$args.cv1` used elsewhere in the statement. These are compile errors: using the blob itself in its own body (`{{$args.pairs}}` above), referencing a header **array** parameter such as `integer[]` from a group body (put the list in each row instead, which is how per-row `IN` works), a `{{$args.x}}` in the body that is not declared in the header, and a body whose placeholders are all `$args.` names (no row field left to iterate).
+
+#### Nesting with `optional`
+
+A group may sit **inside** an `optional(...)` block, so one switch controls a scalar filter and a per-row group together:
+
+```sql
+--($args.pairs blob, $args.active integer)--
+select * from users u
+where u.user_id > 0
+  and optional(u.active = {{$args.active}}
+               and optional_groups({{$args.pairs}}, u.user_id in ({{ids}})))
+```
+
+The **blob parameter joins the optional's all-or-nothing set**, exactly like any other `{{param}}` listed there. Row fields (`ids` above) do not — they come from the blob, not from request args.
+
+| Args | Result |
+|---|---|
+| `pairs` and `active` both given | `and (u.active = ? and ((u.user_id in (?)) or (u.user_id in (?))))` |
+| neither given | whole `optional(...)` block removed |
+| only one given | compile error (partial parameters) |
+
+The group keeps its own parentheses inside the block, so the OR-join still reads as one unit next to the optional's `AND`.
+
+The reverse nesting also works: an `optional(...)` **inside** a group body elides per branch, but it must reference at least one header-declared `$args.*` param. One keyed only on row fields is a compile error, since row fields are always required.
+
+```sql
+-- ok: elides in every branch when $args.flag is omitted
+optional_groups({{$args.pairs}}, col1 = {{cv1}} and optional(col2 = {{$args.flag}}))
+-- error: cv1 is a row field, so this optional could never be dropped
+optional_groups({{$args.pairs}}, optional(col1 = {{cv1}}))
+```
+
+Fixture: `user/groups_in_optional` under `tests/fixtures/api/`.
 
 The blob argument itself may arrive as a **list of row objects**, a **JSON string**, or **UTF-8 JSON bytes** — all three compile and bind identically. Anything that is not a JSON array of objects (a bare object, a scalar, malformed JSON) is rejected. `null`, `[]`, `""`, and `"[]"` all count as **no rows** and elide the clause.
 

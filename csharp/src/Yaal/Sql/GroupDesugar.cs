@@ -6,6 +6,11 @@ namespace Yaal.Sql;
 
 public static class GroupDesugar
 {
+    private const string ArgsPrefix = "$args.";
+
+    private static readonly Dictionary<string, ParamDecl> EmptyHeaderDecls =
+        new(StringComparer.OrdinalIgnoreCase);
+
     private static int SkipWs(List<SqlToken> tokens, int i)
     {
         while (i < tokens.Count && tokens[i].Type is "space" or "newline")
@@ -25,10 +30,41 @@ public static class GroupDesugar
         }
     }
 
-    private static List<SqlToken> MarkGroupFields(List<SqlToken> body, List<string> fieldOrder)
+    /// <summary>
+    /// Row key for a group body placeholder, or null when it binds from the header.
+    /// Row fields are always written bare; a `$args.` name always binds from the
+    /// runtime args and must be declared in the header.
+    /// </summary>
+    private static string? GroupBodyRowKey(
+        string fullName,
+        IReadOnlyDictionary<string, ParamDecl> headerDecls,
+        string groupSource)
+    {
+        if (fullName.Equals(groupSource, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "optional_groups(...) blob {{" + fullName + "}} must not be used in its body");
+        }
+        if (!fullName.StartsWith(ArgsPrefix, StringComparison.Ordinal))
+            return fullName;
+        if (headerDecls.TryGetValue(fullName, out var decl) && ParamTypeUtil.IsArrayType(decl.Type))
+        {
+            throw new InvalidOperationException(
+                "optional_groups(...) body cannot use array parameter {{" + fullName +
+                "}}; put the list in each blob row instead");
+        }
+        return null;
+    }
+
+    private static List<SqlToken> MarkGroupFields(
+        List<SqlToken> body,
+        List<string> fieldOrder,
+        IReadOnlyDictionary<string, ParamDecl> headerDecls,
+        string groupSource)
     {
         var outBody = new List<SqlToken>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var rowFullNames = new HashSet<string>();
         foreach (var t in body)
         {
             if (t.Type != "parameter")
@@ -37,22 +73,54 @@ public static class GroupDesugar
                 continue;
             }
             var name = OptionalDesugar.ParameterNameFromToken(t);
-            if (seen.Add(name))
-                fieldOrder.Add(name);
+            var rowKey = GroupBodyRowKey(name, headerDecls, groupSource);
+            if (rowKey == null)
+            {
+                outBody.Add(t);
+                continue;
+            }
+            rowFullNames.Add(name);
+            if (seen.Add(rowKey))
+                fieldOrder.Add(rowKey);
             outBody.Add(new SqlToken
             {
                 Type = "group_field",
-                Name = name,
+                Name = rowKey,
                 Value = t.Value,
             });
         }
+
+        // Row fields come from the blob, so they cannot gate an optional(...) nested
+        // in the body; one keyed only on row fields would always elide.
+        foreach (var t in outBody)
+        {
+            if (t.Type != "brace" || t.NullableParameters is not { Count: > 0 } nullableParams)
+                continue;
+            var kept = new List<string>();
+            foreach (var p in nullableParams)
+            {
+                if (!rowFullNames.Contains(p))
+                    kept.Add(p);
+            }
+            if (kept.Count == 0)
+            {
+                throw new InvalidOperationException(
+                    "optional(...) inside optional_groups(...) must use at least one " +
+                    "{{$args.param}}; blob row fields are always required");
+            }
+            t.NullableParameters = kept;
+        }
+
         return outBody;
     }
 
-    public static List<SqlToken> Desugar(List<SqlToken>? tokens)
+    public static List<SqlToken> Desugar(
+        List<SqlToken>? tokens,
+        IReadOnlyDictionary<string, ParamDecl>? headerDecls = null)
     {
         if (tokens == null)
             return new List<SqlToken>();
+        headerDecls ??= EmptyHeaderDecls;
 
         var result = new List<SqlToken>();
         var i = 0;
@@ -94,11 +162,11 @@ public static class GroupDesugar
                     var bodyStart = SkipWs(inner, p + 1);
                     var bodyRaw = inner.GetRange(bodyStart, inner.Count - bodyStart);
                     EnsureNoNestedGroups(bodyRaw);
-                    var body = Desugar(bodyRaw);
+                    var body = Desugar(bodyRaw, headerDecls);
                     body = OptionalDesugar.Desugar(body);
 
                     var fieldOrder = new List<string>();
-                    body = MarkGroupFields(body, fieldOrder);
+                    body = MarkGroupFields(body, fieldOrder, headerDecls, sourceName);
                     if (fieldOrder.Count == 0)
                         throw new InvalidOperationException(
                             "optional_groups(...) requires at least one {{field}} in its body");

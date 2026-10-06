@@ -56,6 +56,12 @@ def param_types_by_name(twig):
     out = {}
     for p in twig.get("parameters") or []:
         out[p["name"].lower()] = p["type"]
+    # Desugar consumes the group blob source token, so its declared type only
+    # survives on the group metadata. The header already enforced `blob`.
+    for token in twig.get("content") or []:
+        source = token.get("group_source")
+        if source:
+            out.setdefault(source.lower(), "blob")
     return out
 
 
@@ -207,6 +213,8 @@ def group_shapes_for_compile(twig, get_prop, nulls):
     return counts, field_lengths, field_is_array
 
 _WS_TOKEN_TYPES = frozenset({"space", "newline"})
+
+_ARGS_PREFIX = "$args."
 
 
 def _is_word_like(token):
@@ -502,6 +510,52 @@ def _nullable_group_should_elide(token, nulls_set):
     return False
 
 
+def _matching_close_brace(tokens, open_index):
+    """Index of the ')' matching the '(' at open_index, or None when unclosed."""
+    group = tokens[open_index].get("group")
+    for k in range(open_index + 1, len(tokens)):
+        t = tokens[k]
+        if t["type"] == "brace" and t["value"] == ")" and t.get("group") == group:
+            return k
+    return None
+
+
+def _optional_body_param_names(body):
+    """Names that gate an optional(...).
+
+    A nested optional_groups(...) contributes only its blob source; its body
+    placeholders come from each blob row, never from request args.
+    """
+    names = []
+    seen = set()
+
+    def add(token):
+        name = _parameter_name_from_token(token)
+        if name not in seen:
+            seen.add(name)
+            names.append(name)
+
+    i = 0
+    n = len(body)
+    while i < n:
+        t = body[i]
+        if t["type"] == "word" and t["value"].lower() == "optional_groups":
+            j = _skip_ws_tokens(body, i + 1)
+            if j < n and body[j]["type"] == "brace" and body[j]["value"] == "(":
+                k = _matching_close_brace(body, j)
+                if k is not None:
+                    for inner in body[j + 1:k]:
+                        if inner["type"] == "parameter":
+                            add(inner)
+                            break
+                    i = k + 1
+                    continue
+        if t["type"] == "parameter":
+            add(t)
+        i += 1
+    return names
+
+
 def _desugar_optional_tokens(tokens):
     """Expand optional(expr) into (expr) with nullable_parameters metadata on '('."""
     if not tokens:
@@ -527,14 +581,7 @@ def _desugar_optional_tokens(tokens):
                     raise TypeError("unclosed optional(...)")
 
                 body = _desugar_optional_tokens(tokens[j + 1:k])
-                param_names = []
-                seen = set()
-                for t in body:
-                    if t["type"] == "parameter":
-                        name = _parameter_name_from_token(t)
-                        if name not in seen:
-                            seen.add(name)
-                            param_names.append(name)
+                param_names = _optional_body_param_names(body)
 
                 if len(param_names) == 0:
                     raise TypeError(
@@ -560,31 +607,94 @@ def _ensure_no_nested_optional_groups(body):
             raise TypeError("nested optional_groups(...) is not supported")
 
 
-def _mark_group_field_tokens(body):
-    """Return (body_with_group_field_tokens, field_names_in_order)."""
+def _scan_parameter_header_decls(tokens):
+    """Header declarations seen before desugar, for optional_groups body classification.
+
+    Returns {} for a malformed header; parser() raises the real error later.
+    """
+    for token in tokens:
+        if token["type"] in _WS_TOKEN_TYPES:
+            continue
+        if token["type"] != "dash":
+            return {}
+        try:
+            decls = _parse_parameter_header(token.get("value", ""), "")
+        except TypeError:
+            return {}
+        if not decls:
+            return {}
+        return {d["name"]: d for d in decls}
+    return {}
+
+
+def _group_body_row_key(full_name, header_decls, group_source):
+    """Row key for a group body placeholder, or None when it binds from the header.
+
+    Row fields are always written bare; a `$args.` name always binds from the
+    runtime args and must be declared in the header.
+    """
+    if full_name == group_source:
+        raise TypeError(
+            "optional_groups(...) blob {{" + full_name + "}} must not be used in its body"
+        )
+    if not full_name.startswith(_ARGS_PREFIX):
+        return full_name
+    decl = header_decls.get(full_name)
+    if decl is not None and is_array_param_type(decl.get("type", "")):
+        raise TypeError(
+            "optional_groups(...) body cannot use array parameter {{"
+            + full_name
+            + "}}; put the list in each blob row instead"
+        )
+    return None
+
+
+def _mark_group_field_tokens(body, header_decls, group_source):
+    """Return (body_with_group_field_tokens, row_field_names_in_order)."""
     out = []
     field_order = []
     seen = set()
+    row_full_names = set()
     for t in body:
         if t["type"] != "parameter":
             out.append(t)
             continue
         name = _parameter_name_from_token(t)
-        if name not in seen:
-            seen.add(name)
-            field_order.append(name)
+        row_key = _group_body_row_key(name, header_decls, group_source)
+        if row_key is None:
+            out.append(t)
+            continue
+        row_full_names.add(name)
+        if row_key not in seen:
+            seen.add(row_key)
+            field_order.append(row_key)
         out.append({
             "type": "group_field",
-            "name": name,
+            "name": row_key,
             "value": t["value"],
         })
+
+    # Row fields come from the blob, so they cannot gate an optional(...) nested
+    # in the body; one keyed only on row fields would always elide.
+    for t in out:
+        if t["type"] != "brace" or not t.get("nullable_parameters"):
+            continue
+        kept = [p for p in t["nullable_parameters"] if p not in row_full_names]
+        if not kept:
+            raise TypeError(
+                "optional(...) inside optional_groups(...) must use at least one "
+                "{{$args.param}}; blob row fields are always required"
+            )
+        t["nullable_parameters"] = kept
+
     return out, field_order
 
 
-def _desugar_optional_groups_tokens(tokens):
+def _desugar_optional_groups_tokens(tokens, header_decls=None):
     """Expand optional_groups(blob, body) into (body) with group metadata on '('."""
     if not tokens:
         return tokens
+    header_decls = header_decls or {}
 
     result = []
     i = 0
@@ -620,9 +730,11 @@ def _desugar_optional_groups_tokens(tokens):
                 body_start = _skip_ws_tokens(inner, p + 1)
                 body_raw = inner[body_start:]
                 _ensure_no_nested_optional_groups(body_raw)
-                body = _desugar_optional_groups_tokens(body_raw)
+                body = _desugar_optional_groups_tokens(body_raw, header_decls)
                 body = _desugar_optional_tokens(body)
-                body, field_order = _mark_group_field_tokens(body)
+                body, field_order = _mark_group_field_tokens(
+                    body, header_decls, source_name
+                )
                 if not field_order:
                     raise TypeError(
                         "optional_groups(...) requires at least one {{field}} in its body"
@@ -926,6 +1038,7 @@ def _validate_optional_groups(content, ast_parameters, method):
                 + ".sql"
             )
         for field in tok.get("group_fields") or []:
+            # Only a bare declaration collides; `$args.<field>` is a different name.
             if field in ast_parameters:
                 raise TypeError(
                     "optional_groups(...) field {{" + field + "}} must not be declared in the "
@@ -1362,7 +1475,9 @@ def parser(tokens, method):
         return None
 
     tokens = _desugar_optional_tokens(tokens)
-    tokens = _desugar_optional_groups_tokens(tokens)
+    tokens = _desugar_optional_groups_tokens(
+        tokens, _scan_parameter_header_decls(tokens)
+    )
     tokens = _desugar_sort_dir_tokens(tokens)
 
     ast = {}

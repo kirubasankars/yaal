@@ -13,6 +13,13 @@ internal static class ParamRuntimeUtil
         var outMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var p in twig.Parameters)
             outMap[p.Name] = p.Type;
+        // Desugar consumes the group blob source token, so its declared type only
+        // survives on the group metadata. The header already enforced `blob`.
+        foreach (var token in twig.Content)
+        {
+            if (token.GroupSource is { } source && !outMap.ContainsKey(source))
+                outMap[source] = "blob";
+        }
         return outMap;
     }
 

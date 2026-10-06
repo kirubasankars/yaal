@@ -55,6 +55,123 @@ public class OptionalGroupsHardeningTests
         return (NormalizeWs(compiled.Content), values);
     }
 
+    private const string ArgsTemplateSql =
+        "--($args.pairs blob, $args.flag integer)--\nselect * from t where optional_groups({{$args.pairs}}," +
+        " id = {{id}} and flag = {{$args.flag}})\n";
+
+    // $args.* resolves through the extras shape; Shape data may not hold $-prefixed keys.
+    private static (string Sql, List<object?> Values) CompileAndBindArgs(
+        string sql, Dictionary<string, object?> args)
+    {
+        var helper = new DataProviderHelper();
+        var shape = new Shape(extras: new Dictionary<string, Shape>
+        {
+            ["$args"] = new Shape(data: args),
+        });
+        var compiled = helper.GetExecutableContent("?", Twig(sql), shape);
+        var values = helper.BuildParameters(compiled, shape, (_, v) => v);
+        return (NormalizeWs(compiled.Content), values);
+    }
+
+    private static List<string> GroupFieldsOf(string sql) =>
+        Twig(sql).Content.First(t => t.Type == "brace" && t.GroupSource != null).GroupFields!;
+
+    [Fact]
+    public void Undeclared_args_name_in_body_errors()
+    {
+        Action act = () => Twig(
+            "--($args.pairs blob)--\nselect * from t where optional_groups({{$args.pairs}}," +
+            " id = {{id}} and other = {{$args.nope}})\n");
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*type missing for {{$args.nope}}*");
+    }
+
+    [Fact]
+    public void Body_with_only_args_placeholders_errors()
+    {
+        Action act = () => Twig(
+            "--($args.pairs blob)--\nselect * from t where optional_groups({{$args.pairs}}," +
+            " id = {{$args.id}})\n");
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*at least one*");
+    }
+
+    [Fact]
+    public void Bare_field_beside_declared_args_param()
+    {
+        GroupFieldsOf(
+            "--($args.pairs blob, $args.id integer)--\nselect * from t where" +
+            " optional_groups({{$args.pairs}}, a = {{id}})\n")
+            .Should().Equal("id");
+    }
+
+    [Fact]
+    public void Declared_header_param_repeats_per_branch()
+    {
+        var (sql, values) = CompileAndBindArgs(ArgsTemplateSql, new Dictionary<string, object?>
+        {
+            ["pairs"] = new List<object?> { Row("id", 1L), Row("id", 2L) },
+            ["flag"] = 9L,
+        });
+
+        sql.Should().Be("select * from t where ((id = ? and flag = ?) or (id = ? and flag = ?))");
+        values.Should().Equal(1L, 9L, 2L, 9L);
+    }
+
+    [Fact]
+    public void Header_param_is_not_a_row_key()
+    {
+        GroupFieldsOf(ArgsTemplateSql).Should().Equal("id");
+    }
+
+    [Fact]
+    public void Args_row_key_with_per_row_in_list()
+    {
+        var (sql, values) = CompileAndBindArgs(
+            "--($args.pairs blob)--\nselect * from t where optional_groups({{$args.pairs}}, id in ({{ids}}))\n",
+            new Dictionary<string, object?>
+            {
+                ["pairs"] = new List<object?>
+                {
+                    Row("ids", new List<object?> { 1L, 2L }),
+                    Row("ids", new List<object?> { 3L }),
+                },
+            });
+
+        sql.Should().Be("select * from t where ((id in (?, ?)) or (id in (?)))");
+        values.Should().Equal(1L, 2L, 3L);
+    }
+
+    [Fact]
+    public void Blob_source_in_body_rejected()
+    {
+        Action act = () => Twig(
+            "--($args.pairs blob)--\nselect * from t where optional_groups({{$args.pairs}}," +
+            " id = {{$args.pairs}})\n");
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*must not be used in its body*");
+    }
+
+    [Fact]
+    public void Array_header_param_in_body_rejected()
+    {
+        Action act = () => Twig(
+            "--($args.pairs blob, $args.ids integer[])--\nselect * from t where optional_groups({{$args.pairs}}," +
+            " id in ({{$args.ids}}))\n");
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*cannot use array parameter*");
+    }
+
+    [Fact]
+    public void Bare_row_key_declared_bare_in_header_rejected()
+    {
+        Action act = () => Twig(
+            "--(pairs blob, id integer)--\nselect * from t where optional_groups({{pairs}}," +
+            " col1 = {{id}})\n");
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*must not be declared*");
+    }
+
     [Fact]
     public void Multi_row_group_is_parenthesized_beside_and()
     {
@@ -86,6 +203,151 @@ public class OptionalGroupsHardeningTests
 
         sql.Should().Be("select * from t where ((id = ?) or (id = ?))");
         values.Should().Equal(1L, 3L);
+    }
+
+    private const string NestedGroupsSql =
+        "--($args.pairs blob, $args.x integer)--\nselect * from t where z = 1 and optional(a = {{$args.x}}" +
+        " and optional_groups({{$args.pairs}}, id = {{id}}))\n";
+
+    private const string OptionalInGroupBodySql =
+        "--($args.pairs blob, $args.flag integer)--\nselect * from t where optional_groups({{$args.pairs}}," +
+        " col1 = {{cv1}} and optional(col2 = {{$args.flag}}))\n";
+
+    private static List<string> OptionalParamsOf(string sql) =>
+        Twig(sql).Content
+            .First(t => t.Type == "brace" && t.NullableParameters is { Count: > 0 })
+            .NullableParameters!;
+
+    [Fact]
+    public void Nested_group_row_fields_do_not_gate_the_optional()
+    {
+        OptionalParamsOf(NestedGroupsSql).Should().Equal("$args.x", "$args.pairs");
+    }
+
+    [Fact]
+    public void Nested_multi_row_group_keeps_its_own_parentheses()
+    {
+        var (sql, values) = CompileAndBindArgs(NestedGroupsSql, new Dictionary<string, object?>
+        {
+            ["pairs"] = new List<object?> { Row("id", 1L), Row("id", 2L) },
+            ["x"] = 5L,
+        });
+
+        sql.Should().Be("select * from t where z = 1 and (a = ? and ((id = ?) or (id = ?)))");
+        values.Should().Equal(5L, 1L, 2L);
+    }
+
+    [Fact]
+    public void Nested_single_row_group_is_not_double_wrapped()
+    {
+        var (sql, values) = CompileAndBindArgs(NestedGroupsSql, new Dictionary<string, object?>
+        {
+            ["pairs"] = new List<object?> { Row("id", 1L) },
+            ["x"] = 5L,
+        });
+
+        sql.Should().Be("select * from t where z = 1 and (a = ? and (id = ?))");
+        values.Should().Equal(5L, 1L);
+    }
+
+    [Fact]
+    public void Nested_group_leading_inside_the_optional()
+    {
+        var (sql, values) = CompileAndBindArgs(
+            "--($args.pairs blob, $args.x integer)--\nselect * from t where" +
+            " optional(optional_groups({{$args.pairs}}, id = {{id}}) and a = {{$args.x}})\n",
+            new Dictionary<string, object?>
+            {
+                ["pairs"] = new List<object?> { Row("id", 1L), Row("id", 7L) },
+                ["x"] = 5L,
+            });
+
+        sql.Should().Be("select * from t where (((id = ?) or (id = ?)) and a = ?)");
+        values.Should().Equal(1L, 7L, 5L);
+    }
+
+    [Fact]
+    public void Nested_group_all_absent_elides_the_whole_optional()
+    {
+        var (sql, values) = CompileAndBindArgs(
+            NestedGroupsSql, new Dictionary<string, object?>());
+
+        sql.Should().Be("select * from t where z = 1");
+        values.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Nested_group_blob_absent_with_other_param_given_is_partial()
+    {
+        Action act = () => CompileAndBindArgs(NestedGroupsSql, new Dictionary<string, object?>
+        {
+            ["x"] = 5L,
+        });
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*partial parameters: $args.pairs*");
+    }
+
+    [Fact]
+    public void Optional_wrapping_only_a_group()
+    {
+        const string sql =
+            "--($args.pairs blob)--\nselect * from t where" +
+            " optional(optional_groups({{$args.pairs}}, id = {{id}}))\n";
+
+        OptionalParamsOf(sql).Should().Equal("$args.pairs");
+
+        var (kept, keptValues) = CompileAndBindArgs(sql, new Dictionary<string, object?>
+        {
+            ["pairs"] = new List<object?> { Row("id", 1L), Row("id", 2L) },
+        });
+        kept.Should().Be("select * from t where (((id = ?) or (id = ?)))");
+        keptValues.Should().Equal(1L, 2L);
+
+        var (elided, elidedValues) = CompileAndBindArgs(
+            sql, new Dictionary<string, object?>());
+        elided.Should().Be("select * from t");
+        elidedValues.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Optional_inside_a_group_body_keys_off_header_param()
+    {
+        OptionalParamsOf(OptionalInGroupBodySql).Should().Equal("$args.flag");
+
+        var (sql, values) = CompileAndBindArgs(
+            OptionalInGroupBodySql, new Dictionary<string, object?>
+            {
+                ["pairs"] = new List<object?> { Row("cv1", 7L), Row("cv1", 8L) },
+                ["flag"] = 1L,
+            });
+
+        sql.Should().Be(
+            "select * from t where ((col1 = ? and (col2 = ?)) or (col1 = ? and (col2 = ?)))");
+        values.Should().Equal(7L, 1L, 8L, 1L);
+    }
+
+    [Fact]
+    public void Optional_inside_a_group_body_elides_in_every_branch()
+    {
+        var (sql, values) = CompileAndBindArgs(
+            OptionalInGroupBodySql, new Dictionary<string, object?>
+            {
+                ["pairs"] = new List<object?> { Row("cv1", 7L), Row("cv1", 8L) },
+            });
+
+        sql.Should().Be("select * from t where ((col1 = ?) or (col1 = ?))");
+        values.Should().Equal(7L, 8L);
+    }
+
+    [Fact]
+    public void Optional_inside_a_group_body_on_row_fields_only_rejected()
+    {
+        Action act = () => Twig(
+            "--(pairs blob)--\nselect * from t where optional_groups({{pairs}}," +
+            " optional(col1 = {{cv1}}))\n");
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*inside optional_groups*");
     }
 
     [Fact]

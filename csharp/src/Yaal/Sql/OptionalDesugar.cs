@@ -16,6 +16,69 @@ public static class OptionalDesugar
         return i;
     }
 
+    /// <summary>Index of the ')' matching the '(' at openIndex, or null when unclosed.</summary>
+    private static int? MatchingCloseBrace(List<SqlToken> tokens, int openIndex)
+    {
+        var group = tokens[openIndex].Group;
+        for (var k = openIndex + 1; k < tokens.Count; k++)
+        {
+            var t = tokens[k];
+            if (t.Type == "brace" && t.Value == ")" && t.Group == group)
+                return k;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Names that gate an optional(...). A nested optional_groups(...) contributes only its
+    /// blob source; its body placeholders come from each blob row, never from request args.
+    /// </summary>
+    private static List<string> BodyParamNames(List<SqlToken> body)
+    {
+        var names = new List<string>();
+        var seen = new HashSet<string>();
+
+        void Add(SqlToken token)
+        {
+            var name = ParameterNameFromToken(token);
+            if (seen.Add(name))
+                names.Add(name);
+        }
+
+        var i = 0;
+        var n = body.Count;
+        while (i < n)
+        {
+            var t = body[i];
+            if (t.Type == "word" && t.Value.Equals("optional_groups", StringComparison.OrdinalIgnoreCase))
+            {
+                var j = SkipWs(body, i + 1);
+                if (j < n && body[j].Type == "brace" && body[j].Value == "(")
+                {
+                    var close = MatchingCloseBrace(body, j);
+                    if (close is { } k)
+                    {
+                        for (var m = j + 1; m < k; m++)
+                        {
+                            if (body[m].Type == "parameter")
+                            {
+                                Add(body[m]);
+                                break;
+                            }
+                        }
+                        i = k + 1;
+                        continue;
+                    }
+                }
+            }
+            if (t.Type == "parameter")
+                Add(t);
+            i += 1;
+        }
+
+        return names;
+    }
+
     public static List<SqlToken> Desugar(List<SqlToken>? tokens)
     {
         if (tokens == null)
@@ -47,17 +110,7 @@ public static class OptionalDesugar
                         throw new InvalidOperationException("unclosed optional(...)");
 
                     var body = Desugar(tokens.GetRange(j + 1, k - (j + 1)));
-                    var paramNames = new List<string>();
-                    var seen = new HashSet<string>();
-                    foreach (var t in body)
-                    {
-                        if (t.Type == "parameter")
-                        {
-                            var name = ParameterNameFromToken(t);
-                            if (seen.Add(name))
-                                paramNames.Add(name);
-                        }
-                    }
+                    var paramNames = BodyParamNames(body);
 
                     if (paramNames.Count == 0)
                         throw new InvalidOperationException(

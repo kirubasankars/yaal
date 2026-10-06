@@ -243,13 +243,40 @@ public static class SqlParser
         return true;
     }
 
+    /// <summary>
+    /// Header declarations seen before desugar, for optional_groups body classification.
+    /// Returns an empty map for a malformed header; Parse raises the real error later.
+    /// </summary>
+    private static Dictionary<string, ParamDecl> ScanParameterHeaderDecls(List<SqlToken> tokens)
+    {
+        var empty = new Dictionary<string, ParamDecl>(StringComparer.OrdinalIgnoreCase);
+        foreach (var token in tokens)
+        {
+            if (token.Type is "space" or "newline")
+                continue;
+            if (token.Type != "dash")
+                return empty;
+            try
+            {
+                if (!TryParseParameterHeader(token.Value, "", out var decls) || decls == null)
+                    return empty;
+                return decls.ToDictionary(d => d.Name, d => d, StringComparer.OrdinalIgnoreCase);
+            }
+            catch (InvalidOperationException)
+            {
+                return empty;
+            }
+        }
+        return empty;
+    }
+
     public static SqlAst? Parse(List<SqlToken>? tokens, string method)
     {
         if (tokens == null || tokens.Count == 0)
             return null;
 
         tokens = OptionalDesugar.Desugar(tokens);
-        tokens = GroupDesugar.Desugar(tokens);
+        tokens = GroupDesugar.Desugar(tokens, ScanParameterHeaderDecls(tokens));
         tokens = SortDirDesugar.Desugar(tokens);
 
         var ast = new SqlAst();
@@ -455,6 +482,7 @@ public static class SqlParser
             }
             foreach (var field in tok.GroupFields ?? Enumerable.Empty<string>())
             {
+                // Only a bare declaration collides; `$args.<field>` is a different name.
                 if (astParameters.ContainsKey(field))
                 {
                     throw new InvalidOperationException(
