@@ -368,6 +368,127 @@ class TestGroupsInsideOptional(unittest.TestCase):
         self.assertIn("inside optional_groups", str(ctx.exception))
 
 
+WHEN_SQL = (
+    "--($args.apply bool, $args.id integer)--\n"
+    "select * from t where z = 1"
+    " and optional_when({{$args.apply}}, u.user_id = {{$args.id}})\n"
+)
+
+
+class TestOptionalWhen(unittest.TestCase):
+    """optional_when(...) gates its block on a separate condition param."""
+
+    def _compile(self, sql, props):
+        twig = parser(lexer(sql), "$")["sql_stmts"][0]
+        shape = _Shape(props)
+        helper = DataProviderHelper()
+        compiled = helper.get_executable_content("?", twig, shape)
+        values = helper.build_parameters(compiled, shape, lambda _t, v: v)
+        return compiled["content"].strip(), values
+
+    def test_condition_and_body_param_are_both_nullable(self):
+        twig = parser(lexer(WHEN_SQL), "$")["sql_stmts"][0]
+        self.assertEqual(twig["nullable"], ["$args.apply", "$args.id"])
+
+    def test_condition_is_declared_but_never_bound(self):
+        content, values = self._compile(WHEN_SQL, {"$args.apply": True, "$args.id": 7})
+        self.assertEqual(content, "select * from t where z = 1 and (u.user_id = ?)")
+        self.assertEqual(values, [7])
+
+    def test_condition_absent_drops_the_block(self):
+        content, values = self._compile(WHEN_SQL, {"$args.id": 7})
+        self.assertEqual(content, "select * from t where z = 1")
+        self.assertEqual(values, [])
+
+    def test_false_condition_keeps_the_block(self):
+        content, values = self._compile(WHEN_SQL, {"$args.apply": False, "$args.id": 7})
+        self.assertEqual(content, "select * from t where z = 1 and (u.user_id = ?)")
+        self.assertEqual(values, [7])
+
+    def test_body_param_absent_drops_the_block(self):
+        content, values = self._compile(WHEN_SQL, {"$args.apply": True})
+        self.assertEqual(content, "select * from t where z = 1")
+        self.assertEqual(values, [])
+
+    def test_absent_condition_skips_the_body_partial_check(self):
+        sql = (
+            "--($args.apply bool, $args.a integer, $args.b integer)--\n"
+            "select * from t where"
+            " optional_when({{$args.apply}}, a = {{$args.a}} and b = {{$args.b}})\n"
+        )
+        with self.assertRaises(ValueError) as ctx:
+            self._compile(sql, {"$args.apply": True, "$args.a": 1})
+        self.assertIn("partial parameters: $args.b", str(ctx.exception))
+
+        content, values = self._compile(sql, {"$args.a": 1})
+        self.assertEqual(content, "select * from t")
+        self.assertEqual(values, [])
+
+    def test_wrapping_only_a_group(self):
+        sql = (
+            "--($args.apply bool, $args.pairs blob)--\n"
+            "select * from t where z = 1 and"
+            " optional_when({{$args.apply}}, optional_groups({{$args.pairs}}, id = {{id}}))\n"
+        )
+        content, values = self._compile(
+            sql, {"$args.apply": True, "$args.pairs": [{"id": 1}, {"id": 2}]}
+        )
+        self.assertEqual(
+            content, "select * from t where z = 1 and (((id = ?) or (id = ?)))"
+        )
+        self.assertEqual(values, [1, 2])
+
+        for absent in ({"$args.pairs": [{"id": 1}]}, {"$args.apply": True}):
+            with self.subTest(absent=absent):
+                content, values = self._compile(sql, absent)
+                self.assertEqual(content, "select * from t where z = 1")
+                self.assertEqual(values, [])
+
+    def test_inside_a_group_body_may_key_off_row_fields_only(self):
+        sql = (
+            "--($args.pairs blob, $args.flag bool)--\n"
+            "select * from t where optional_groups({{$args.pairs}},"
+            " c1 = {{cv}} and optional_when({{$args.flag}}, c2 = {{cv2}}))\n"
+        )
+        rows = [{"cv": 1, "cv2": 10}, {"cv": 2, "cv2": 20}]
+        content, values = self._compile(
+            sql, {"$args.pairs": rows, "$args.flag": True}
+        )
+        self.assertEqual(
+            content,
+            "select * from t where ((c1 = ? and (c2 = ?)) or (c1 = ? and (c2 = ?)))",
+        )
+        self.assertEqual(values, [1, 10, 2, 20])
+
+        content, values = self._compile(sql, {"$args.pairs": rows})
+        self.assertEqual(content, "select * from t where ((c1 = ?) or (c1 = ?))")
+        self.assertEqual(values, [1, 2])
+
+    def test_inside_a_group_body_rejects_a_bare_condition(self):
+        with self.assertRaises(TypeError) as ctx:
+            parser(
+                lexer(
+                    "--($args.pairs blob, flag bool)--\n"
+                    "select * from t where optional_groups({{$args.pairs}},"
+                    " c1 = {{cv}} and optional_when({{flag}}, c2 = {{cv2}}))\n"
+                ),
+                "$",
+            )
+        self.assertIn("must use a {{$args.param}} condition", str(ctx.exception))
+
+    def test_nested_optional_when_is_rejected(self):
+        with self.assertRaises(TypeError) as ctx:
+            parser(
+                lexer(
+                    "--($args.a bool, $args.b bool, $args.x integer)--\n"
+                    "select * from t where optional_when({{$args.a}},"
+                    " optional_when({{$args.b}}, c = {{$args.x}}))\n"
+                ),
+                "$",
+            )
+        self.assertIn("nested optional_when", str(ctx.exception))
+
+
 class TestBlobSourceShapes(unittest.TestCase):
     """A blob can arrive as a list, a JSON string, or JSON bytes."""
 

@@ -260,6 +260,33 @@ public class SqliteIntegrationTests : IDisposable
         Ids(rows).Should().Equal(1L, 2L);
     }
 
+    [Fact]
+    public void Optional_when_condition_gates_the_filter()
+    {
+        var rows = ((System.Collections.IEnumerable)_yaal.Query(
+            "user/when_optional", args: new { apply = true, id = 1 })!)
+            .Cast<object>().ToList();
+        Ids(rows).Should().Equal(1L);
+    }
+
+    [Fact]
+    public void Optional_when_condition_absent_elides_the_filter()
+    {
+        var rows = ((System.Collections.IEnumerable)_yaal.Query(
+            "user/when_optional", args: new { id = 1 })!)
+            .Cast<object>().ToList();
+        Ids(rows).Should().Equal(1L, 2L);
+    }
+
+    [Fact]
+    public void Optional_when_false_condition_still_applies_the_filter()
+    {
+        var rows = ((System.Collections.IEnumerable)_yaal.Query(
+            "user/when_optional", args: new { apply = false, id = 1 })!)
+            .Cast<object>().ToList();
+        Ids(rows).Should().Equal(1L);
+    }
+
     private static List<long> Ids(List<object> rows) =>
         rows.Select(r => AsInt64(((Dictionary<string, object?>)r)["id"])).ToList();
 

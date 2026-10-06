@@ -1015,5 +1015,192 @@
     "name": "unclosed_header_errors",
     "sql": "--(a integer\nselect 1\n",
     "expect_error_contains": "unclosed parameter header"
+  },
+  {
+    "name": "optional_when_cond_absent_elides",
+    "sql": "--($args.apply bool, $args.id integer)--\nselect * from t where z = 1 and optional_when({{$args.apply}}, u.user_id = {{$args.id}})\n",
+    "expect_nullable_contains": [
+      "$args.apply",
+      "$args.id"
+    ],
+    "nulls": [
+      "$args.apply"
+    ],
+    "expect_sql": "select * from t where z = 1",
+    "expect_param_names": []
+  },
+  {
+    "name": "optional_when_cond_present_body_absent_elides",
+    "sql": "--($args.apply bool, $args.id integer)--\nselect * from t where z = 1 and optional_when({{$args.apply}}, u.user_id = {{$args.id}})\n",
+    "nulls": [
+      "$args.id"
+    ],
+    "expect_sql": "select * from t where z = 1",
+    "expect_param_names": []
+  },
+  {
+    "name": "optional_when_cond_and_body_present_keeps",
+    "sql": "--($args.apply bool, $args.id integer)--\nselect * from t where z = 1 and optional_when({{$args.apply}}, u.user_id = {{$args.id}})\n",
+    "nulls": [],
+    "expect_sql": "select * from t where z = 1 and (u.user_id = ?)",
+    "expect_param_names": [
+      "$args.id"
+    ]
+  },
+  {
+    "name": "optional_when_sole_predicate_drops_where",
+    "sql": "--($args.apply bool, $args.id integer)--\nselect * from t where optional_when({{$args.apply}}, u.user_id = {{$args.id}})\n",
+    "nulls": [
+      "$args.apply"
+    ],
+    "expect_sql": "select * from t",
+    "expect_param_names": []
+  },
+  {
+    "name": "optional_when_body_partial_errors",
+    "sql": "--($args.apply bool, $args.a integer, $args.b integer)--\nselect * from t where optional_when({{$args.apply}}, a = {{$args.a}} and b = {{$args.b}})\n",
+    "nulls": [
+      "$args.b"
+    ],
+    "expect_compile_error_contains": "partial parameters"
+  },
+  {
+    "name": "optional_when_cond_absent_skips_body_partial_check",
+    "sql": "--($args.apply bool, $args.a integer, $args.b integer)--\nselect * from t where optional_when({{$args.apply}}, a = {{$args.a}} and b = {{$args.b}})\n",
+    "nulls": [
+      "$args.apply",
+      "$args.b"
+    ],
+    "expect_sql": "select * from t",
+    "expect_param_names": []
+  },
+  {
+    "name": "optional_when_wrapping_groups_only_keeps",
+    "sql": "--($args.apply bool, $args.pairs blob)--\nselect * from t where z = 1 and optional_when({{$args.apply}}, optional_groups({{$args.pairs}}, id = {{id}}))\n",
+    "nulls": [],
+    "group_counts": {
+      "$args.pairs": 2
+    },
+    "group_field_lengths": {
+      "$args.pairs": [
+        {
+          "id": 1
+        },
+        {
+          "id": 1
+        }
+      ]
+    },
+    "expect_sql": "select * from t where z = 1 and (((id = ?) or (id = ?)))",
+    "expect_param_names": [
+      "id",
+      "id"
+    ]
+  },
+  {
+    "name": "optional_when_wrapping_groups_only_cond_absent_elides",
+    "sql": "--($args.apply bool, $args.pairs blob)--\nselect * from t where z = 1 and optional_when({{$args.apply}}, optional_groups({{$args.pairs}}, id = {{id}}))\n",
+    "nulls": [
+      "$args.apply"
+    ],
+    "group_counts": {
+      "$args.pairs": 2
+    },
+    "group_field_lengths": {
+      "$args.pairs": [
+        {
+          "id": 1
+        },
+        {
+          "id": 1
+        }
+      ]
+    },
+    "expect_sql": "select * from t where z = 1",
+    "expect_param_names": []
+  },
+  {
+    "name": "optional_when_inside_groups_body_row_fields_only",
+    "sql": "--($args.pairs blob, $args.flag bool)--\nselect * from t where optional_groups({{$args.pairs}}, c1 = {{cv}} and optional_when({{$args.flag}}, c2 = {{cv2}}))\n",
+    "nulls": [],
+    "group_counts": {
+      "$args.pairs": 2
+    },
+    "group_field_lengths": {
+      "$args.pairs": [
+        {
+          "cv": 1,
+          "cv2": 1
+        },
+        {
+          "cv": 1,
+          "cv2": 1
+        }
+      ]
+    },
+    "expect_sql": "select * from t where ((c1 = ? and (c2 = ?)) or (c1 = ? and (c2 = ?)))",
+    "expect_param_names": [
+      "cv",
+      "cv2",
+      "cv",
+      "cv2"
+    ]
+  },
+  {
+    "name": "optional_when_inside_groups_body_cond_absent_elides_per_branch",
+    "sql": "--($args.pairs blob, $args.flag bool)--\nselect * from t where optional_groups({{$args.pairs}}, c1 = {{cv}} and optional_when({{$args.flag}}, c2 = {{cv2}}))\n",
+    "nulls": [
+      "$args.flag"
+    ],
+    "group_counts": {
+      "$args.pairs": 2
+    },
+    "group_field_lengths": {
+      "$args.pairs": [
+        {
+          "cv": 1,
+          "cv2": 1
+        },
+        {
+          "cv": 1,
+          "cv2": 1
+        }
+      ]
+    },
+    "expect_sql": "select * from t where ((c1 = ?) or (c1 = ?))",
+    "expect_param_names": [
+      "cv",
+      "cv"
+    ]
+  },
+  {
+    "name": "optional_when_inside_groups_bare_condition_errors",
+    "sql": "--($args.pairs blob, flag bool)--\nselect * from t where optional_groups({{$args.pairs}}, c1 = {{cv}} and optional_when({{flag}}, c2 = {{cv2}}))\n",
+    "expect_error_contains": "must use a {{$args.param}} condition"
+  },
+  {
+    "name": "optional_when_undeclared_condition_errors",
+    "sql": "--($args.id integer)--\nselect * from t where optional_when({{$args.apply}}, a = {{$args.id}})\n",
+    "expect_error_contains": "type missing for {{$args.apply}}"
+  },
+  {
+    "name": "optional_when_empty_body_errors",
+    "sql": "--($args.apply bool)--\nselect * from t where optional_when({{$args.apply}}, a = 1)\n",
+    "expect_error_contains": "requires at least one {{param}} in its body"
+  },
+  {
+    "name": "optional_when_missing_comma_errors",
+    "sql": "--($args.apply bool, $args.id integer)--\nselect * from t where optional_when({{$args.apply}} u.user_id = {{$args.id}})\n",
+    "expect_error_contains": "requires a comma after the condition parameter"
+  },
+  {
+    "name": "optional_when_condition_not_a_param_errors",
+    "sql": "--($args.id integer)--\nselect * from t where optional_when(apply, a = {{$args.id}})\n",
+    "expect_error_contains": "requires {{param}} as the first argument"
+  },
+  {
+    "name": "optional_when_nested_errors",
+    "sql": "--($args.a bool, $args.b bool, $args.x integer)--\nselect * from t where optional_when({{$args.a}}, optional_when({{$args.b}}, c = {{$args.x}}))\n",
+    "expect_error_contains": "nested optional_when(...) is not supported"
   }
 ]

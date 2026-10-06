@@ -488,6 +488,10 @@ def _match_is_null_or_after(tokens, param_index):
 
 def _nullable_group_should_elide(token, nulls_set):
     """True when a parenthesized optional/nullable group should be dropped at compile time."""
+    condition = token.get("optional_when_condition")
+    if condition and condition.lower() in nulls_set:
+        # An absent condition drops the block outright, before the body is judged.
+        return True
     group_source = token.get("group_source")
     if group_source:
         return group_source.lower() in nulls_set
@@ -611,6 +615,71 @@ def _ensure_no_nested_optional_groups(body):
             raise TypeError("nested optional_groups(...) is not supported")
 
 
+def _ensure_no_nested_optional_when(body):
+    for t in body:
+        if t["type"] == "word" and t["value"].lower() == "optional_when":
+            raise TypeError("nested optional_when(...) is not supported")
+
+
+def _desugar_optional_when_tokens(tokens):
+    """Expand optional_when({{cond}}, expr) into (expr) gated on cond plus expr params."""
+    if not tokens:
+        return tokens
+
+    result = []
+    i = 0
+    n = len(tokens)
+    while i < n:
+        tok = tokens[i]
+        if tok["type"] == "word" and tok["value"].lower() == "optional_when":
+            j = _skip_ws_tokens(tokens, i + 1)
+            if j < n and tokens[j]["type"] == "brace" and tokens[j]["value"] == "(":
+                open_tok = tokens[j]
+                k = _matching_close_brace(tokens, j)
+                if k is None:
+                    raise TypeError("unclosed optional_when(...)")
+
+                inner = tokens[j + 1:k]
+                p = _skip_ws_tokens(inner, 0)
+                if p >= len(inner) or inner[p]["type"] != "parameter":
+                    raise TypeError(
+                        "optional_when(...) requires {{param}} as the first argument"
+                    )
+                condition = _parameter_name_from_token(inner[p])
+                p = _skip_ws_tokens(inner, p + 1)
+                if p >= len(inner) or inner[p]["type"] != "word" or inner[p]["value"] != ",":
+                    raise TypeError(
+                        "optional_when(...) requires a comma after the condition parameter"
+                    )
+                body_raw = inner[_skip_ws_tokens(inner, p + 1):]
+                _ensure_no_nested_optional_when(body_raw)
+                body = _desugar_optional_tokens(body_raw)
+                param_names, saw_groups = _optional_body_param_names(body)
+
+                if len(param_names) == 0 and not saw_groups:
+                    raise TypeError(
+                        "optional_when(...) requires at least one {{param}} in its body"
+                    )
+
+                open_paren = dict(open_tok)
+                open_paren["optional_when_condition"] = condition
+                if param_names:
+                    open_paren["nullable_parameters"] = param_names
+                if saw_groups and not param_names:
+                    # Nothing but a group inside: the group elides itself, so the
+                    # wrapper parens must disappear with it rather than emit "()".
+                    open_paren["optional_groups_wrapper"] = True
+                result.append(open_paren)
+                result.extend(body)
+                result.append(tokens[k])
+                i = k + 1
+                continue
+
+        result.append(tok)
+        i += 1
+    return result
+
+
 def _scan_parameter_header_decls(tokens):
     """Header declarations seen before desugar, for optional_groups body classification.
 
@@ -681,10 +750,22 @@ def _mark_group_field_tokens(body, header_decls, group_source):
     # Row fields come from the blob, so they cannot gate an optional(...) nested
     # in the body; one keyed only on row fields would always elide.
     for t in out:
-        if t["type"] != "brace" or not t.get("nullable_parameters"):
+        if t["type"] != "brace":
+            continue
+        condition = t.get("optional_when_condition")
+        if condition and not condition.startswith(_ARGS_PREFIX):
+            raise TypeError(
+                "optional_when(...) inside optional_groups(...) must use a "
+                "{{$args.param}} condition; blob row fields are always required"
+            )
+        if not t.get("nullable_parameters"):
             continue
         kept = [p for p in t["nullable_parameters"] if p not in row_full_names]
         if not kept:
+            if condition:
+                # The condition still gates the block, so a row-field-only body is fine.
+                del t["nullable_parameters"]
+                continue
             raise TypeError(
                 "optional(...) inside optional_groups(...) must use at least one "
                 "{{$args.param}}; blob row fields are always required"
@@ -1478,6 +1559,7 @@ def parser(tokens, method):
     if not tokens:
         return None
 
+    tokens = _desugar_optional_when_tokens(tokens)
     tokens = _desugar_optional_tokens(tokens)
     tokens = _desugar_optional_groups_tokens(
         tokens, _scan_parameter_header_decls(tokens)
@@ -1509,6 +1591,11 @@ def parser(tokens, method):
 
         if token_type in ("sort", "dir"):
             sql_stmt["parameters"].append({"name": token["param"]})
+
+        if token_type == "brace" and token.get("optional_when_condition"):
+            # Desugar consumed the condition token, so register it here to keep the
+            # header type lookup and runtime absence detection working.
+            sql_stmt["parameters"].append({"name": token["optional_when_condition"]})
 
         if token_type == "group_field":
             token["name"] = token.get("name") or _parameter_name_from_token(token)
@@ -1607,6 +1694,11 @@ def parser(tokens, method):
         for token in sql_stmt["content"]:
             if token["type"] != "brace":
                 continue
+            condition = token.get("optional_when_condition")
+            if condition:
+                n = condition.lower()
+                if n not in sql_stmt["nullable"]:
+                    sql_stmt["nullable"].append(n)
             if token.get("nullable_parameters"):
                 for name in token["nullable_parameters"]:
                     n = name.lower()
@@ -1616,7 +1708,7 @@ def parser(tokens, method):
                 n = token["group_source"].lower()
                 if n not in sql_stmt["nullable"]:
                     sql_stmt["nullable"].append(n)
-            elif token.get("optional_groups_wrapper"):
+            elif condition or token.get("optional_groups_wrapper"):
                 pass
             elif "content" in token:
                 m = _POSSIBLE_NULL_PARAMETER_RX.search(token["content"])

@@ -94,7 +94,16 @@ public static class GroupDesugar
         // in the body; one keyed only on row fields would always elide.
         foreach (var t in outBody)
         {
-            if (t.Type != "brace" || t.NullableParameters is not { Count: > 0 } nullableParams)
+            if (t.Type != "brace")
+                continue;
+            var condition = t.OptionalWhenCondition;
+            if (condition != null && !condition.StartsWith(ArgsPrefix, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    "optional_when(...) inside optional_groups(...) must use a " +
+                    "{{$args.param}} condition; blob row fields are always required");
+            }
+            if (t.NullableParameters is not { Count: > 0 } nullableParams)
                 continue;
             var kept = new List<string>();
             foreach (var p in nullableParams)
@@ -104,6 +113,12 @@ public static class GroupDesugar
             }
             if (kept.Count == 0)
             {
+                if (condition != null)
+                {
+                    // The condition still gates the block, so a row-field-only body is fine.
+                    t.NullableParameters = null;
+                    continue;
+                }
                 throw new InvalidOperationException(
                     "optional(...) inside optional_groups(...) must use at least one " +
                     "{{$args.param}}; blob row fields are always required");

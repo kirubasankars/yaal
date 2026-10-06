@@ -24,6 +24,9 @@ public sealed class SqlToken
     [JsonPropertyName("optional_groups_wrapper")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool OptionalGroupsWrapper { get; set; }
+    [JsonPropertyName("optional_when_condition")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? OptionalWhenCondition { get; set; }
     [JsonPropertyName("group_fields")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<string>? GroupFields { get; set; }

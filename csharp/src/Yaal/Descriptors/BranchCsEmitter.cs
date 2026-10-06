@@ -225,6 +225,10 @@ public static class BranchCsEmitter
                 sb.AppendLine($"{pad}        {CsString(n)},");
             sb.AppendLine($"{pad}    }},");
         }
+        if (token.OptionalGroupsWrapper)
+            sb.AppendLine($"{pad}    OptionalGroupsWrapper = true,");
+        if (token.OptionalWhenCondition != null)
+            EmitProp(sb, indent + 4, "OptionalWhenCondition", token.OptionalWhenCondition);
         if (token.GroupSource != null)
             EmitProp(sb, indent + 4, "GroupSource", token.GroupSource);
         if (token.GroupFields is { Count: > 0 } groupFields)

@@ -50,6 +50,21 @@ public class PrecompiledTests
     }
 
     [Fact]
+    public void Export_import_roundtrip_preserves_optional_when_condition()
+    {
+        var y = new Yaal(FixtureApi, debug: true);
+        var branch = y.CreateDescriptor("user/when_optional");
+        var loaded = Precompiled.Import(Precompiled.ExportJson(branch, indented: true));
+
+        var conditions = loaded.Twigs![0].Content
+            .Where(t => t.OptionalWhenCondition != null)
+            .Select(t => t.OptionalWhenCondition)
+            .ToList();
+
+        conditions.Should().Equal("$args.apply");
+    }
+
+    [Fact]
     public void Yaal_loads_from_precompiled_directory()
     {
         var y = new Yaal(FixtureApi, debug: true);

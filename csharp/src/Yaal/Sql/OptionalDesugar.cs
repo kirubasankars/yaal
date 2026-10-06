@@ -135,4 +135,85 @@ public static class OptionalDesugar
 
         return result;
     }
+
+    private static void EnsureNoNestedWhen(List<SqlToken> body)
+    {
+        foreach (var t in body)
+        {
+            if (t.Type == "word" && t.Value.Equals("optional_when", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("nested optional_when(...) is not supported");
+        }
+    }
+
+    /// <summary>
+    /// Expand optional_when({{cond}}, expr) into (expr) gated on cond plus expr params.
+    /// </summary>
+    public static List<SqlToken> DesugarWhen(List<SqlToken>? tokens)
+    {
+        if (tokens == null)
+            return new List<SqlToken>();
+
+        var result = new List<SqlToken>();
+        var i = 0;
+        var n = tokens.Count;
+        while (i < n)
+        {
+            var tok = tokens[i];
+            if (tok.Type == "word" && tok.Value.Equals("optional_when", StringComparison.OrdinalIgnoreCase))
+            {
+                var j = SkipWs(tokens, i + 1);
+
+                if (j < n && tokens[j].Type == "brace" && tokens[j].Value == "(")
+                {
+                    var openTok = tokens[j];
+                    if (MatchingCloseBrace(tokens, j) is not { } k)
+                        throw new InvalidOperationException("unclosed optional_when(...)");
+
+                    var inner = tokens.GetRange(j + 1, k - (j + 1));
+                    var p = SkipWs(inner, 0);
+                    if (p >= inner.Count || inner[p].Type != "parameter")
+                        throw new InvalidOperationException(
+                            "optional_when(...) requires {{param}} as the first argument");
+
+                    var condition = ParameterNameFromToken(inner[p]);
+                    p = SkipWs(inner, p + 1);
+                    if (p >= inner.Count || inner[p].Type != "word" || inner[p].Value != ",")
+                        throw new InvalidOperationException(
+                            "optional_when(...) requires a comma after the condition parameter");
+
+                    var bodyStart = SkipWs(inner, p + 1);
+                    var bodyRaw = inner.GetRange(bodyStart, inner.Count - bodyStart);
+                    EnsureNoNestedWhen(bodyRaw);
+                    var body = Desugar(bodyRaw);
+                    var (paramNames, sawGroups) = BodyParamNames(body);
+
+                    if (paramNames.Count == 0 && !sawGroups)
+                        throw new InvalidOperationException(
+                            "optional_when(...) requires at least one {{param}} in its body");
+
+                    openTok.OptionalWhenCondition = condition;
+                    if (paramNames.Count > 0)
+                    {
+                        openTok.NullableParameters = paramNames;
+                    }
+                    else if (sawGroups)
+                    {
+                        // Nothing but a group inside: the group elides itself, so the
+                        // wrapper parens must disappear with it rather than emit "()".
+                        openTok.OptionalGroupsWrapper = true;
+                    }
+                    result.Add(openTok);
+                    result.AddRange(body);
+                    result.Add(tokens[k]);
+                    i = k + 1;
+                    continue;
+                }
+            }
+
+            result.Add(tok);
+            i += 1;
+        }
+
+        return result;
+    }
 }

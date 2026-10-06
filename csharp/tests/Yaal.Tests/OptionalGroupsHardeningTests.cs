@@ -609,4 +609,179 @@ public class OptionalGroupsHardeningTests
 
         lengths["ids"].Should().Be(3);
     }
+
+    private const string WhenSql =
+        "--($args.apply bool, $args.id integer)--\nselect * from t where z = 1" +
+        " and optional_when({{$args.apply}}, u.user_id = {{$args.id}})\n";
+
+    [Fact]
+    public void Optional_when_condition_and_body_param_are_both_nullable()
+    {
+        Twig(WhenSql).Nullable.Should().Equal("$args.apply", "$args.id");
+    }
+
+    [Fact]
+    public void Optional_when_condition_is_declared_but_never_bound()
+    {
+        var (sql, values) = CompileAndBindArgs(WhenSql, new Dictionary<string, object?>
+        {
+            ["apply"] = true,
+            ["id"] = 7L,
+        });
+
+        sql.Should().Be("select * from t where z = 1 and (u.user_id = ?)");
+        values.Should().Equal(7L);
+    }
+
+    [Fact]
+    public void Optional_when_condition_absent_drops_the_block()
+    {
+        var (sql, values) = CompileAndBindArgs(WhenSql, new Dictionary<string, object?>
+        {
+            ["id"] = 7L,
+        });
+
+        sql.Should().Be("select * from t where z = 1");
+        values.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Optional_when_false_condition_keeps_the_block()
+    {
+        var (sql, values) = CompileAndBindArgs(WhenSql, new Dictionary<string, object?>
+        {
+            ["apply"] = false,
+            ["id"] = 7L,
+        });
+
+        sql.Should().Be("select * from t where z = 1 and (u.user_id = ?)");
+        values.Should().Equal(7L);
+    }
+
+    [Fact]
+    public void Optional_when_body_param_absent_drops_the_block()
+    {
+        var (sql, values) = CompileAndBindArgs(WhenSql, new Dictionary<string, object?>
+        {
+            ["apply"] = true,
+        });
+
+        sql.Should().Be("select * from t where z = 1");
+        values.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Optional_when_absent_condition_skips_the_body_partial_check()
+    {
+        const string sql =
+            "--($args.apply bool, $args.a integer, $args.b integer)--\nselect * from t where" +
+            " optional_when({{$args.apply}}, a = {{$args.a}} and b = {{$args.b}})\n";
+
+        Action act = () => CompileAndBindArgs(sql, new Dictionary<string, object?>
+        {
+            ["apply"] = true,
+            ["a"] = 1L,
+        });
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*partial parameters: $args.b*");
+
+        var (elided, values) = CompileAndBindArgs(sql, new Dictionary<string, object?>
+        {
+            ["a"] = 1L,
+        });
+        elided.Should().Be("select * from t");
+        values.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Optional_when_wrapping_only_a_group()
+    {
+        const string sql =
+            "--($args.apply bool, $args.pairs blob)--\nselect * from t where z = 1 and" +
+            " optional_when({{$args.apply}}, optional_groups({{$args.pairs}}, id = {{id}}))\n";
+
+        var (kept, keptValues) = CompileAndBindArgs(sql, new Dictionary<string, object?>
+        {
+            ["apply"] = true,
+            ["pairs"] = new List<object?> { Row("id", 1L), Row("id", 2L) },
+        });
+        kept.Should().Be("select * from t where z = 1 and (((id = ?) or (id = ?)))");
+        keptValues.Should().Equal(1L, 2L);
+
+        var (noRows, noRowsValues) = CompileAndBindArgs(sql, new Dictionary<string, object?>
+        {
+            ["apply"] = true,
+        });
+        noRows.Should().Be("select * from t where z = 1");
+        noRowsValues.Should().BeEmpty();
+
+        var (noCond, noCondValues) = CompileAndBindArgs(sql, new Dictionary<string, object?>
+        {
+            ["pairs"] = new List<object?> { Row("id", 1L) },
+        });
+        noCond.Should().Be("select * from t where z = 1");
+        noCondValues.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Optional_when_inside_a_group_body_may_key_off_row_fields_only()
+    {
+        const string sql =
+            "--($args.pairs blob, $args.flag bool)--\nselect * from t where" +
+            " optional_groups({{$args.pairs}}, c1 = {{cv}}" +
+            " and optional_when({{$args.flag}}, c2 = {{cv2}}))\n";
+
+        var rows = new List<object?>
+        {
+            new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["cv"] = 1L,
+                ["cv2"] = 10L,
+            },
+            new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["cv"] = 2L,
+                ["cv2"] = 20L,
+            },
+        };
+
+        var (kept, keptValues) = CompileAndBindArgs(sql, new Dictionary<string, object?>
+        {
+            ["pairs"] = rows,
+            ["flag"] = true,
+        });
+        kept.Should().Be(
+            "select * from t where ((c1 = ? and (c2 = ?)) or (c1 = ? and (c2 = ?)))");
+        keptValues.Should().Equal(1L, 10L, 2L, 20L);
+
+        var (elided, elidedValues) = CompileAndBindArgs(sql, new Dictionary<string, object?>
+        {
+            ["pairs"] = rows,
+        });
+        elided.Should().Be("select * from t where ((c1 = ?) or (c1 = ?))");
+        elidedValues.Should().Equal(1L, 2L);
+    }
+
+    [Fact]
+    public void Optional_when_inside_a_group_body_rejects_a_bare_condition()
+    {
+        Action act = () => Twig(
+            "--($args.pairs blob, flag bool)--\nselect * from t where" +
+            " optional_groups({{$args.pairs}}, c1 = {{cv}}" +
+            " and optional_when({{flag}}, c2 = {{cv2}}))\n");
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*must use a {{$args.param}} condition*");
+    }
+
+    [Fact]
+    public void Nested_optional_when_is_rejected()
+    {
+        Action act = () => Twig(
+            "--($args.a bool, $args.b bool, $args.x integer)--\nselect * from t where" +
+            " optional_when({{$args.a}}, optional_when({{$args.b}}, c = {{$args.x}}))\n");
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*nested optional_when*");
+    }
 }

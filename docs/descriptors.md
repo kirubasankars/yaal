@@ -135,6 +135,36 @@ If the elided filter was the only predicate, the empty `WHERE`, ClickHouse `PREW
 
 Long form still works and must be parenthesized: `({{param}} is null or col = {{param}})` (case and surrounding whitespace are flexible).
 
+### Conditional filters (`optional_when`)
+
+`optional(...)` decides from the params **inside** the block. `optional_when({{cond}}, body)` adds a separate **condition** param that gates the block from outside:
+
+```sql
+--($args.apply bool, $args.id integer)--
+and optional_when({{$args.apply}}, u.user_id = {{$args.id}})
+```
+
+The condition is removed from the emitted SQL and is never bound — it only decides whether the block survives. The body keeps the ordinary `optional(...)` all-or-nothing rules on top.
+
+| `$args.apply` | `$args.id` | Result |
+|---|---|---|
+| omitted / null | given | clause removed |
+| `true` or `false` | given | `and (u.user_id = ?)` |
+| given | omitted | clause removed |
+
+Only **absence** disables the block, so a `bool` condition of `false` still keeps it — pass `null` (or omit the arg) to drop the filter. An absent condition is checked first, so it also suppresses the body's partial-parameter error.
+
+The condition must be declared in the parameter header like any other arg, and the body needs at least one `{{param}}` of its own (or an `optional_groups(...)`). Nesting one `optional_when(...)` directly inside another is rejected.
+
+Inside an `optional_groups(...)` body the condition must be a header-declared `$args.*` name — a bare name there would be a blob row field, which is always present and could never gate the block. With a condition in place the body may use **only** row fields, since the condition does the gating:
+
+```sql
+-- elides per branch when $args.flag is omitted; cv/cv2 come from each row
+optional_groups({{$args.pairs}}, c1 = {{cv}} and optional_when({{$args.flag}}, c2 = {{cv2}}))
+```
+
+Fixture: `user/when_optional` under `tests/fixtures/api/`.
+
 ### Optional groups (`optional_groups`)
 
 Repeat the same AND-shaped predicate for each row of a **blob** parameter (JSON array of objects). Copies are joined with **OR**; omit/null/`[]` on the blob removes the whole clause (like `optional`).

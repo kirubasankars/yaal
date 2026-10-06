@@ -566,6 +566,12 @@ public static class SqlCompiler
 
     private static bool ShouldElideNullableGroup(SqlToken token, HashSet<string> nullsSet)
     {
+        if (token.OptionalWhenCondition is { } condition &&
+            nullsSet.Contains(condition.ToLowerInvariant()))
+        {
+            // An absent condition drops the block outright, before the body is judged.
+            return true;
+        }
         if (token.GroupSource != null)
             return nullsSet.Contains(token.GroupSource.ToLowerInvariant());
         if (token.NullableParameters is { Count: > 0 } list)

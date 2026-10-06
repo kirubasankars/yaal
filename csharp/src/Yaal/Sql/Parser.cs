@@ -275,6 +275,7 @@ public static class SqlParser
         if (tokens == null || tokens.Count == 0)
             return null;
 
+        tokens = OptionalDesugar.DesugarWhen(tokens);
         tokens = OptionalDesugar.Desugar(tokens);
         tokens = GroupDesugar.Desugar(tokens, ScanParameterHeaderDecls(tokens));
         tokens = SortDirDesugar.Desugar(tokens);
@@ -301,6 +302,13 @@ public static class SqlParser
 
             if (tokenType is "sort" or "dir")
                 sqlStmt.Parameters.Add(new ParamDecl { Name = token.Param! });
+
+            if (tokenType == "brace" && token.OptionalWhenCondition is { } whenCondition)
+            {
+                // Desugar consumed the condition token, so register it here to keep the
+                // header type lookup and runtime absence detection working.
+                sqlStmt.Parameters.Add(new ParamDecl { Name = whenCondition });
+            }
 
             if (tokenType == "group_field")
                 token.Name = token.Name ?? OptionalDesugar.ParameterNameFromToken(token);
@@ -413,6 +421,14 @@ public static class SqlParser
                 if (token.Type != "brace")
                     continue;
 
+                var condition = token.OptionalWhenCondition;
+                if (condition != null)
+                {
+                    var lower = condition.ToLowerInvariant();
+                    if (!stmt.Nullable.Contains(lower))
+                        stmt.Nullable.Add(lower);
+                }
+
                 if (token.NullableParameters is { Count: > 0 } nullableParams)
                 {
                     foreach (var name in nullableParams)
@@ -428,7 +444,7 @@ public static class SqlParser
                     if (!stmt.Nullable.Contains(lower))
                         stmt.Nullable.Add(lower);
                 }
-                else if (token.OptionalGroupsWrapper)
+                else if (condition != null || token.OptionalGroupsWrapper)
                 {
                 }
                 else if (token.Content is string contentStr)

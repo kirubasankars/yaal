@@ -138,6 +138,25 @@ class TestOptionalFiltersIntegration(unittest.TestCase):
         self.assertNotIn("()", explained[0]["sql"])
         self.assertEqual(explained[0]["parameters"], [1])
 
+    def test_when_optional_condition_gates_the_filter(self):
+        rows = self._yaal.query("user/when_optional", args={"apply": True, "id": 1})
+        self.assertEqual(rows, [{"id": 1, "name": "admin"}])
+
+        explained = self._yaal.explain_sql(
+            "user/when_optional", args={"apply": True, "id": 1}
+        )
+        self.assertEqual(explained[0]["parameters"], [1])
+
+    def test_when_optional_condition_absent_elides_the_filter(self):
+        rows = self._yaal.query("user/when_optional", args={"id": 1})
+        self.assertEqual([r["id"] for r in rows], [1, 2])
+        explained = self._yaal.explain_sql("user/when_optional", args={"id": 1})
+        self.assertEqual(explained[0]["parameters"], [])
+
+    def test_when_optional_false_condition_still_applies_the_filter(self):
+        rows = self._yaal.query("user/when_optional", args={"apply": False, "id": 1})
+        self.assertEqual(rows, [{"id": 1, "name": "admin"}])
+
 
 if __name__ == "__main__":
     unittest.main()
