@@ -15,6 +15,8 @@ make yaal ARGS='list'
 | JSON out / nested shape | [Nested get](#nested-get--userget) | `user/get` |
 | Output shaping (child SQL) | [Nested child SQL](#nested-child-sql--usernested) | `user/nested` |
 | Subtractive filters | [Optional list](#optional-list--userlist) | `user/list` |
+| Optional `IN` (`integer[]`) | [Optional IN list](#optional-in-list-filter) | *(inline demo SQL)* |
+| Optional groups (`blob` + OR rows) | [Optional groups](#optional-groups--usergroups) | `user/groups` |
 | Dynamic ORDER BY (`sort`/`dir`) | [Optional list](#optional-list--userlist) | `user/list` |
 | API pagination / `$mode=params` | [Paginated nest](#paginated-nest--userpage) | `user/page` |
 | Multi-query + data passing | [Paginated nest](#paginated-nest--userpage) | `user/page` (`--sql--` + `$params`) |
@@ -328,6 +330,78 @@ order by
   { "id": 1, "name": "admin", "active": 1 },
   { "id": 2, "name": "guest", "active": 1 }
 ]
+```
+
+---
+
+## Optional IN list filter
+
+Typical list filter: one array arg expands to bound `IN` placeholders. Omit the arg or pass `[]` inside `optional(...)` to drop the whole clause (same rules as scalar optionals).
+
+### Descriptor (minimal)
+
+```sql
+--($args.id integer[])--
+
+select u.user_id, u.user_name
+from users u
+where optional(u.user_id in ({{$args.id}}))
+```
+
+| CLI | Compiled shape |
+|---|---|
+| no `id` / `[]` | `WHERE` elided |
+| `--arg 'id=[1,2]'` or `--args '{"id":[1,2]}'` | `where (u.user_id in (?, ?))` |
+
+Do not pass a nested object for the array (`--arg id='{"id":[1,2]}'` validates as an object, not a list). Reference: [descriptors — optional filters](descriptors.md#optional-filters).
+
+```bash
+yaal explain user/list   # different fixture; same optional() mechanics
+```
+
+---
+
+## Optional groups — `user/groups`
+
+Repeat the same AND-shaped predicate for each row of a **`blob`** parameter (JSON array of objects). Copies are joined with **OR**; omit/`null`/`[]`/`""`/`"[]"` on the blob removes the whole clause. Row keys (`{{id}}`, …) are **not** declared in the SQL header—only the blob source is.
+
+### Descriptor
+
+**[`user/groups/$.sql`](../tests/fixtures/api/user/groups/$.sql)**
+
+```sql
+--($args.pairs blob)--
+
+select * from (select 1 as id union select 2) t
+where optional_groups({{$args.pairs}}, id = {{id}})
+```
+
+**[`user/groups/$.output.json`](../tests/fixtures/api/user/groups/$.output.json)** — root array mapping `id`.
+
+Per-row `IN` inside the template is supported (array values in each row object). `blob` args accept a list, a JSON string, or UTF-8 JSON bytes at runtime. Details: [descriptors — optional groups](descriptors.md#optional-groups-optional_groups).
+
+### Commands
+
+```bash
+yaal query user/groups
+# both rows (filter elided)
+
+yaal query user/groups --arg 'pairs=[{"id":1}]'
+# [{"id":1}]
+
+yaal query user/groups --arg 'pairs=[{"id":1},{"id":2}]'
+# [{"id":1},{"id":2}]
+
+yaal explain user/groups --arg 'pairs=[{"id":1},{"id":2}]'
+# where (id = ?) or (id = ?)  — binds: [1, 2]
+```
+
+```python
+y.query("user/groups", args={"pairs": [{"id": 1}, {"id": 2}]})
+```
+
+```csharp
+y.Query("user/groups", args: new { pairs = new[] { new { id = 1 }, new { id = 2 } } });
 ```
 
 ---
@@ -782,7 +856,12 @@ yaal explain user/list --arg active=1 --arg sort=name --arg dir=desc
 
 # Multi-twig: user/page returns one entry per twig
 yaal explain user/page --arg page=1 --arg page_size=10
+
+# optional_groups: one OR branch per blob row
+yaal explain user/groups --arg 'pairs=[{"id":1},{"id":2}]'
 ```
+
+Elision also drops an empty `WHERE`, `PREWHERE`, or `HAVING` when the last optional predicate is removed (shared compile goldens under [`tests/fixtures/sql_compile/`](../tests/fixtures/sql_compile/)).
 
 ### Python
 

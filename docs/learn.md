@@ -10,6 +10,7 @@ This guide walks the shared fixtures under [`tests/fixtures/api/`](../tests/fixt
 | 1 | Mental model | pipeline below |
 | 2 | One get → nested JSON | `user/get` |
 | 3 | Subtractive filters | `user/list` + `explain` |
+| 3b | Array `IN` + optional groups | `user/groups` + [examples](examples.md#optional-in-list-filter) |
 | 4 | Output shaping | `mapped` / `partition_by` / `parent_rows` |
 | 5 | Child SQL nesting | `user/nested` |
 | 6 | `$mode` + pagination | `user/page` |
@@ -122,7 +123,20 @@ order by
 | no `sort` / `dir` | header defaults → `ORDER BY u.user_id ASC` |
 | `sort=name` / `dir=desc` | splices `u.user_name DESC` (allowlisted only) |
 
-That is the core of “subtractive.” Details: [examples — Optional list](examples.md#optional-list--userlist) and [descriptors — Dynamic ORDER BY](descriptors.md#dynamic-order-by--sort--dir).
+That is the core of “subtractive.” When the only predicate in a `WHERE`, `PREWHERE`, or `HAVING` is elided, the bare clause is removed (including aggregate queries—no empty `HAVING`). Details: [examples — Optional list](examples.md#optional-list--userlist) and [descriptors — Dynamic ORDER BY](descriptors.md#dynamic-order-by--sort--dir).
+
+### Step 3b — List filters and optional groups
+
+**Optional `IN`:** declare `integer[]` (or `string[]`, …) in the header; `optional(col in ({{$args.ids}}))` expands to one `?` per list element. Omit or `[]` elides the block.
+
+**Optional groups:** declare `blob` and `optional_groups({{$args.pairs}}, …)` with body placeholders as keys in each row object. Multiple rows become `(pred) or (pred)`. Walkthrough: [examples — Optional groups](examples.md#optional-groups--usergroups).
+
+```bash
+yaal explain user/groups --arg 'pairs=[{"id":1}]'
+yaal query user/groups --arg 'pairs=[{"id":1},{"id":2}]'
+```
+
+Reference: [descriptors — optional filters](descriptors.md#optional-filters) · [optional groups](descriptors.md#optional-groups-optional_groups).
 
 ---
 

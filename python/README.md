@@ -1,6 +1,6 @@
 # Yaal for Python
 
-Python implementation of the Yaal SQL→JSON library. Descriptor-driven queries, optional-filter SQL DSL, nested JSON shaping, and multi-engine providers.
+Python implementation of the Yaal SQL→JSON library. Descriptor-driven queries, subtractive `optional()` / `optional_groups` SQL DSL, header array params (`integer[]` for `IN`), nested JSON shaping, and multi-engine providers.
 
 Package: `yaal` `0.6.0` (MIT). Database drivers are extras — add the client your app uses. SQLite is stdlib.
 
@@ -56,7 +56,7 @@ y = Yaal("tests/fixtures/api", precompiled="/tmp/yaal-precompiled")
 
 `debug=True` forces live SQL/JSON and ignores `precompiled`. See [descriptors.md](../docs/descriptors.md#precompiled-descriptors).
 
-Descriptors are shared with the .NET library under [`../tests/fixtures/api/`](../tests/fixtures/api/) (`user/get`, `user/nested`, `user/list`, `user/page`, `report/summary`, `user/combine`).
+Descriptors are shared with the .NET library under [`../tests/fixtures/api/`](../tests/fixtures/api/) (`user/get`, `user/nested`, `user/list`, `user/groups`, `user/page`, `report/summary`, `user/combine`). Compile goldens for optional filters and groups: [`../tests/fixtures/sql_compile/`](../tests/fixtures/sql_compile/).
 
 ## Database URLs
 
