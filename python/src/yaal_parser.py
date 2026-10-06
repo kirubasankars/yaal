@@ -524,10 +524,29 @@ def _matching_close_brace(tokens, open_index):
     return None
 
 
+_GROUP_JOIN_BY_KEYWORD = {
+    "optional_groups_or": "or",
+    "optional_groups_and": "and",
+}
+
+
+def _group_join_for_token(token):
+    """Row join for an optional_groups_* keyword token, or None when not one."""
+    if token["type"] != "word":
+        return None
+    value = token["value"].lower()
+    if value == "optional_groups":
+        raise TypeError(
+            "optional_groups(...) was renamed: use optional_groups_or(...) to keep the "
+            "OR join, or optional_groups_and(...) to AND the rows"
+        )
+    return _GROUP_JOIN_BY_KEYWORD.get(value)
+
+
 def _optional_body_param_names(body):
     """Names that gate an optional(...).
 
-    A nested optional_groups(...) contributes nothing: its blob source elides the
+    A nested optional_groups_*(...) contributes nothing: its blob source elides the
     group on its own, and its body placeholders come from each blob row.
     Returns (names, saw_optional_groups).
     """
@@ -545,7 +564,7 @@ def _optional_body_param_names(body):
     n = len(body)
     while i < n:
         t = body[i]
-        if t["type"] == "word" and t["value"].lower() == "optional_groups":
+        if _group_join_for_token(t) is not None:
             saw_groups = True
             j = _skip_ws_tokens(body, i + 1)
             if j < n and body[j]["type"] == "brace" and body[j]["value"] == "(":
@@ -611,8 +630,10 @@ def _desugar_optional_tokens(tokens):
 
 def _ensure_no_nested_optional_groups(body):
     for t in body:
-        if t["type"] == "word" and t["value"].lower() == "optional_groups":
-            raise TypeError("nested optional_groups(...) is not supported")
+        if _group_join_for_token(t) is not None:
+            raise TypeError(
+                "nested optional_groups_or(...)/optional_groups_and(...) is not supported"
+            )
 
 
 def _ensure_no_nested_optional_when(body):
@@ -708,14 +729,14 @@ def _group_body_row_key(full_name, header_decls, group_source):
     """
     if full_name == group_source:
         raise TypeError(
-            "optional_groups(...) blob {{" + full_name + "}} must not be used in its body"
+            "optional_groups_*(...) blob {{" + full_name + "}} must not be used in its body"
         )
     if not full_name.startswith(_ARGS_PREFIX):
         return full_name
     decl = header_decls.get(full_name)
     if decl is not None and is_array_param_type(decl.get("type", "")):
         raise TypeError(
-            "optional_groups(...) body cannot use array parameter {{"
+            "optional_groups_*(...) body cannot use array parameter {{"
             + full_name
             + "}}; put the list in each blob row instead"
         )
@@ -755,7 +776,7 @@ def _mark_group_field_tokens(body, header_decls, group_source):
         condition = t.get("optional_when_condition")
         if condition and not condition.startswith(_ARGS_PREFIX):
             raise TypeError(
-                "optional_when(...) inside optional_groups(...) must use a "
+                "optional_when(...) inside optional_groups_*(...) must use a "
                 "{{$args.param}} condition; blob row fields are always required"
             )
         if not t.get("nullable_parameters"):
@@ -767,7 +788,7 @@ def _mark_group_field_tokens(body, header_decls, group_source):
                 del t["nullable_parameters"]
                 continue
             raise TypeError(
-                "optional(...) inside optional_groups(...) must use at least one "
+                "optional(...) inside optional_groups_*(...) must use at least one "
                 "{{$args.param}}; blob row fields are always required"
             )
         t["nullable_parameters"] = kept
@@ -776,7 +797,7 @@ def _mark_group_field_tokens(body, header_decls, group_source):
 
 
 def _desugar_optional_groups_tokens(tokens, header_decls=None):
-    """Expand optional_groups(blob, body) into (body) with group metadata on '('."""
+    """Expand optional_groups_or/_and(blob, body) into (body) with group metadata on '('."""
     if not tokens:
         return tokens
     header_decls = header_decls or {}
@@ -786,7 +807,9 @@ def _desugar_optional_groups_tokens(tokens, header_decls=None):
     n = len(tokens)
     while i < n:
         tok = tokens[i]
-        if tok["type"] == "word" and tok["value"].lower() == "optional_groups":
+        join = _group_join_for_token(tok)
+        if join is not None:
+            keyword = tok["value"].lower()
             j = _skip_ws_tokens(tokens, i + 1)
             if j < n and tokens[j]["type"] == "brace" and tokens[j]["value"] == "(":
                 open_tok = tokens[j]
@@ -798,19 +821,19 @@ def _desugar_optional_groups_tokens(tokens, header_decls=None):
                         break
                     k += 1
                 else:
-                    raise TypeError("unclosed optional_groups(...)")
+                    raise TypeError("unclosed " + keyword + "(...)")
 
                 inner = tokens[j + 1:k]
                 p = _skip_ws_tokens(inner, 0)
                 if p >= len(inner) or inner[p]["type"] != "parameter":
                     raise TypeError(
-                        "optional_groups(...) requires {{blob}} as the first argument"
+                        keyword + "(...) requires {{blob}} as the first argument"
                     )
                 source_name = _parameter_name_from_token(inner[p])
                 p = _skip_ws_tokens(inner, p + 1)
                 if p >= len(inner) or inner[p]["type"] != "word" or inner[p]["value"] != ",":
                     raise TypeError(
-                        "optional_groups(...) requires a comma after the blob parameter"
+                        keyword + "(...) requires a comma after the blob parameter"
                     )
                 body_start = _skip_ws_tokens(inner, p + 1)
                 body_raw = inner[body_start:]
@@ -822,12 +845,13 @@ def _desugar_optional_groups_tokens(tokens, header_decls=None):
                 )
                 if not field_order:
                     raise TypeError(
-                        "optional_groups(...) requires at least one {{field}} in its body"
+                        keyword + "(...) requires at least one {{field}} in its body"
                     )
 
                 open_paren = dict(open_tok)
                 open_paren["group_source"] = source_name
                 open_paren["group_fields"] = field_order
+                open_paren["group_join"] = join
                 result.append(open_paren)
                 result.extend(body)
                 result.append(tokens[k])
@@ -1118,7 +1142,7 @@ def _validate_optional_groups(content, ast_parameters, method):
             )
         if decl.get("type", "").lower() != "blob":
             raise TypeError(
-                "optional_groups(...) source {{" + source + "}} must be declared blob in "
+                "optional_groups_*(...) source {{" + source + "}} must be declared blob in "
                 + method
                 + ".sql"
             )
@@ -1126,7 +1150,7 @@ def _validate_optional_groups(content, ast_parameters, method):
             # Only a bare declaration collides; `$args.<field>` is a different name.
             if field in ast_parameters:
                 raise TypeError(
-                    "optional_groups(...) field {{" + field + "}} must not be declared in the "
+                    "optional_groups_*(...) field {{" + field + "}} must not be declared in the "
                     + method
                     + ".sql parameter header"
                 )
@@ -1938,7 +1962,7 @@ def _find_matching_close_paren(stmt, open_idx):
 
 
 def _wrapped_groups_all_elide(stmt, start, end, nulls_set, group_counts):
-    """True when every optional_groups(...) inside a wrapper optional(...) elides."""
+    """True when every optional_groups_*(...) inside a wrapper optional(...) elides."""
     for idx in range(start, end):
         token = stmt[idx]
         if token["type"] != "brace" or token.get("value") != "(":
@@ -2197,7 +2221,7 @@ def compile_sql(
                     _strip_preceding_connector(tokens)
                     close_idx = _find_matching_close_paren(stmt, idx)
                     if close_idx is None:
-                        raise ValueError("unclosed optional_groups(...)")
+                        raise ValueError("unclosed optional_groups_*(...)")
                     idx = close_idx + 1
                     continue
                 source = token["group_source"]
@@ -2211,7 +2235,7 @@ def compile_sql(
                     _strip_preceding_connector(tokens)
                     close_idx = _find_matching_close_paren(stmt, idx)
                     if close_idx is None:
-                        raise ValueError("unclosed optional_groups(...)")
+                        raise ValueError("unclosed optional_groups_*(...)")
                     idx = close_idx + 1
                     continue
                 rows_lens = group_field_lengths.get(skey)
@@ -2222,7 +2246,7 @@ def compile_sql(
                     )
                 close_idx = _find_matching_close_paren(stmt, idx)
                 if close_idx is None:
-                    raise ValueError("unclosed optional_groups(...)")
+                    raise ValueError("unclosed optional_groups_*(...)")
                 branches = []
                 branch_params = []
                 for gi in range(n_groups):
@@ -2243,9 +2267,10 @@ def compile_sql(
                     )
                     branches.append("(" + "".join(bt) + ")")
                     branch_params.extend(bp)
-                joined = " or ".join(branches)
-                # Multiple rows leave a top-level "or"; parenthesize so an
-                # adjacent AND does not bind tighter than this group.
+                joiner = " and " if token.get("group_join") == "and" else " or "
+                joined = joiner.join(branches)
+                # Multiple rows leave a top-level connector; parenthesize so an
+                # adjacent AND/OR does not bind tighter than this group.
                 tokens.append(
                     "(" + joined + ")" if len(branches) > 1 else joined
                 )

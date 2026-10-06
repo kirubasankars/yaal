@@ -373,12 +373,12 @@ Repeat the same AND-shaped predicate for each row of a **`blob`** parameter (JSO
 --($args.pairs blob)--
 
 select * from (select 1 as id union select 2) t
-where optional_groups({{$args.pairs}}, id = {{id}})
+where optional_groups_or({{$args.pairs}}, id = {{id}})
 ```
 
 **[`user/groups/$.output.json`](../tests/fixtures/api/user/groups/$.output.json)** — root array mapping `id`.
 
-Per-row `IN` inside the template is supported (array values in each row object). `blob` args accept a list, a JSON string, or UTF-8 JSON bytes at runtime. Row keys are always written bare (`{{id}}`); a `{{$args.x}}` placeholder in the body must be declared in the header and binds from the runtime args in every OR branch instead. Details: [descriptors — optional groups](descriptors.md#optional-groups-optional_groups).
+Per-row `IN` inside the template is supported (array values in each row object). `blob` args accept a list, a JSON string, or UTF-8 JSON bytes at runtime. Row keys are always written bare (`{{id}}`); a `{{$args.x}}` placeholder in the body must be declared in the header and binds from the runtime args in every OR branch instead. Swapping the keyword to `optional_groups_and({{$args.pairs}}, …)` joins the rows with `AND` instead, for filters where every row must match. Details: [descriptors — optional groups](descriptors.md#optional-groups-optional_groups_or-optional_groups_and).
 
 ### Commands
 

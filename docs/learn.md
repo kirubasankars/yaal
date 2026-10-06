@@ -129,14 +129,14 @@ That is the core of “subtractive.” When the only predicate in a `WHERE`, `PR
 
 **Optional `IN`:** declare `integer[]` (or `string[]`, …) in the header; `optional(col in ({{$args.ids}}))` expands to one `?` per list element. Omit or `[]` elides the block.
 
-**Optional groups:** declare `blob` and `optional_groups({{$args.pairs}}, …)` with bare body placeholders as keys in each row object (`{{id}}`; a `{{$args.x}}` in the body must be declared in the header and binds from the runtime args in every branch). Multiple rows become `((pred) or (pred))` — the outer parens keep the group a single boolean unit next to `AND`. Walkthrough: [examples — Optional groups](examples.md#optional-groups--usergroups).
+**Optional groups:** declare `blob` and `optional_groups_or({{$args.pairs}}, …)` with bare body placeholders as keys in each row object (`{{id}}`; a `{{$args.x}}` in the body must be declared in the header and binds from the runtime args in every branch). Multiple rows become `((pred) or (pred))` — the outer parens keep the group a single boolean unit next to `AND`. Use `optional_groups_and(...)` instead when every row must match; it is the same keyword with an `AND` row joiner. Walkthrough: [examples — Optional groups](examples.md#optional-groups--usergroups).
 
 ```bash
 yaal explain user/groups --arg 'pairs=[{"id":1}]'
 yaal query user/groups --arg 'pairs=[{"id":1},{"id":2}]'
 ```
 
-Reference: [descriptors — optional filters](descriptors.md#optional-filters) · [optional groups](descriptors.md#optional-groups-optional_groups).
+Reference: [descriptors — optional filters](descriptors.md#optional-filters) · [optional groups](descriptors.md#optional-groups-optional_groups_or-optional_groups_and).
 
 ---
 

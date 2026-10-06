@@ -496,7 +496,7 @@ public static class SqlParser
             if (!decl.Type.Equals("blob", StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException(
-                    "optional_groups(...) source {{" + tok.GroupSource + "}} must be declared blob in " +
+                    "optional_groups_*(...) source {{" + tok.GroupSource + "}} must be declared blob in " +
                     method + ".sql");
             }
             foreach (var field in tok.GroupFields ?? Enumerable.Empty<string>())
@@ -505,7 +505,7 @@ public static class SqlParser
                 if (astParameters.ContainsKey(field))
                 {
                     throw new InvalidOperationException(
-                        "optional_groups(...) field {{" + field + "}} must not be declared in the " +
+                        "optional_groups_*(...) field {{" + field + "}} must not be declared in the " +
                         method + ".sql parameter header");
                 }
             }

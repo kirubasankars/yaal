@@ -18,14 +18,35 @@ public static class GroupDesugar
         return i;
     }
 
+    private static readonly Dictionary<string, string> GroupJoinByKeyword =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["optional_groups_or"] = "or",
+            ["optional_groups_and"] = "and",
+        };
+
+    /// <summary>Row join for an optional_groups_* keyword token, or null when not one.</summary>
+    public static string? GroupJoinForToken(SqlToken token)
+    {
+        if (token.Type != "word")
+            return null;
+        if (token.Value.Equals("optional_groups", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "optional_groups(...) was renamed: use optional_groups_or(...) to keep the " +
+                "OR join, or optional_groups_and(...) to AND the rows");
+        }
+        return GroupJoinByKeyword.GetValueOrDefault(token.Value);
+    }
+
     private static void EnsureNoNestedGroups(List<SqlToken> body)
     {
         for (var i = 0; i < body.Count; i++)
         {
-            if (body[i].Type == "word" &&
-                body[i].Value.Equals("optional_groups", StringComparison.OrdinalIgnoreCase))
+            if (GroupJoinForToken(body[i]) != null)
             {
-                throw new InvalidOperationException("nested optional_groups(...) is not supported");
+                throw new InvalidOperationException(
+                    "nested optional_groups_or(...)/optional_groups_and(...) is not supported");
             }
         }
     }
@@ -43,14 +64,14 @@ public static class GroupDesugar
         if (fullName.Equals(groupSource, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException(
-                "optional_groups(...) blob {{" + fullName + "}} must not be used in its body");
+                "optional_groups_*(...) blob {{" + fullName + "}} must not be used in its body");
         }
         if (!fullName.StartsWith(ArgsPrefix, StringComparison.Ordinal))
             return fullName;
         if (headerDecls.TryGetValue(fullName, out var decl) && ParamTypeUtil.IsArrayType(decl.Type))
         {
             throw new InvalidOperationException(
-                "optional_groups(...) body cannot use array parameter {{" + fullName +
+                "optional_groups_*(...) body cannot use array parameter {{" + fullName +
                 "}}; put the list in each blob row instead");
         }
         return null;
@@ -100,7 +121,7 @@ public static class GroupDesugar
             if (condition != null && !condition.StartsWith(ArgsPrefix, StringComparison.Ordinal))
             {
                 throw new InvalidOperationException(
-                    "optional_when(...) inside optional_groups(...) must use a " +
+                    "optional_when(...) inside optional_groups_*(...) must use a " +
                     "{{$args.param}} condition; blob row fields are always required");
             }
             if (t.NullableParameters is not { Count: > 0 } nullableParams)
@@ -120,7 +141,7 @@ public static class GroupDesugar
                     continue;
                 }
                 throw new InvalidOperationException(
-                    "optional(...) inside optional_groups(...) must use at least one " +
+                    "optional(...) inside optional_groups_*(...) must use at least one " +
                     "{{$args.param}}; blob row fields are always required");
             }
             t.NullableParameters = kept;
@@ -143,9 +164,9 @@ public static class GroupDesugar
         while (i < n)
         {
             var tok = tokens[i];
-            if (tok.Type == "word" &&
-                tok.Value.Equals("optional_groups", StringComparison.OrdinalIgnoreCase))
+            if (GroupJoinForToken(tok) is { } join)
             {
+                var keyword = tok.Value.ToLowerInvariant();
                 var j = SkipWs(tokens, i + 1);
                 if (j < n && tokens[j].Type == "brace" && tokens[j].Value == "(")
                 {
@@ -160,19 +181,19 @@ public static class GroupDesugar
                         k += 1;
                     }
                     if (k >= n)
-                        throw new InvalidOperationException("unclosed optional_groups(...)");
+                        throw new InvalidOperationException("unclosed " + keyword + "(...)");
 
                     var inner = tokens.GetRange(j + 1, k - (j + 1));
                     var p = SkipWs(inner, 0);
                     if (p >= inner.Count || inner[p].Type != "parameter")
                         throw new InvalidOperationException(
-                            "optional_groups(...) requires {{blob}} as the first argument");
+                            keyword + "(...) requires {{blob}} as the first argument");
 
                     var sourceName = OptionalDesugar.ParameterNameFromToken(inner[p]);
                     p = SkipWs(inner, p + 1);
                     if (p >= inner.Count || inner[p].Type != "word" || inner[p].Value != ",")
                         throw new InvalidOperationException(
-                            "optional_groups(...) requires a comma after the blob parameter");
+                            keyword + "(...) requires a comma after the blob parameter");
 
                     var bodyStart = SkipWs(inner, p + 1);
                     var bodyRaw = inner.GetRange(bodyStart, inner.Count - bodyStart);
@@ -184,10 +205,11 @@ public static class GroupDesugar
                     body = MarkGroupFields(body, fieldOrder, headerDecls, sourceName);
                     if (fieldOrder.Count == 0)
                         throw new InvalidOperationException(
-                            "optional_groups(...) requires at least one {{field}} in its body");
+                            keyword + "(...) requires at least one {{field}} in its body");
 
                     openTok.GroupSource = sourceName;
                     openTok.GroupFields = fieldOrder;
+                    openTok.GroupJoin = join;
                     result.Add(openTok);
                     result.AddRange(body);
                     result.Add(tokens[k]);

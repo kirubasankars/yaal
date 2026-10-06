@@ -30,7 +30,7 @@ public static class OptionalDesugar
     }
 
     /// <summary>
-    /// Names that gate an optional(...). A nested optional_groups(...) contributes nothing:
+    /// Names that gate an optional(...). A nested optional_groups_*(...) contributes nothing:
     /// its blob source elides the group on its own, and its body placeholders come from
     /// each blob row. Also reports whether a nested group was seen.
     /// </summary>
@@ -52,7 +52,7 @@ public static class OptionalDesugar
         while (i < n)
         {
             var t = body[i];
-            if (t.Type == "word" && t.Value.Equals("optional_groups", StringComparison.OrdinalIgnoreCase))
+            if (GroupDesugar.GroupJoinForToken(t) != null)
             {
                 sawGroups = true;
                 var j = SkipWs(body, i + 1);

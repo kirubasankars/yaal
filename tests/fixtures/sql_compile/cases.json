@@ -520,7 +520,7 @@
   },
   {
     "name": "optional_groups_two_scalar_rows",
-    "sql": "--(pairs blob)--\nselect * from t where optional_groups({{pairs}}, col2 = {{cv}} and col1 = {{cv1}})\n",
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups_or({{pairs}}, col2 = {{cv}} and col1 = {{cv1}})\n",
     "nulls": [],
     "group_counts": {
       "pairs": 2
@@ -550,7 +550,7 @@
   },
   {
     "name": "optional_groups_one_row_no_or",
-    "sql": "--(pairs blob)--\nselect * from t where optional_groups({{pairs}}, col1 = {{cv1}})\n",
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups_or({{pairs}}, col1 = {{cv1}})\n",
     "nulls": [],
     "group_counts": {
       "pairs": 1
@@ -569,7 +569,7 @@
   },
   {
     "name": "optional_groups_elide_null",
-    "sql": "--(pairs blob)--\nselect * from t where optional_groups({{pairs}}, col1 = {{cv1}})\n",
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups_or({{pairs}}, col1 = {{cv1}})\n",
     "nulls": [
       "pairs"
     ],
@@ -578,7 +578,7 @@
   },
   {
     "name": "optional_groups_mixed_in_per_row",
-    "sql": "--(pairs blob)--\nselect * from t where optional_groups({{pairs}}, col2 in ({{cv}}) and col1 = {{cv1}})\n",
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups_or({{pairs}}, col2 in ({{cv}}) and col1 = {{cv1}})\n",
     "nulls": [],
     "group_counts": {
       "pairs": 2
@@ -606,8 +606,8 @@
     ]
   },
   {
-    "name": "optional_groups_and_two_blobs",
-    "sql": "--(pairs blob, pairs1 blob)--\nselect * from t where optional_groups({{pairs}}, id = {{id}}) and optional_groups({{pairs1}}, id = {{id}})\n",
+    "name": "two_optional_groups_or_sibling_and",
+    "sql": "--(pairs blob, pairs1 blob)--\nselect * from t where optional_groups_or({{pairs}}, id = {{id}}) and optional_groups_or({{pairs1}}, id = {{id}})\n",
     "nulls": [],
     "group_counts": {
       "pairs": 2,
@@ -637,7 +637,7 @@
   },
   {
     "name": "optional_groups_multi_row_with_optional_scalar",
-    "sql": "--(pairs blob, flag integer)--\nselect * from t where optional_groups({{pairs}}, col1 = {{cv1}}) and optional(col2 = {{flag}})\n",
+    "sql": "--(pairs blob, flag integer)--\nselect * from t where optional_groups_or({{pairs}}, col1 = {{cv1}}) and optional(col2 = {{flag}})\n",
     "nulls": [],
     "group_counts": {
       "pairs": 2
@@ -661,7 +661,7 @@
   },
   {
     "name": "optional_groups_body_row_template",
-    "sql": "--($args.pairs blob)--\nselect * from t where optional_groups({{$args.pairs}}, col2 in ({{cv}}) and col1 = {{cv1}})\n",
+    "sql": "--($args.pairs blob)--\nselect * from t where optional_groups_or({{$args.pairs}}, col2 in ({{cv}}) and col1 = {{cv1}})\n",
     "nulls": [],
     "group_counts": {
       "$args.pairs": 2
@@ -690,7 +690,7 @@
   },
   {
     "name": "optional_groups_body_header_param_per_branch",
-    "sql": "--($args.pairs blob, $args.flag integer)--\nselect * from t where optional_groups({{$args.pairs}}, col1 = {{cv1}} and col2 = {{$args.flag}})\n",
+    "sql": "--($args.pairs blob, $args.flag integer)--\nselect * from t where optional_groups_or({{$args.pairs}}, col1 = {{cv1}} and col2 = {{$args.flag}})\n",
     "nulls": [],
     "group_counts": {
       "$args.pairs": 2
@@ -715,17 +715,17 @@
   },
   {
     "name": "optional_groups_body_blob_source_errors",
-    "sql": "--($args.pairs blob)--\nselect * from t where optional_groups({{$args.pairs}}, col1 = {{$args.pairs}})\n",
+    "sql": "--($args.pairs blob)--\nselect * from t where optional_groups_or({{$args.pairs}}, col1 = {{$args.pairs}})\n",
     "expect_error_contains": "must not be used in its body"
   },
   {
     "name": "optional_groups_body_array_header_param_errors",
-    "sql": "--($args.pairs blob, $args.ids integer[])--\nselect * from t where optional_groups({{$args.pairs}}, col1 in ({{$args.ids}}))\n",
+    "sql": "--($args.pairs blob, $args.ids integer[])--\nselect * from t where optional_groups_or({{$args.pairs}}, col1 in ({{$args.ids}}))\n",
     "expect_error_contains": "cannot use array parameter"
   },
   {
     "name": "optional_groups_body_bare_field_beside_args_header",
-    "sql": "--($args.pairs blob, $args.cv1 integer)--\nselect * from t where optional_groups({{$args.pairs}}, col1 = {{cv1}})\n",
+    "sql": "--($args.pairs blob, $args.cv1 integer)--\nselect * from t where optional_groups_or({{$args.pairs}}, col1 = {{cv1}})\n",
     "nulls": [],
     "group_counts": {
       "$args.pairs": 2
@@ -748,17 +748,17 @@
   },
   {
     "name": "optional_groups_body_undeclared_args_field_errors",
-    "sql": "--($args.pairs blob)--\nselect * from t where optional_groups({{$args.pairs}}, col1 = {{cv1}} and col2 = {{$args.cv2}})\n",
+    "sql": "--($args.pairs blob)--\nselect * from t where optional_groups_or({{$args.pairs}}, col1 = {{cv1}} and col2 = {{$args.cv2}})\n",
     "expect_error_contains": "type missing"
   },
   {
     "name": "optional_groups_body_only_args_fields_errors",
-    "sql": "--($args.pairs blob)--\nselect * from t where optional_groups({{$args.pairs}}, col1 = {{$args.cv1}})\n",
+    "sql": "--($args.pairs blob)--\nselect * from t where optional_groups_or({{$args.pairs}}, col1 = {{$args.cv1}})\n",
     "expect_error_contains": "at least one"
   },
   {
     "name": "optional_groups_empty_in_errors",
-    "sql": "--(pairs blob)--\nselect * from t where optional_groups({{pairs}}, col2 in ({{cv}}))\n",
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups_or({{pairs}}, col2 in ({{cv}}))\n",
     "nulls": [],
     "group_counts": {
       "pairs": 1
@@ -774,7 +774,7 @@
   },
   {
     "name": "optional_groups_missing_lengths_errors",
-    "sql": "--(pairs blob)--\nselect * from t where optional_groups({{pairs}}, col1 = {{cv1}})\n",
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups_or({{pairs}}, col1 = {{cv1}})\n",
     "nulls": [],
     "group_counts": {
       "pairs": 1
@@ -783,22 +783,22 @@
   },
   {
     "name": "optional_groups_no_body_field_errors",
-    "sql": "--(pairs blob)--\nselect * from t where optional_groups({{pairs}}, col1 = 1)\n",
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups_or({{pairs}}, col1 = 1)\n",
     "expect_error_contains": "at least one"
   },
   {
     "name": "optional_groups_source_not_blob_errors",
-    "sql": "--(pairs integer)--\nselect * from t where optional_groups({{pairs}}, col1 = {{cv1}})\n",
+    "sql": "--(pairs integer)--\nselect * from t where optional_groups_or({{pairs}}, col1 = {{cv1}})\n",
     "expect_error_contains": "must be declared blob"
   },
   {
     "name": "optional_groups_field_in_header_errors",
-    "sql": "--(pairs blob, cv1 integer)--\nselect * from t where optional_groups({{pairs}}, col1 = {{cv1}})\n",
+    "sql": "--(pairs blob, cv1 integer)--\nselect * from t where optional_groups_or({{pairs}}, col1 = {{cv1}})\n",
     "expect_error_contains": "must not be declared"
   },
   {
     "name": "optional_with_groups_multi_row",
-    "sql": "--($args.pairs blob, $args.x integer)--\nselect * from t where z = 1 and optional(a = {{$args.x}} and optional_groups({{$args.pairs}}, id = {{id}}))\n",
+    "sql": "--($args.pairs blob, $args.x integer)--\nselect * from t where z = 1 and optional(a = {{$args.x}} and optional_groups_or({{$args.pairs}}, id = {{id}}))\n",
     "nulls": [],
     "group_counts": {
       "$args.pairs": 2
@@ -822,7 +822,7 @@
   },
   {
     "name": "optional_with_groups_single_row",
-    "sql": "--($args.pairs blob, $args.x integer)--\nselect * from t where z = 1 and optional(a = {{$args.x}} and optional_groups({{$args.pairs}}, id = {{id}}))\n",
+    "sql": "--($args.pairs blob, $args.x integer)--\nselect * from t where z = 1 and optional(a = {{$args.x}} and optional_groups_or({{$args.pairs}}, id = {{id}}))\n",
     "nulls": [],
     "group_counts": {
       "$args.pairs": 1
@@ -842,7 +842,7 @@
   },
   {
     "name": "optional_with_groups_group_leading",
-    "sql": "--($args.pairs blob, $args.x integer)--\nselect * from t where optional(optional_groups({{$args.pairs}}, id = {{id}}) and a = {{$args.x}})\n",
+    "sql": "--($args.pairs blob, $args.x integer)--\nselect * from t where optional(optional_groups_or({{$args.pairs}}, id = {{id}}) and a = {{$args.x}})\n",
     "nulls": [],
     "group_counts": {
       "$args.pairs": 2
@@ -866,7 +866,7 @@
   },
   {
     "name": "optional_with_groups_all_absent_elides",
-    "sql": "--($args.pairs blob, $args.x integer)--\nselect * from t where z = 1 and optional(a = {{$args.x}} and optional_groups({{$args.pairs}}, id = {{id}}))\n",
+    "sql": "--($args.pairs blob, $args.x integer)--\nselect * from t where z = 1 and optional(a = {{$args.x}} and optional_groups_or({{$args.pairs}}, id = {{id}}))\n",
     "nulls": [
       "$args.pairs",
       "$args.x"
@@ -876,7 +876,7 @@
   },
   {
     "name": "optional_with_groups_id_only_keeps_scalar",
-    "sql": "--($args.pairs blob, $args.x integer)--\nselect * from t where z = 1 and optional(a = {{$args.x}} and optional_groups({{$args.pairs}}, id = {{id}}))\n",
+    "sql": "--($args.pairs blob, $args.x integer)--\nselect * from t where z = 1 and optional(a = {{$args.x}} and optional_groups_or({{$args.pairs}}, id = {{id}}))\n",
     "nulls": [
       "$args.pairs"
     ],
@@ -887,7 +887,7 @@
   },
   {
     "name": "optional_wrapping_groups_only",
-    "sql": "--($args.pairs blob)--\nselect * from t where optional(optional_groups({{$args.pairs}}, id = {{id}}))\n",
+    "sql": "--($args.pairs blob)--\nselect * from t where optional(optional_groups_or({{$args.pairs}}, id = {{id}}))\n",
     "nulls": [],
     "group_counts": {
       "$args.pairs": 2
@@ -910,7 +910,7 @@
   },
   {
     "name": "optional_wrapping_groups_only_elided",
-    "sql": "--($args.pairs blob)--\nselect * from t where optional(optional_groups({{$args.pairs}}, id = {{id}}))\n",
+    "sql": "--($args.pairs blob)--\nselect * from t where optional(optional_groups_or({{$args.pairs}}, id = {{id}}))\n",
     "nulls": [
       "$args.pairs"
     ],
@@ -919,7 +919,7 @@
   },
   {
     "name": "optional_wrapping_groups_only_elided_beside_predicate",
-    "sql": "--($args.pairs blob)--\nselect * from t where z = 1 and optional(optional_groups({{$args.pairs}}, id = {{id}}))\n",
+    "sql": "--($args.pairs blob)--\nselect * from t where z = 1 and optional(optional_groups_or({{$args.pairs}}, id = {{id}}))\n",
     "nulls": [
       "$args.pairs"
     ],
@@ -928,7 +928,7 @@
   },
   {
     "name": "optional_inside_groups_body_args_header",
-    "sql": "--($args.pairs blob, $args.flag integer)--\nselect * from t where optional_groups({{$args.pairs}}, col1 = {{cv1}} and optional(col2 = {{$args.flag}}))\n",
+    "sql": "--($args.pairs blob, $args.flag integer)--\nselect * from t where optional_groups_or({{$args.pairs}}, col1 = {{cv1}} and optional(col2 = {{$args.flag}}))\n",
     "nulls": [],
     "group_counts": {
       "$args.pairs": 2
@@ -953,7 +953,7 @@
   },
   {
     "name": "optional_inside_groups_body_args_header_omitted",
-    "sql": "--($args.pairs blob, $args.flag integer)--\nselect * from t where optional_groups({{$args.pairs}}, col1 = {{cv1}} and optional(col2 = {{$args.flag}}))\n",
+    "sql": "--($args.pairs blob, $args.flag integer)--\nselect * from t where optional_groups_or({{$args.pairs}}, col1 = {{cv1}} and optional(col2 = {{$args.flag}}))\n",
     "nulls": [
       "$args.flag"
     ],
@@ -978,7 +978,7 @@
   },
   {
     "name": "optional_inside_groups_body_row_field_only_errors",
-    "sql": "--(pairs blob)--\nselect * from t where optional_groups({{pairs}}, optional(col1 = {{cv1}}))\n",
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups_or({{pairs}}, optional(col1 = {{cv1}}))\n",
     "expect_error_contains": "inside optional_groups"
   },
   {
@@ -1076,7 +1076,7 @@
   },
   {
     "name": "optional_when_wrapping_groups_only_keeps",
-    "sql": "--($args.apply bool, $args.pairs blob)--\nselect * from t where z = 1 and optional_when({{$args.apply}}, optional_groups({{$args.pairs}}, id = {{id}}))\n",
+    "sql": "--($args.apply bool, $args.pairs blob)--\nselect * from t where z = 1 and optional_when({{$args.apply}}, optional_groups_or({{$args.pairs}}, id = {{id}}))\n",
     "nulls": [],
     "group_counts": {
       "$args.pairs": 2
@@ -1099,7 +1099,7 @@
   },
   {
     "name": "optional_when_wrapping_groups_only_cond_absent_elides",
-    "sql": "--($args.apply bool, $args.pairs blob)--\nselect * from t where z = 1 and optional_when({{$args.apply}}, optional_groups({{$args.pairs}}, id = {{id}}))\n",
+    "sql": "--($args.apply bool, $args.pairs blob)--\nselect * from t where z = 1 and optional_when({{$args.apply}}, optional_groups_or({{$args.pairs}}, id = {{id}}))\n",
     "nulls": [
       "$args.apply"
     ],
@@ -1121,7 +1121,7 @@
   },
   {
     "name": "optional_when_inside_groups_body_row_fields_only",
-    "sql": "--($args.pairs blob, $args.flag bool)--\nselect * from t where optional_groups({{$args.pairs}}, c1 = {{cv}} and optional_when({{$args.flag}}, c2 = {{cv2}}))\n",
+    "sql": "--($args.pairs blob, $args.flag bool)--\nselect * from t where optional_groups_or({{$args.pairs}}, c1 = {{cv}} and optional_when({{$args.flag}}, c2 = {{cv2}}))\n",
     "nulls": [],
     "group_counts": {
       "$args.pairs": 2
@@ -1148,7 +1148,7 @@
   },
   {
     "name": "optional_when_inside_groups_body_cond_absent_elides_per_branch",
-    "sql": "--($args.pairs blob, $args.flag bool)--\nselect * from t where optional_groups({{$args.pairs}}, c1 = {{cv}} and optional_when({{$args.flag}}, c2 = {{cv2}}))\n",
+    "sql": "--($args.pairs blob, $args.flag bool)--\nselect * from t where optional_groups_or({{$args.pairs}}, c1 = {{cv}} and optional_when({{$args.flag}}, c2 = {{cv2}}))\n",
     "nulls": [
       "$args.flag"
     ],
@@ -1175,7 +1175,7 @@
   },
   {
     "name": "optional_when_inside_groups_bare_condition_errors",
-    "sql": "--($args.pairs blob, flag bool)--\nselect * from t where optional_groups({{$args.pairs}}, c1 = {{cv}} and optional_when({{flag}}, c2 = {{cv2}}))\n",
+    "sql": "--($args.pairs blob, flag bool)--\nselect * from t where optional_groups_or({{$args.pairs}}, c1 = {{cv}} and optional_when({{flag}}, c2 = {{cv2}}))\n",
     "expect_error_contains": "must use a {{$args.param}} condition"
   },
   {
@@ -1202,5 +1202,144 @@
     "name": "optional_when_nested_errors",
     "sql": "--($args.a bool, $args.b bool, $args.x integer)--\nselect * from t where optional_when({{$args.a}}, optional_when({{$args.b}}, c = {{$args.x}}))\n",
     "expect_error_contains": "nested optional_when(...) is not supported"
+  },
+  {
+    "name": "optional_groups_and_two_rows",
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups_and({{pairs}}, id = {{id}})\n",
+    "nulls": [],
+    "group_counts": {
+      "pairs": 2
+    },
+    "group_field_lengths": {
+      "pairs": [
+        {
+          "id": 1
+        },
+        {
+          "id": 1
+        }
+      ]
+    },
+    "expect_sql": "select * from t where ((id = ?) and (id = ?))",
+    "expect_param_names": [
+      "id",
+      "id"
+    ]
+  },
+  {
+    "name": "optional_groups_and_single_row",
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups_and({{pairs}}, id = {{id}})\n",
+    "nulls": [],
+    "group_counts": {
+      "pairs": 1
+    },
+    "group_field_lengths": {
+      "pairs": [
+        {
+          "id": 1
+        }
+      ]
+    },
+    "expect_sql": "select * from t where (id = ?)",
+    "expect_param_names": [
+      "id"
+    ]
+  },
+  {
+    "name": "optional_groups_and_elided_blob",
+    "sql": "--(pairs blob)--\nselect * from t where z = 1 and optional_groups_and({{pairs}}, id = {{id}})\n",
+    "nulls": [
+      "pairs"
+    ],
+    "expect_sql": "select * from t where z = 1",
+    "expect_param_names": []
+  },
+  {
+    "name": "optional_groups_and_multi_field_rows",
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups_and({{pairs}}, col2 in ({{cv}}) and col1 = {{cv1}})\n",
+    "nulls": [],
+    "group_counts": {
+      "pairs": 2
+    },
+    "group_field_lengths": {
+      "pairs": [
+        {
+          "cv": 3,
+          "cv1": 1
+        },
+        {
+          "cv": 1,
+          "cv1": 1
+        }
+      ]
+    },
+    "expect_sql": "select * from t where ((col2 in (?, ?, ?) and col1 = ?) and (col2 in (?) and col1 = ?))",
+    "expect_param_names": [
+      "cv",
+      "cv",
+      "cv",
+      "cv1",
+      "cv",
+      "cv1"
+    ]
+  },
+  {
+    "name": "optional_groups_and_beside_or_group",
+    "sql": "--(pairs blob, pairs1 blob)--\nselect * from t where optional_groups_and({{pairs}}, id = {{id}}) or optional_groups_or({{pairs1}}, id = {{id}})\n",
+    "nulls": [],
+    "group_counts": {
+      "pairs": 2,
+      "pairs1": 2
+    },
+    "group_field_lengths": {
+      "pairs": [
+        {
+          "id": 1
+        },
+        {
+          "id": 1
+        }
+      ],
+      "pairs1": [
+        {
+          "id": 1
+        },
+        {
+          "id": 1
+        }
+      ]
+    },
+    "expect_sql": "select * from t where ((id = ?) and (id = ?)) or ((id = ?) or (id = ?))",
+    "expect_param_names": [
+      "id",
+      "id",
+      "id",
+      "id"
+    ]
+  },
+  {
+    "name": "optional_groups_and_nested_errors",
+    "sql": "--(pairs blob, pairs1 blob)--\nselect * from t where optional_groups_and({{pairs}}, optional_groups_and({{pairs1}}, id = {{id}}))\n",
+    "expect_error_contains": "nested optional_groups_or(...)/optional_groups_and(...) is not supported"
+  },
+  {
+    "name": "optional_groups_mixed_nested_errors",
+    "sql": "--(pairs blob, pairs1 blob)--\nselect * from t where optional_groups_or({{pairs}}, optional_groups_and({{pairs1}}, id = {{id}}))\n",
+    "expect_error_contains": "nested optional_groups_or(...)/optional_groups_and(...) is not supported"
+  },
+  {
+    "name": "optional_groups_and_blob_in_own_body_errors",
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups_and({{pairs}}, id = {{pairs}})\n",
+    "expect_error_contains": "must not be used in its body"
+  },
+  {
+    "name": "optional_groups_legacy_spelling_errors",
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups({{pairs}}, id = {{id}})\n",
+    "expect_error_contains": "optional_groups(...) was renamed"
+  },
+  {
+    "name": "optional_groups_legacy_spelling_inside_optional_errors",
+    "sql": "--($args.pairs blob, $args.x integer)--\nselect * from t where optional(a = {{$args.x}} and optional_groups({{$args.pairs}}, id = {{id}}))\n",
+    "expect_error_contains": "optional_groups(...) was renamed"
   }
 ]

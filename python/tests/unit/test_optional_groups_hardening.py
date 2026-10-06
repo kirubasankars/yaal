@@ -29,16 +29,16 @@ SCHEMA = ROOT / "docker" / "sqlite" / "schema.sql"
 
 GROUPS_SQL = (
     "--(pairs blob)--\n"
-    "select * from t where optional_groups({{pairs}}, id = {{id}})\n"
+    "select * from t where optional_groups_or({{pairs}}, id = {{id}})\n"
 )
 GROUPS_IN_SQL = (
     "--(pairs blob)--\n"
-    "select * from t where optional_groups({{pairs}}, id in ({{ids}}))\n"
+    "select * from t where optional_groups_or({{pairs}}, id in ({{ids}}))\n"
 )
 TWO_GROUPS_AND_SQL = (
     "--(pairs blob, pairs1 blob)--\n"
-    "select * from t where optional_groups({{pairs}}, id = {{id}})"
-    " and optional_groups({{pairs1}}, id = {{id}})\n"
+    "select * from t where optional_groups_or({{pairs}}, id = {{id}})"
+    " and optional_groups_or({{pairs1}}, id = {{id}})\n"
 )
 
 
@@ -107,7 +107,7 @@ class TestGroupPrecedence(unittest.TestCase):
 
 ARGS_TEMPLATE_SQL = (
     "--($args.pairs blob, $args.flag integer)--\n"
-    "select * from t where optional_groups({{$args.pairs}},"
+    "select * from t where optional_groups_or({{$args.pairs}},"
     " id = {{id}} and flag = {{$args.flag}})\n"
 )
 
@@ -128,7 +128,7 @@ class TestGroupBodyBinding(unittest.TestCase):
             parser(
                 lexer(
                     "--($args.pairs blob)--\n"
-                    "select * from t where optional_groups({{$args.pairs}},"
+                    "select * from t where optional_groups_or({{$args.pairs}},"
                     " id = {{id}} and other = {{$args.nope}})\n"
                 ),
                 "$",
@@ -140,7 +140,7 @@ class TestGroupBodyBinding(unittest.TestCase):
             parser(
                 lexer(
                     "--($args.pairs blob)--\n"
-                    "select * from t where optional_groups({{$args.pairs}},"
+                    "select * from t where optional_groups_or({{$args.pairs}},"
                     " id = {{$args.id}})\n"
                 ),
                 "$",
@@ -151,7 +151,7 @@ class TestGroupBodyBinding(unittest.TestCase):
         twig = parser(
             lexer(
                 "--($args.pairs blob, $args.id integer)--\n"
-                "select * from t where optional_groups({{$args.pairs}}, a = {{id}})\n"
+                "select * from t where optional_groups_or({{$args.pairs}}, a = {{id}})\n"
             ),
             "$",
         )["sql_stmts"][0]
@@ -183,7 +183,7 @@ class TestGroupBodyBinding(unittest.TestCase):
     def test_row_key_with_per_row_in_list(self):
         sql, values = self._compile(
             "--($args.pairs blob)--\n"
-            "select * from t where optional_groups({{$args.pairs}}, id in ({{ids}}))\n",
+            "select * from t where optional_groups_or({{$args.pairs}}, id in ({{ids}}))\n",
             {"$args.pairs": [{"ids": [1, 2]}, {"ids": [3]}]},
         )
         self.assertEqual(
@@ -196,7 +196,7 @@ class TestGroupBodyBinding(unittest.TestCase):
             parser(
                 lexer(
                     "--($args.pairs blob)--\n"
-                    "select * from t where optional_groups({{$args.pairs}},"
+                    "select * from t where optional_groups_or({{$args.pairs}},"
                     " id = {{$args.pairs}})\n"
                 ),
                 "$",
@@ -208,7 +208,7 @@ class TestGroupBodyBinding(unittest.TestCase):
             parser(
                 lexer(
                     "--($args.pairs blob, $args.ids integer[])--\n"
-                    "select * from t where optional_groups({{$args.pairs}},"
+                    "select * from t where optional_groups_or({{$args.pairs}},"
                     " id in ({{$args.ids}}))\n"
                 ),
                 "$",
@@ -220,7 +220,7 @@ class TestGroupBodyBinding(unittest.TestCase):
             parser(
                 lexer(
                     "--(pairs blob, id integer)--\n"
-                    "select * from t where optional_groups({{pairs}}, col1 = {{id}})\n"
+                    "select * from t where optional_groups_or({{pairs}}, col1 = {{id}})\n"
                 ),
                 "$",
             )
@@ -230,7 +230,7 @@ class TestGroupBodyBinding(unittest.TestCase):
 NESTED_GROUPS_SQL = (
     "--($args.pairs blob, $args.x integer)--\n"
     "select * from t where z = 1 and optional(a = {{$args.x}}"
-    " and optional_groups({{$args.pairs}}, id = {{id}}))\n"
+    " and optional_groups_or({{$args.pairs}}, id = {{id}}))\n"
 )
 
 
@@ -276,7 +276,7 @@ class TestGroupsInsideOptional(unittest.TestCase):
     def test_group_leading_inside_the_optional(self):
         sql, values = self._compile(
             "--($args.pairs blob, $args.x integer)--\n"
-            "select * from t where optional(optional_groups({{$args.pairs}}, id = {{id}})"
+            "select * from t where optional(optional_groups_or({{$args.pairs}}, id = {{id}})"
             " and a = {{$args.x}})\n",
             {"$args.pairs": [{"id": 1}, {"id": 7}], "$args.x": 5},
         )
@@ -299,7 +299,7 @@ class TestGroupsInsideOptional(unittest.TestCase):
         sql = (
             "--($args.pairs blob)--\n"
             "select * from t where z = 1"
-            " and optional(optional_groups({{$args.pairs}}, id = {{id}}))\n"
+            " and optional(optional_groups_or({{$args.pairs}}, id = {{id}}))\n"
         )
         content, values = self._compile(sql, {"$args.pairs": [{"id": 1}, {"id": 2}]})
         self.assertEqual(
@@ -311,7 +311,7 @@ class TestGroupsInsideOptional(unittest.TestCase):
         sql = (
             "--($args.pairs blob)--\n"
             "select * from t where z = 1"
-            " and optional(optional_groups({{$args.pairs}}, id = {{id}}))\n"
+            " and optional(optional_groups_or({{$args.pairs}}, id = {{id}}))\n"
         )
         for absent in ({}, {"$args.pairs": []}):
             with self.subTest(absent=absent):
@@ -322,7 +322,7 @@ class TestGroupsInsideOptional(unittest.TestCase):
     def test_optional_wrapping_only_a_group_drops_sole_where(self):
         content, values = self._compile(
             "--($args.pairs blob)--\n"
-            "select * from t where optional(optional_groups({{$args.pairs}}, id = {{id}}))\n",
+            "select * from t where optional(optional_groups_or({{$args.pairs}}, id = {{id}}))\n",
             {},
         )
         self.assertEqual(content, "select * from t")
@@ -331,7 +331,7 @@ class TestGroupsInsideOptional(unittest.TestCase):
     def test_optional_inside_a_group_body_keys_off_header_param(self):
         sql = (
             "--($args.pairs blob, $args.flag integer)--\n"
-            "select * from t where optional_groups({{$args.pairs}},"
+            "select * from t where optional_groups_or({{$args.pairs}},"
             " col1 = {{cv1}} and optional(col2 = {{$args.flag}}))\n"
         )
         self.assertEqual(self._optional_params(sql), ["$args.flag"])
@@ -348,7 +348,7 @@ class TestGroupsInsideOptional(unittest.TestCase):
     def test_optional_inside_a_group_body_elides_in_every_branch(self):
         content, values = self._compile(
             "--($args.pairs blob, $args.flag integer)--\n"
-            "select * from t where optional_groups({{$args.pairs}},"
+            "select * from t where optional_groups_or({{$args.pairs}},"
             " col1 = {{cv1}} and optional(col2 = {{$args.flag}}))\n",
             {"$args.pairs": [{"cv1": 7}, {"cv1": 8}]},
         )
@@ -360,7 +360,7 @@ class TestGroupsInsideOptional(unittest.TestCase):
             parser(
                 lexer(
                     "--(pairs blob)--\n"
-                    "select * from t where optional_groups({{pairs}},"
+                    "select * from t where optional_groups_or({{pairs}},"
                     " optional(col1 = {{cv1}}))\n"
                 ),
                 "$",
@@ -428,7 +428,7 @@ class TestOptionalWhen(unittest.TestCase):
         sql = (
             "--($args.apply bool, $args.pairs blob)--\n"
             "select * from t where z = 1 and"
-            " optional_when({{$args.apply}}, optional_groups({{$args.pairs}}, id = {{id}}))\n"
+            " optional_when({{$args.apply}}, optional_groups_or({{$args.pairs}}, id = {{id}}))\n"
         )
         content, values = self._compile(
             sql, {"$args.apply": True, "$args.pairs": [{"id": 1}, {"id": 2}]}
@@ -447,7 +447,7 @@ class TestOptionalWhen(unittest.TestCase):
     def test_inside_a_group_body_may_key_off_row_fields_only(self):
         sql = (
             "--($args.pairs blob, $args.flag bool)--\n"
-            "select * from t where optional_groups({{$args.pairs}},"
+            "select * from t where optional_groups_or({{$args.pairs}},"
             " c1 = {{cv}} and optional_when({{$args.flag}}, c2 = {{cv2}}))\n"
         )
         rows = [{"cv": 1, "cv2": 10}, {"cv": 2, "cv2": 20}]
@@ -469,7 +469,7 @@ class TestOptionalWhen(unittest.TestCase):
             parser(
                 lexer(
                     "--($args.pairs blob, flag bool)--\n"
-                    "select * from t where optional_groups({{$args.pairs}},"
+                    "select * from t where optional_groups_or({{$args.pairs}},"
                     " c1 = {{cv}} and optional_when({{flag}}, c2 = {{cv2}}))\n"
                 ),
                 "$",
@@ -487,6 +487,85 @@ class TestOptionalWhen(unittest.TestCase):
                 "$",
             )
         self.assertIn("nested optional_when", str(ctx.exception))
+
+
+GROUPS_AND_SQL = (
+    "--(pairs blob)--\n"
+    "select * from t where optional_groups_and({{pairs}}, id = {{id}})\n"
+)
+
+
+class TestGroupJoinModes(unittest.TestCase):
+    """optional_groups_or joins rows with OR; optional_groups_and with AND."""
+
+    def test_or_and_and_differ_only_in_the_row_joiner(self):
+        rows = [{"id": 1}, {"id": 2}]
+        or_sql, or_values = _compile_and_bind(GROUPS_SQL, rows)
+        and_sql, and_values = _compile_and_bind(GROUPS_AND_SQL, rows)
+
+        self.assertEqual(or_sql, "select * from t where ((id = ?) or (id = ?))")
+        self.assertEqual(and_sql, "select * from t where ((id = ?) and (id = ?))")
+        self.assertEqual(or_values, and_values)
+
+    def test_and_single_row_is_not_double_wrapped(self):
+        sql, values = _compile_and_bind(GROUPS_AND_SQL, [{"id": 7}])
+        self.assertEqual(sql, "select * from t where (id = ?)")
+        self.assertEqual(values, [7])
+
+    def test_and_blob_absence_elides_like_or(self):
+        for pairs in ([], "", "[]"):
+            with self.subTest(pairs=pairs):
+                sql, values = _compile_and_bind(GROUPS_AND_SQL, pairs)
+                self.assertEqual(sql, "select * from t")
+                self.assertEqual(values, [])
+
+    def test_and_null_blob_elides_through_the_helper(self):
+        twig = parser(lexer(GROUPS_AND_SQL), "$")["sql_stmts"][0]
+        shape = _Shape({"pairs": None})
+        helper = DataProviderHelper()
+        compiled = helper.get_executable_content("?", twig, shape)
+        self.assertEqual(compiled["content"].strip(), "select * from t")
+        self.assertEqual(
+            helper.build_parameters(compiled, shape, lambda _t, v: v), []
+        )
+
+    def test_group_join_metadata_is_recorded(self):
+        for sql, expected in ((GROUPS_SQL, "or"), (GROUPS_AND_SQL, "and")):
+            with self.subTest(expected=expected):
+                twig = parser(lexer(sql), "$")["sql_stmts"][0]
+                open_tok = next(
+                    t for t in twig["content"] if t.get("group_source")
+                )
+                self.assertEqual(open_tok["group_join"], expected)
+
+    def test_legacy_optional_groups_spelling_is_rejected(self):
+        with self.assertRaises(TypeError) as ctx:
+            parser(
+                lexer(
+                    "--(pairs blob)--\n"
+                    "select * from t where optional_groups({{pairs}}, id = {{id}})\n"
+                ),
+                "$",
+            )
+        message = str(ctx.exception)
+        self.assertIn("optional_groups(...) was renamed", message)
+        self.assertIn("optional_groups_or(...)", message)
+        self.assertIn("optional_groups_and(...)", message)
+
+    def test_nested_groups_rejected_for_either_keyword(self):
+        for outer in ("optional_groups_or", "optional_groups_and"):
+            for inner in ("optional_groups_or", "optional_groups_and"):
+                with self.subTest(outer=outer, inner=inner):
+                    with self.assertRaises(TypeError) as ctx:
+                        parser(
+                            lexer(
+                                "--(pairs blob, pairs1 blob)--\n"
+                                "select * from t where " + outer + "({{pairs}}, "
+                                + inner + "({{pairs1}}, id = {{id}}))\n"
+                            ),
+                            "$",
+                        )
+                    self.assertIn("nested optional_groups", str(ctx.exception))
 
 
 class TestBlobSourceShapes(unittest.TestCase):

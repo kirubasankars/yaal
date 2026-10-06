@@ -154,25 +154,25 @@ The condition is removed from the emitted SQL and is never bound — it only dec
 
 Only **absence** disables the block, so a `bool` condition of `false` still keeps it — pass `null` (or omit the arg) to drop the filter. An absent condition is checked first, so it also suppresses the body's partial-parameter error.
 
-The condition must be declared in the parameter header like any other arg, and the body needs at least one `{{param}}` of its own (or an `optional_groups(...)`). Nesting one `optional_when(...)` directly inside another is rejected.
+The condition must be declared in the parameter header like any other arg, and the body needs at least one `{{param}}` of its own (or an `optional_groups_or(...)`). Nesting one `optional_when(...)` directly inside another is rejected.
 
-Inside an `optional_groups(...)` body the condition must be a header-declared `$args.*` name — a bare name there would be a blob row field, which is always present and could never gate the block. With a condition in place the body may use **only** row fields, since the condition does the gating:
+Inside an `optional_groups_or(...)` body the condition must be a header-declared `$args.*` name — a bare name there would be a blob row field, which is always present and could never gate the block. With a condition in place the body may use **only** row fields, since the condition does the gating:
 
 ```sql
 -- elides per branch when $args.flag is omitted; cv/cv2 come from each row
-optional_groups({{$args.pairs}}, c1 = {{cv}} and optional_when({{$args.flag}}, c2 = {{cv2}}))
+optional_groups_or({{$args.pairs}}, c1 = {{cv}} and optional_when({{$args.flag}}, c2 = {{cv2}}))
 ```
 
 Fixture: `user/when_optional` under `tests/fixtures/api/`.
 
-### Optional groups (`optional_groups`)
+### Optional groups (`optional_groups_or`, `optional_groups_and`)
 
-Repeat the same AND-shaped predicate for each row of a **blob** parameter (JSON array of objects). Copies are joined with **OR**; omit/null/`[]` on the blob removes the whole clause (like `optional`).
+Repeat the same predicate for each row of a **blob** parameter (JSON array of objects). `optional_groups_or(...)` joins the copies with **OR**, `optional_groups_and(...)` with **AND**; omit/null/`[]` on the blob removes the whole clause (like `optional`). The two keywords are otherwise identical — same body rules, same metadata, same elision — so everything below applies to both.
 
 ```sql
 --($args.pairs blob)--
 select * from t
-where optional_groups(
+where optional_groups_or(
   {{$args.pairs}},
   col2 in ({{cv}})
   and col1 = {{cv1}}
@@ -197,13 +197,31 @@ where ((col2 in (?, ?, ?) and col1 = ?) or (col2 in (?) and col1 = ?))
 Each row becomes its own parenthesized predicate, and when there are two or more rows the whole OR-join is wrapped once more. That outer pair is what keeps a neighbouring `AND` from binding tighter than the group, so two groups side by side compile as separate units:
 
 ```sql
-where optional_groups({{$args.pairs}}, id = {{id}})
-  and optional_groups({{$args.pairs1}}, id = {{id}})
+where optional_groups_or({{$args.pairs}}, id = {{id}})
+  and optional_groups_or({{$args.pairs1}}, id = {{id}})
 -- 2 rows in pairs, 1 row in pairs1:
 where ((id = ?) or (id = ?)) and (id = ?)
 ```
 
 A single-row group is already one predicate in parens, so it is not wrapped again.
+
+#### Choosing the joiner
+
+Swap the keyword to change only how the rows combine. `optional_groups_or(...)` reads as "match any of these rows" — the usual shape for a list of filter alternatives. `optional_groups_and(...)` reads as "match all of these rows", which is what you want when each row narrows the result further, such as a tag filter that must match every requested tag.
+
+```sql
+-- any of the requested pairs matches
+where optional_groups_or({{$args.pairs}}, id = {{id}})
+-- 2 rows: where ((id = ?) or (id = ?))
+
+-- every requested pair must match
+where optional_groups_and({{$args.pairs}}, id = {{id}})
+-- 2 rows: where ((id = ?) and (id = ?))
+```
+
+Both keywords are plain boolean units, so they compose freely and may sit side by side with each other or with the surrounding predicate.
+
+There is no bare `optional_groups(...)` keyword. Using it is a compile error that points at the two replacements, so an old statement fails loudly rather than silently picking a joiner.
 
 | Blob field value | Placeholders |
 |---|---|
@@ -222,7 +240,7 @@ A group body has two namespaces, and the `$args.` prefix is what tells them apar
 ```sql
 --($args.pairs blob, $args.flag integer)--
 select * from t
-where optional_groups(
+where optional_groups_or(
   {{$args.pairs}},
   col1 = {{cv1}}
   and col2 = {{$args.flag}}
@@ -248,7 +266,7 @@ A group may sit **inside** an `optional(...)` block, so one switch controls a sc
 select * from users u
 where u.user_id > 0
   and optional(u.active = {{$args.active}}
-               and optional_groups({{$args.pairs}}, u.user_id in ({{ids}})))
+               and optional_groups_or({{$args.pairs}}, u.user_id in ({{ids}})))
 ```
 
 A nested group is **independent of the optional's all-or-nothing set**: the blob parameter does not gate the block, and neither do the row fields (`ids` above). The group elides itself when its blob has no rows, and the surrounding `optional(...)` is still decided only by its own `{{$args.*}}` params — `$args.active` here.
@@ -265,16 +283,16 @@ An `optional(...)` may also wrap nothing but a group. It then has no params of i
 
 ```sql
 -- $args.pairs absent compiles to `select * from t where z = 1`
-select * from t where z = 1 and optional(optional_groups({{$args.pairs}}, id = {{id}}))
+select * from t where z = 1 and optional(optional_groups_or({{$args.pairs}}, id = {{id}}))
 ```
 
 The reverse nesting also works: an `optional(...)` **inside** a group body elides per branch, but it must reference at least one header-declared `$args.*` param. One keyed only on row fields is a compile error, since row fields are always required.
 
 ```sql
 -- ok: elides in every branch when $args.flag is omitted
-optional_groups({{$args.pairs}}, col1 = {{cv1}} and optional(col2 = {{$args.flag}}))
+optional_groups_or({{$args.pairs}}, col1 = {{cv1}} and optional(col2 = {{$args.flag}}))
 -- error: cv1 is a row field, so this optional could never be dropped
-optional_groups({{$args.pairs}}, optional(col1 = {{cv1}}))
+optional_groups_or({{$args.pairs}}, optional(col1 = {{cv1}}))
 ```
 
 Fixture: `user/groups_in_optional` under `tests/fixtures/api/`.

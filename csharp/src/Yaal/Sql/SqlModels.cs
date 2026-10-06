@@ -21,6 +21,10 @@ public sealed class SqlToken
     [JsonPropertyName("group_source")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? GroupSource { get; set; }
+    /// <summary>Row join for an optional_groups_* block: "or" or "and".</summary>
+    [JsonPropertyName("group_join")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? GroupJoin { get; set; }
     [JsonPropertyName("optional_groups_wrapper")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool OptionalGroupsWrapper { get; set; }

@@ -231,6 +231,8 @@ public static class BranchCsEmitter
             EmitProp(sb, indent + 4, "OptionalWhenCondition", token.OptionalWhenCondition);
         if (token.GroupSource != null)
             EmitProp(sb, indent + 4, "GroupSource", token.GroupSource);
+        if (token.GroupJoin != null)
+            EmitProp(sb, indent + 4, "GroupJoin", token.GroupJoin);
         if (token.GroupFields is { Count: > 0 } groupFields)
         {
             sb.AppendLine($"{pad}    GroupFields = new List<string>");

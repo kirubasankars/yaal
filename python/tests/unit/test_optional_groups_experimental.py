@@ -102,7 +102,7 @@ class TestOptionalGroupsExperimental(unittest.TestCase):
     def test_experimental_bind_scalar_vs_single_element_array_same_placeholder_count(self):
         sql = (
             "--(pairs blob)--\n"
-            "select * from t where optional_groups({{pairs}}, col in ({{cv}}))\n"
+            "select * from t where optional_groups_or({{pairs}}, col in ({{cv}}))\n"
         )
         twig = parser(lexer(sql), "$")["sql_stmts"][0]
         pairs = [{"cv": 5}, {"cv": [4]}]
@@ -126,7 +126,7 @@ class TestOptionalGroupsExperimental(unittest.TestCase):
     def test_experimental_bind_coercion_types(self):
         sql = (
             "--(pairs blob)--\n"
-            "select * from t where optional_groups({{pairs}}, a = {{a}} and b = {{b}} "
+            "select * from t where optional_groups_or({{pairs}}, a = {{a}} and b = {{b}} "
             "and c = {{c}} and d = {{d}})\n"
         )
         twig = parser(lexer(sql), "$")["sql_stmts"][0]
@@ -150,7 +150,7 @@ class TestOptionalGroupsExperimental(unittest.TestCase):
     def test_experimental_shape_walk_missing_row_field(self):
         sql = (
             "--(pairs blob)--\n"
-            "select * from t where optional_groups({{pairs}}, col1 = {{cv1}})\n"
+            "select * from t where optional_groups_or({{pairs}}, col1 = {{cv1}})\n"
         )
         twig = parser(lexer(sql), "$")["sql_stmts"][0]
         shape = _Shape({"pairs": [{}]})
@@ -161,7 +161,7 @@ class TestOptionalGroupsExperimental(unittest.TestCase):
     def test_experimental_compile_cache_key_differs_by_field_lengths(self):
         sql = (
             "--(pairs blob)--\n"
-            "select * from t where optional_groups({{pairs}}, col in ({{cv}}))\n"
+            "select * from t where optional_groups_or({{pairs}}, col in ({{cv}}))\n"
         )
         twig = parser(lexer(sql), "$")["sql_stmts"][0]
         helper = DataProviderHelper()

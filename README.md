@@ -299,7 +299,7 @@ YAAL_INTEGRATION=1 make test-integration
 make test-csharp          # .NET unit tests (sdk container)
 ```
 
-CI (GitHub Actions) runs Python unit tests and .NET tests on every PR. Shared SQL compile goldens live under [`tests/fixtures/sql_compile/`](tests/fixtures/sql_compile/) (optional filters, `integer[]` expansion, `optional_groups`, `HAVING` cleanup). Descriptor fixtures live under [`tests/fixtures/api/`](tests/fixtures/api/) (including [`user/groups`](tests/fixtures/api/user/groups/) for blob + optional groups).
+CI (GitHub Actions) runs Python unit tests and .NET tests on every PR. Shared SQL compile goldens live under [`tests/fixtures/sql_compile/`](tests/fixtures/sql_compile/) (optional filters, `integer[]` expansion, `optional_groups_or` / `optional_groups_and`, `HAVING` cleanup). Descriptor fixtures live under [`tests/fixtures/api/`](tests/fixtures/api/) (including [`user/groups`](tests/fixtures/api/user/groups/) for blob + optional groups).
 
 ## Python
 

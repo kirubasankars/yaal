@@ -175,7 +175,7 @@ public static class SqlCompiler
                         StripPrecedingConnector(tokens);
                         var elidedCloseIdx = FindMatchingCloseParen(stmt, idx);
                         if (elidedCloseIdx == null)
-                            throw new InvalidOperationException("unclosed optional_groups(...)");
+                            throw new InvalidOperationException("unclosed optional_groups_*(...)");
                         idx = elidedCloseIdx.Value + 1;
                         continue;
                     }
@@ -190,7 +190,7 @@ public static class SqlCompiler
                         StripPrecedingConnector(tokens);
                         var closeIdx0 = FindMatchingCloseParen(stmt, idx);
                         if (closeIdx0 == null)
-                            throw new InvalidOperationException("unclosed optional_groups(...)");
+                            throw new InvalidOperationException("unclosed optional_groups_*(...)");
                         idx = closeIdx0.Value + 1;
                         continue;
                     }
@@ -206,7 +206,7 @@ public static class SqlCompiler
 
                     var closeIdx = FindMatchingCloseParen(stmt, idx);
                     if (closeIdx == null)
-                        throw new InvalidOperationException("unclosed optional_groups(...)");
+                        throw new InvalidOperationException("unclosed optional_groups_*(...)");
 
                     var branches = new List<string>();
                     for (var gi = 0; gi < nGroups; gi++)
@@ -230,9 +230,10 @@ public static class SqlCompiler
                         branches.Add("(" + string.Concat(bt) + ")");
                         parameters.AddRange(bp);
                     }
-                    var joined = string.Join(" or ", branches);
-                    // Multiple rows leave a top-level "or"; parenthesize so an
-                    // adjacent AND does not bind tighter than this group.
+                    var joiner = token.GroupJoin == "and" ? " and " : " or ";
+                    var joined = string.Join(joiner, branches);
+                    // Multiple rows leave a top-level connector; parenthesize so an
+                    // adjacent AND/OR does not bind tighter than this group.
                     tokens.Add(branches.Count > 1 ? "(" + joined + ")" : joined);
                     idx = closeIdx.Value + 1;
                     continue;
@@ -364,7 +365,7 @@ public static class SqlCompiler
         }
     }
 
-    /// <summary>True when every optional_groups(...) inside a wrapper optional(...) elides.</summary>
+    /// <summary>True when every optional_groups_*(...) inside a wrapper optional(...) elides.</summary>
     private static bool WrappedGroupsAllElide(
         List<SqlToken> stmt,
         int start,

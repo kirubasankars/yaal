@@ -21,7 +21,7 @@ class TestOptionalGroupsBind(unittest.TestCase):
     def test_bind_order_mixed_in_and_scalar(self):
         sql = (
             "--(pairs blob)--\n"
-            "select * from t where optional_groups("
+            "select * from t where optional_groups_or("
             "{{pairs}}, col2 in ({{cv}}) and col1 = {{cv1}})\n"
         )
         twig = parser(lexer(sql), "$")["sql_stmts"][0]
@@ -47,7 +47,7 @@ class TestOptionalGroupsBind(unittest.TestCase):
     def test_bind_case_insensitive_row_keys(self):
         sql = (
             "--(pairs blob)--\n"
-            "select * from t where optional_groups({{pairs}}, col1 = {{cv1}})\n"
+            "select * from t where optional_groups_or({{pairs}}, col1 = {{cv1}})\n"
         )
         twig = parser(lexer(sql), "$")["sql_stmts"][0]
         shape = _Shape({"pairs": [{"CV1": 7}]})

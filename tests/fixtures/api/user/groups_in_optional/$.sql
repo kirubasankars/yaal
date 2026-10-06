@@ -6,5 +6,5 @@ select
 from users u
 where u.user_id > 0
   and optional(u.active = {{$args.active}}
-               and optional_groups({{$args.pairs}}, u.user_id in ({{ids}})))
+               and optional_groups_or({{$args.pairs}}, u.user_id in ({{ids}})))
 order by u.user_id
