@@ -39,7 +39,7 @@ With Yaal you author the real, per-engine SQL directly — CTEs, window function
 1. Subtract unused `optional(...)` predicates before running the statement
 2. Shape the resulting flat rows into JSON
 
-That elision is careful enough to also clean up the ClickHouse-specific clause: an elided filter that was the only predicate drops the empty `WHERE` *or* `PREWHERE`, not just `WHERE` (see [Optional filters](descriptors.md#optional-filters)). Because Yaal never owns schema or migrations, it composes cleanly with externally managed ClickHouse DDL such as [`docker/clickhouse/init.sql`](../docker/clickhouse/init.sql):
+That elision is careful enough to also clean up filter clauses: an elided filter that was the only predicate drops the empty `WHERE`, ClickHouse `PREWHERE`, or `HAVING` (see [Optional filters](descriptors.md#optional-filters)). Because Yaal never owns schema or migrations, it composes cleanly with externally managed ClickHouse DDL such as [`docker/clickhouse/init.sql`](../docker/clickhouse/init.sql):
 
 ```sql
 CREATE TABLE IF NOT EXISTS yaal.users (

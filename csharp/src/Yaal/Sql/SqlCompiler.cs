@@ -16,7 +16,7 @@ public static class SqlCompiler
 
     private static readonly HashSet<string> FilterClauses = new(StringComparer.OrdinalIgnoreCase)
     {
-        "where", "prewhere",
+        "where", "prewhere", "having",
     };
 
     private static readonly Regex OneEqualsOneCompact = new(
@@ -31,7 +31,7 @@ public static class SqlCompiler
     ///
     /// fragments (when not eliding) reuses the original "order"/"by"/whitespace
     /// tokens verbatim instead of merging them into one string, so downstream
-    /// WHERE/PREWHERE cleanup -- which detects clause boundaries by exact-matching
+    /// filter-clause cleanup (WHERE/PREWHERE/HAVING) -- which detects clause boundaries by exact-matching
     /// the word "order" -- still recognizes it.
     /// </summary>
     private static (bool IsOrderBy, List<string>? Fragments, int NextIdx) CompileOrderBy(
@@ -305,7 +305,7 @@ public static class SqlCompiler
                 var (j, word) = NextSignificant(tokens, i + 1);
                 if (j == null || (word != null && ClauseBoundary.Contains(word)))
                 {
-                    // Empty WHERE/PREWHERE at EOF, before ), ORDER/GROUP/WHERE/..., etc.
+                    // Empty WHERE/PREWHERE/HAVING at EOF, before ), ORDER/GROUP/WHERE/..., etc.
                     var oldI = i;
                     i = TrimWsBefore(tokens, i);
                     if (j == null)
@@ -333,7 +333,7 @@ public static class SqlCompiler
                 var oneEnd = MatchOneEqualsOne(tokens, j.Value);
                 if (oneEnd == null)
                 {
-                    // Real predicate; keep scanning for other WHERE/PREWHERE clauses.
+                    // Real predicate; keep scanning for other filter clauses.
                     continue;
                 }
 

@@ -1179,7 +1179,7 @@ _CLAUSE_BOUNDARY = frozenset({
     "union", "except", "intersect", ")", "where", "prewhere",
 })
 
-_FILTER_CLAUSES = frozenset({"where", "prewhere"})
+_FILTER_CLAUSES = frozenset({"where", "prewhere", "having"})
 
 _ONE_EQUALS_ONE_COMPACT = re.compile(r"^1\s*=\s*1$")
 
@@ -1235,7 +1235,7 @@ def _trim_ws_before(tokens, i):
 
 
 def _cleanup_compiled_sql(tokens):
-    """Drop empty/tautology WHERE|PREWHERE 1 = 1 left after optional-filter elision."""
+    """Drop empty/tautology WHERE|PREWHERE|HAVING 1 = 1 left after optional-filter elision."""
     tokens = list(tokens)
     changed = True
     while changed:
@@ -1248,7 +1248,7 @@ def _cleanup_compiled_sql(tokens):
 
             j, word = _next_significant(tokens, i + 1)
             if j is None or word in _CLAUSE_BOUNDARY:
-                # Empty WHERE/PREWHERE at EOF, before ), ORDER/GROUP/WHERE/..., etc.
+                # Empty WHERE/PREWHERE/HAVING at EOF, before ), ORDER/GROUP/WHERE/..., etc.
                 old_i = i
                 i = _trim_ws_before(tokens, i)
                 if j is None:
@@ -1270,12 +1270,12 @@ def _cleanup_compiled_sql(tokens):
 
             one_end = _match_one_equals_one(tokens, j)
             if one_end is None:
-                # Real predicate; keep scanning for other WHERE/PREWHERE clauses.
+                # Real predicate; keep scanning for other filter clauses.
                 continue
 
             k, next_word = _next_significant(tokens, one_end)
             if k is None or next_word in _CLAUSE_BOUNDARY:
-                # Sole WHERE/PREWHERE 1 = 1 (or before ORDER/GROUP/WHERE/...).
+                # Sole WHERE/PREWHERE/HAVING 1 = 1 (or before ORDER/GROUP/WHERE/...).
                 old_i = i
                 i = _trim_ws_before(tokens, i)
                 one_end -= old_i - i
@@ -1291,7 +1291,7 @@ def _cleanup_compiled_sql(tokens):
                 break
 
             if next_word in ("and", "or"):
-                # WHERE/PREWHERE 1 = 1 AND|OR rest → WHERE/PREWHERE rest
+                # WHERE/PREWHERE/HAVING 1 = 1 AND|OR rest → clause rest
                 del_end = k + 1
                 while del_end < len(tokens) and _is_whitespace_sql_fragment(tokens[del_end]):
                     del_end += 1
@@ -1317,7 +1317,7 @@ def _compile_order_by(stmt, order_idx, sort_map):
       fragments: None to elide the entire clause (incl. keyword), or a list of
                  string fragments to splice in -- the original "order"/"by"/
                  whitespace tokens are reused verbatim (not merged into one
-                 string) so downstream WHERE/PREWHERE cleanup, which detects
+                 string) so downstream filter-clause cleanup, which detects
                  clause boundaries by exact-matching the word "order", still
                  recognizes it.
       next_idx: index in stmt right after the clause.

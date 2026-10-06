@@ -112,7 +112,7 @@ and optional(u.user_id = {{$args.id}})
 | value present | `and (u.user_id = ?)` with a bind |
 | value null / omitted | clause removed |
 
-If the elided filter was the only predicate, the empty `WHERE` / ClickHouse `PREWHERE` is dropped — including before `)` or other clause starts (no leftover bare clause or `1 = 1`). Leading author `WHERE`/`PREWHERE 1 = 1 AND|OR …` is cleaned the same way when the rest remains. When both clauses appear, each is cleaned independently. For why this SQL-first, engine-agnostic elision fits ClickHouse-style engines (and reporting-shaped queries generally) better than an ORM-owned dialect layer, see [Why SQL-first fits](why-sql-first.md).
+If the elided filter was the only predicate, the empty `WHERE`, ClickHouse `PREWHERE`, or `HAVING` is dropped — including before `)` or other clause starts (no leftover bare clause or `1 = 1`). Leading author `WHERE`/`PREWHERE`/`HAVING 1 = 1 AND|OR …` is cleaned the same way when the rest remains. When multiple filter clauses appear, each is cleaned independently. For why this SQL-first, engine-agnostic elision fits ClickHouse-style engines (and reporting-shaped queries generally) better than an ORM-owned dialect layer, see [Why SQL-first fits](why-sql-first.md).
 
 Long form still works and must be parenthesized: `({{param}} is null or col = {{param}})` (case and surrounding whitespace are flexible).
 
