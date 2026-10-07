@@ -12,11 +12,11 @@ License: [MIT](LICENSE). Version: `0.8.0` (Python package + NuGet metadata). Pyt
 
 ## Features
 
-Learning path: [`docs/learn.md`](docs/learn.md). Full walkthroughs: [`docs/examples.md`](docs/examples.md) (feature index at the top).
+Learning path: [`docs/tutorial/index.md`](docs/tutorial/index.md). Task guides: [`docs/guides/index.md`](docs/guides/index.md). Preview the site with `make docs-serve`.
 
 ### Subtractive filters
 
-`optional(...)` / null groups are **removed** when params are null, omitted, or (for list params) `[]`. Empty `WHERE`, `PREWHERE`, and `HAVING` clauses are dropped after elision—no bare `HAVING` or leftover `1 = 1`. [Full example →](docs/examples.md#optional-list--userlist)
+`optional(...)` / null groups are **removed** when params are null, omitted, or (for list params) `[]`. Empty `WHERE`, `PREWHERE`, and `HAVING` clauses are dropped after elision—no bare `HAVING` or leftover `1 = 1`. [Full example →](docs/guides/optional-filters.md)
 
 ```sql
 --($args.active integer)--
@@ -30,9 +30,9 @@ where 1 = 1
 | *(omitted)* | predicate removed; `where 1 = 1` | `[]` |
 | `active=1` | `and (u.active = ?)` | `[1]` |
 
-**Header array types** (`integer[]`, …): one `{{param}}` expands to `?, ?, ?` for `IN` lists. Inside `optional(...)`, use `optional(id in ({{$args.id}}))` with `--arg 'id=[1,2]'`. Multi-param `optional(...)` requires all listed params or none—partial args are a compile error. See [descriptors — optional filters](docs/descriptors.md#optional-filters).
+**Header array types** (`integer[]`, …): one `{{param}}` expands to `?, ?, ?` for `IN` lists. Inside `optional(...)`, use `optional(id in ({{$args.id}}))` with `--arg 'id=[1,2]'`. Multi-param `optional(...)` requires all listed params or none—partial args are a compile error. See [optional semantics](docs/concepts/optional-semantics.md).
 
-**Optional groups** repeat an AND-shaped filter per row of a `blob` arg (JSON array of objects), OR-joined; omit/`[]` elides the whole block. [Example →](docs/examples.md#optional-groups--usergroups)
+**Optional groups** repeat an AND-shaped filter per row of a `blob` arg (JSON array of objects), OR-joined; omit/`[]` elides the whole block. [Example →](docs/guides/optional-groups.md)
 
 ```bash
 yaal explain user/list
@@ -42,7 +42,7 @@ yaal explain user/groups --arg 'pairs=[{"id":1}]'
 
 ### Dynamic ORDER BY
 
-Allowlisted `sort()` / `dir()` splice author expressions only — never client SQL. Null `sort` elides `ORDER BY` unless the header sets a default (`string = id`). Supports multi-column sort (`sort=name,id` + `dir=desc,asc`), `NULLS FIRST/LAST` (`dir=desc_nulls_last`), and mixing with a static tiebreaker column. [Details →](docs/descriptors.md#dynamic-order-by--sort--dir)
+Allowlisted `sort()` / `dir()` splice author expressions only — never client SQL. Null `sort` elides `ORDER BY` unless the header sets a default (`string = id`). Supports multi-column sort (`sort=name,id` + `dir=desc,asc`), `NULLS FIRST/LAST` (`dir=desc_nulls_last`), and mixing with a static tiebreaker column. [Details →](docs/reference/sort-and-dir.md)
 
 ```sql
 --($args.sort string = id, $args.dir string = asc)--
@@ -59,7 +59,7 @@ yaal query user/list --arg sort=name,id --arg dir=desc,asc
 
 ### JSON out
 
-Every `query` returns nested JSON. [Full example →](docs/examples.md#nested-get--userget)
+Every `query` returns nested JSON. [Full example →](docs/tutorial/03-nested-get.md)
 
 ```bash
 yaal query user/get --arg id=1
@@ -68,7 +68,7 @@ yaal query user/get --arg id=1
 
 ### Output shaping
 
-`mapped`, `partition_by`, `parent_rows`, or child SQL (`$.roles.sql`). [get](docs/examples.md#nested-get--userget) · [nested](docs/examples.md#nested-child-sql--usernested)
+`mapped`, `partition_by`, `parent_rows`, or child SQL (`$.roles.sql`). [get](docs/tutorial/03-nested-get.md) · [nested](docs/guides/child-sql-and-siblings.md)
 
 ```json
 {
@@ -86,7 +86,7 @@ yaal query user/get --arg id=1
 
 ### Multi-query + data passing
 
-`--sql--` twigs share binds; `$mode=params` copies columns onto `$params` for later twigs. [Full example →](docs/examples.md#paginated-nest--userpage)
+`--sql--` twigs share binds; `$mode=params` copies columns onto `$params` for later twigs. [Full example →](docs/guides/pagination-and-mode-params.md)
 
 ```sql
 SELECT 'params' AS "$mode", COUNT(*) AS total_count FROM users WHERE active = 1
@@ -97,7 +97,7 @@ SELECT {{$args.page}} AS page, {{$args.page_size}} AS page_size,
 
 ### API pagination
 
-Sibling `$.paging.sql` + `$.data.sql` → `{ paging, data }` via `$mode=params`. [Full example →](docs/examples.md#paginated-nest--userpage)
+Sibling `$.paging.sql` + `$.data.sql` → `{ paging, data }` via `$mode=params`. [Full example →](docs/guides/pagination-and-mode-params.md)
 
 ```bash
 yaal query user/page --arg page=1 --arg page_size=10
@@ -106,7 +106,7 @@ yaal query user/page --arg page=1 --arg page_size=10
 
 ### Multi-database
 
-Named providers + `--sql(name)--` twigs in one operation. [Full example →](docs/examples.md#multi-database--usercombine)
+Named providers + `--sql(name)--` twigs in one operation. [Full example →](docs/guides/multi-database.md)
 
 ```python
 y.setup_data_provider("db", "sqlite3:///" + app_db)
@@ -122,7 +122,7 @@ SELECT f.user_id, f.vip FROM external_flags f WHERE f.user_id = {{$args.id}}
 
 ### Real SQL (`WITH` / aggregations)
 
-CTEs and aggregates stay ordinary SQL. [Full example →](docs/examples.md#real-sql--reportsummary)
+CTEs and aggregates stay ordinary SQL. [Full example →](docs/tutorial/08-real-sql.md)
 
 ```sql
 WITH role_counts AS (
@@ -138,7 +138,7 @@ yaal query report/summary
 
 ### Dual runtime
 
-Python and .NET 8 share [`tests/fixtures/api/`](tests/fixtures/api/). [Full example →](docs/examples.md#dual-runtime-python--c)
+Python and .NET 8 share [`tests/fixtures/api/`](tests/fixtures/api/). [Full example →](docs/appendix/python.md)
 
 ```python
 y.query("user/get", args={"id": 1})
@@ -150,7 +150,7 @@ y.Query("user/get", args: new { id = 1 });
 
 ### Ahead-of-time compile
 
-`yaal compile` / `precompiled=...`; elision still runs per request. [Full example →](docs/examples.md#precompiled-descriptors)
+`yaal compile` / `precompiled=...`; elision still runs per request. [Full example →](docs/guides/precompile.md)
 
 **Python CLI** — JSON artifacts:
 
@@ -175,7 +175,7 @@ foreach (var (path, branch) in Yaal.Generated.YaalDescriptorRegistry.All)
     y.RegisterDescriptor(path, branch);
 ```
 
-Load order when `debug=false`: registered → cache → precompiled JSON → live SQL/JSON. See [descriptors.md — precompiled](docs/descriptors.md#precompiled-descriptors).
+Load order when `debug=false`: registered → cache → precompiled JSON → live SQL/JSON. See [precompiled artifacts](docs/reference/precompiled-artifacts.md).
 
 ## Install
 
@@ -261,13 +261,20 @@ for twig in y.explain_sql("user/get", args={"id": 1}):
 
 ## Documentation
 
-Operations are folders of `*.sql` (+ `$.output.json`), discovered filesystem-first and called by path (`y.query("user/get", ...)`). Full reference (parameters, output shaping, multi-twig / `$mode`, pagination, precompile, database URLs, errors, public API) lives in [`docs/descriptors.md`](docs/descriptors.md) — not duplicated here.
+Operations are folders of `*.sql` (+ `$.output.json`), discovered filesystem-first and called by path (`y.query("user/get", ...)`). The docs site splits that material into a tutorial, task guides, concept notes, and a reference.
 
-- [`docs/learn.md`](docs/learn.md) — step-by-step learning guide
-- [`docs/examples.md`](docs/examples.md) — end-to-end walkthroughs (SQL, output JSON, sample results, CLI/Python/C#)
-- [`docs/descriptors.md`](docs/descriptors.md) — the full reference above
-- [`docs/why-sql-first.md`](docs/why-sql-first.md) — why SQL-first fits ClickHouse-like engines and complex reporting apps
-- [`docs/README.md`](docs/README.md) — full docs index (also covers the .NET port and runnable demos)
+```bash
+make docs-install
+make docs-serve
+```
+
+- [`docs/index.md`](docs/index.md) — site home
+- [`docs/tutorial/index.md`](docs/tutorial/index.md) — step-by-step learning path
+- [`docs/guides/index.md`](docs/guides/index.md) — task guides (filters, paging, precompile, explain)
+- [`docs/concepts/index.md`](docs/concepts/index.md) — elision, optional semantics, shaping
+- [`docs/reference/index.md`](docs/reference/index.md) — header, DSL, CLI, URLs
+- [`docs/essays/why-sql-first.md`](docs/essays/why-sql-first.md) — why SQL-first fits reporting and ClickHouse-like engines
+- [`docs/README.md`](docs/README.md) — short index for readers browsing the repo
 
 ## Make targets
 
@@ -287,6 +294,7 @@ Operations are folders of `*.sql` (+ `$.output.json`), discovered filesystem-fir
 | `make test-csharp` | .NET unit tests (SDK container) |
 | `make test-csharp-integration` | Compose DBs + .NET integration tests |
 | `make benchmark-csharp` | Descriptor load benchmarks (live SQL vs JSON vs `RegisterDescriptor`) |
+| `make docs-install` / `docs-serve` / `docs-build` | MkDocs site (preview or strict build) |
 | `make integration-up` / `integration-down` | Manage compose DBs |
 
 SQLite-only usage does **not** need Docker. Compose is only for Postgres/MySQL/ClickHouse integration tests.

@@ -1,0 +1,95 @@
+site_name: Yaal
+site_description: Subtractive SQL ORM — SQL and JSON descriptors to nested JSON
+repo_url: https://github.com/kirubasankars/yaal
+repo_name: kirubasankars/yaal
+edit_uri: edit/main/docs/
+
+docs_dir: docs
+
+exclude_docs: |
+  /README.md
+  /learn.md
+  /descriptors.md
+  /examples.md
+  /why-sql-first.md
+  /stringbuilder-vs-optional.md
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - content.code.copy
+    - toc.follow
+    - search.suggest
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Tutorial:
+      - tutorial/index.md
+      - Install and tour: tutorial/01-install-and-tour.md
+      - Mental model: tutorial/02-mental-model.md
+      - Nested get: tutorial/03-nested-get.md
+      - Subtractive filters: tutorial/04-subtractive-filters.md
+      - Output shaping: tutorial/05-output-shaping.md
+      - Child SQL: tutorial/06-child-sql.md
+      - Pagination: tutorial/07-pagination.md
+      - Real SQL: tutorial/08-real-sql.md
+      - Multi-database: tutorial/09-multi-database.md
+      - Precompile: tutorial/10-precompile.md
+  - Guides:
+      - guides/index.md
+      - Optional filters: guides/optional-filters.md
+      - Array IN filters: guides/array-in-filters.md
+      - Optional groups: guides/optional-groups.md
+      - Dynamic ORDER BY: guides/dynamic-order-by.md
+      - Output shaping: guides/output-shaping.md
+      - Child SQL and siblings: guides/child-sql-and-siblings.md
+      - Pagination and mode params: guides/pagination-and-mode-params.md
+      - Multi-database: guides/multi-database.md
+      - Precompile: guides/precompile.md
+      - Explain and debug: guides/explain-and-debug.md
+      - Writes and modes: guides/writes-and-modes.md
+      - Experiment sandbox: guides/experiment-sandbox.md
+  - Concepts:
+      - concepts/index.md
+      - Subtractive ORM: concepts/subtractive-orm.md
+      - Descriptor lifecycle: concepts/descriptor-lifecycle.md
+      - Compile and elision: concepts/compile-and-elision.md
+      - Optional semantics: concepts/optional-semantics.md
+      - Parameter namespaces: concepts/parameter-namespaces.md
+      - Branches, twigs, and output: concepts/branches-twigs-and-output.md
+      - Shaping strategies: concepts/shaping-strategies.md
+  - Reference:
+      - reference/index.md
+      - Descriptor layout: reference/descriptor-layout.md
+      - Parameter header: reference/parameter-header.md
+      - Optional DSL: reference/optional-dsl.md
+      - Optional groups DSL: reference/optional-groups-dsl.md
+      - sort and dir: reference/sort-and-dir.md
+      - Output JSON schema: reference/output-json-schema.md
+      - Mode rows: reference/mode-rows.md
+      - Precompiled artifacts: reference/precompiled-artifacts.md
+      - Errors and validation: reference/errors-and-validation.md
+      - CLI: reference/cli.md
+      - Database URLs: reference/database-urls.md
+  - Cookbook:
+      - Fixture index: cookbook/fixtures.md
+  - Essays:
+      - Why SQL-first: essays/why-sql-first.md
+      - StringBuilder vs optional: essays/stringbuilder-vs-optional.md
+  - Appendix:
+      - Python: appendix/python.md
+      - C#: appendix/csharp.md

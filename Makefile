@@ -16,7 +16,8 @@ EXP_CH_SEED := docker/clickhouse/experiment_seed.sql
 	experiment experiment-init experiment-reset experiment-clean \
 	experiment-clickhouse experiment-clickhouse-init experiment-clickhouse-reset \
 	integration-up integration-down integration-ps clean \
-	test-csharp test-csharp-integration example-csharp benchmark-csharp
+	test-csharp test-csharp-integration example-csharp benchmark-csharp \
+	docs-install docs-serve docs-build
 
 help:
 	@echo "Targets:"
@@ -39,7 +40,10 @@ help:
 	@echo "  make benchmark-csharp   Descriptor load benchmarks (JSON vs CS vs live SQL)"
 	@echo "  make integration-up     Start Postgres/MySQL/ClickHouse (docker compose)"
 	@echo "  make integration-down   Stop and remove compose containers/volumes"
-	@echo "  make clean              Remove venv, caches, and experiment sandbox"
+	@echo "  make docs-install       Install MkDocs into the venv"
+	@echo "  make docs-serve        Preview the docs site locally"
+	@echo "  make docs-build        Build the docs site (strict)"
+	@echo "  make clean              Remove venv, caches, site/, and experiment sandbox"
 
 venv:
 	$(PYTHON) -m venv $(VENV)
@@ -140,8 +144,17 @@ benchmark-csharp:
 	$(COMPOSE) --profile csharp run --rm --no-deps dotnet-test \
 		sh -c 'dotnet build csharp/src/Yaal/Yaal.csproj -c Release && dotnet run --project csharp/benchmarks/Yaal.Benchmarks.Generator/Yaal.Benchmarks.Generator.csproj && dotnet run -c Release --project csharp/benchmarks/Yaal.Benchmarks/Yaal.Benchmarks.csproj'
 
+docs-install: venv
+	$(PIP) install -e ".[docs]"
+
+docs-serve:
+	$(VENV)/bin/mkdocs serve
+
+docs-build:
+	$(VENV)/bin/mkdocs build --strict
+
 clean: experiment-clean
-	rm -rf $(VENV) __pycache__ .pytest_cache
+	rm -rf $(VENV) __pycache__ .pytest_cache site
 	find . -type d -name '__pycache__' -prune -exec rm -rf {} +
 	find . -type f -name '*.py[co]' -delete
 	find csharp -type d \( -name bin -o -name obj \) -prune -exec rm -rf {} +

@@ -11,7 +11,7 @@ pip install 'yaal[postgres]'   # or [mysql] / [clickhouse]
 
 From a clone: `make install` (`pip install -e .`). CLI: `yaal` (same as `python -m yaal_cli`).
 
-Docs: [examples](../docs/examples.md) · [descriptors](../docs/descriptors.md) · [index](../docs/README.md).
+Docs: [tutorial](../docs/tutorial/index.md) · [reference](../docs/reference/index.md) · [index](../docs/index.md). Preview with `make docs-serve`.
 
 Runnable tour (get / list / page / create + explain): `make example`.
 
@@ -54,7 +54,7 @@ yaal --api tests/fixtures/api compile --out /tmp/yaal-precompiled
 y = Yaal("tests/fixtures/api", precompiled="/tmp/yaal-precompiled")
 ```
 
-`debug=True` forces live SQL/JSON and ignores `precompiled`. See [descriptors.md](../docs/descriptors.md#precompiled-descriptors).
+`debug=True` forces live SQL/JSON and ignores `precompiled`. See [precompiled artifacts](../docs/reference/precompiled-artifacts.md).
 
 Descriptors are shared with the .NET library under [`../tests/fixtures/api/`](../tests/fixtures/api/) (`user/get`, `user/nested`, `user/list`, `user/groups`, `user/page`, `report/summary`, `user/combine`). Compile goldens for optional filters and groups: [`../tests/fixtures/sql_compile/`](../tests/fixtures/sql_compile/).
 

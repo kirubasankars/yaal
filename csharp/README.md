@@ -141,9 +141,10 @@ y.SetupDataProvider("db", new MyContextManager(), scheme: "postgresql");
 
 ## Documentation
 
-- [Learning path](https://github.com/kirubasankars/yaal/blob/master/docs/learn.md)
-- [Examples](https://github.com/kirubasankars/yaal/blob/master/docs/examples.md) (SQL, output JSON, sample results, C#)
-- [Descriptor reference](https://github.com/kirubasankars/yaal/blob/master/docs/descriptors.md)
+- [Documentation home](https://github.com/kirubasankars/yaal/blob/master/docs/index.md)
+- [Tutorial](https://github.com/kirubasankars/yaal/blob/master/docs/tutorial/index.md)
+- [C# appendix](https://github.com/kirubasankars/yaal/blob/master/docs/appendix/csharp.md)
+- [Descriptor reference](https://github.com/kirubasankars/yaal/blob/master/docs/reference/index.md)
 - [Source repository](https://github.com/kirubasankars/yaal)
 
 ## Feedback

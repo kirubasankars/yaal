@@ -1,41 +1,25 @@
 # Yaal documentation
 
-Yaal turns SQL + JSON descriptors into nested JSON. These docs use the shared fixtures under [`tests/fixtures/api/`](../tests/fixtures/api/) and the seed schema in [`docker/sqlite/schema.sql`](../docker/sqlite/schema.sql). Project overview / install: [`../README.md`](../README.md).
-
-| Doc | Purpose |
-|---|---|
-| [learn.md](learn.md) | Step-by-step learning path (install → fixtures → your own API) |
-| [examples.md](examples.md) | End-to-end examples: SQL/JSON, CLI/Python/C#, precompile, explain, writes |
-| [descriptors.md](descriptors.md) | Reference: trunk/branch/twig, parameters, shaping, [`$mode`](descriptors.md#mode-rows), precompile, database URLs, errors, public API |
-| [why-sql-first.md](why-sql-first.md) | Why SQL-first fits ClickHouse-like engines and complex reporting apps |
-| [stringbuilder-vs-optional.md](stringbuilder-vs-optional.md) | C# microbenchmark: StringBuilder filter appends vs `optional()` elision |
-| [`../python/README.md`](../python/README.md) | Python library layout (`python/src`, tests, examples) |
-| [`../csharp/README.md`](../csharp/README.md) | .NET 8 / NuGet package — install, usage, database URLs, custom providers |
-
-## Try it
+The documentation site is [index.md](index.md). Preview it with:
 
 ```bash
-make install
-make example                 # Python: all fixtures + explain
-make example-csharp          # same tour in .NET (Docker SDK)
-make benchmark-csharp        # descriptor load benchmarks (.NET)
-make yaal ARGS='list'
-make yaal ARGS='query user/get --arg id=1'
+make docs-install
+make docs-serve
 ```
 
-Runnable demos:
-
-- Python: [`python/examples/demo.py`](../python/examples/demo.py)
-- C#: [`csharp/examples/Yaal.Example/`](../csharp/examples/Yaal.Example/)
-
-Fixture operations:
-
-| Path | Shows |
+| Section | Purpose |
 |---|---|
-| `user/get` | Nested object + `parent_rows` (one join SQL) |
-| `user/nested` | Nested child SQL file (`$.roles.sql`) + `partition_by` |
-| `user/list` | Root array + `optional()` filter + `sort()` / `dir()` |
-| `user/groups` | `optional_groups` + `blob` arg (OR per row; optional `IN` in template) |
-| `user/page` | Sibling branches + `$mode=params` (multi-twig read) |
-| `report/summary` | `WITH` + aggregations → JSON |
-| `user/combine` | Multi-database (`--sql(flags)--`) |
+| [Tutorial](tutorial/index.md) | Install through precompile, on the shared fixtures |
+| [Guides](guides/index.md) | One task per page (filters, groups, paging, explain) |
+| [Concepts](concepts/index.md) | Lifecycle, elision, optional semantics, shaping |
+| [Reference](reference/index.md) | Header, DSL, output JSON, CLI, URLs |
+| [Fixture index](cookbook/fixtures.md) | Which folder demonstrates what |
+| [Python](appendix/python.md) · [C#](appendix/csharp.md) | Runtime APIs |
+
+Older filenames still resolve:
+
+- [learn.md](learn.md) → tutorial
+- [examples.md](examples.md) → guides
+- [descriptors.md](descriptors.md) → reference
+
+Fixtures: `tests/fixtures/api/`. Seed: `docker/sqlite/schema.sql`.

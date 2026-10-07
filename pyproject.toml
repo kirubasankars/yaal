@@ -33,13 +33,18 @@ engines = [
     "mysql-connector-python>=8.0,<10",
     "clickhouse-driver>=0.2,<1",
 ]
+docs = [
+    "mkdocs>=1.6",
+    "mkdocs-material>=9.5",
+    "pymdown-extensions>=10",
+]
 
 [project.scripts]
 yaal = "yaal_cli:main"
 
 [project.urls]
 Homepage = "https://github.com/kirubasankars/yaal"
-Documentation = "https://github.com/kirubasankars/yaal/blob/main/docs/README.md"
+Documentation = "https://github.com/kirubasankars/yaal/blob/main/docs/index.md"
 
 [tool.setuptools]
 package-dir = {"" = "python/src"}
