@@ -1,3 +1,9 @@
+<!--
+Copyright 2018 Kiruba Sankar Swaminathan. All rights reserved.
+Use of this source code is governed by a MIT style
+license that can be found in the LICENSE file.
+-->
+
 # Learn Yaal
 
 This page moved. The step-by-step path is the [tutorial](tutorial/index.md).
@@ -12,7 +18,6 @@ This page moved. The step-by-step path is the [tutorial](tutorial/index.md).
 | Child SQL | [Child SQL](tutorial/06-child-sql.md) |
 | Pagination | [Pagination](tutorial/07-pagination.md) |
 | Real SQL | [Real SQL](tutorial/08-real-sql.md) |
-| Multi-database | [Multi-database](tutorial/09-multi-database.md) |
 | Your own API | [Experiment sandbox](guides/experiment-sandbox.md) |
 | Precompile | [Precompile](tutorial/10-precompile.md) |
 

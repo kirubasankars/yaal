@@ -1,3 +1,9 @@
+<!--
+Copyright 2018 Kiruba Sankar Swaminathan. All rights reserved.
+Use of this source code is governed by a MIT style
+license that can be found in the LICENSE file.
+-->
+
 # Branches, twigs, and output
 
 An operation folder becomes a small tree. SQL files define the tree. Output JSON shapes each node. Twigs are statements inside one file.
@@ -17,7 +23,7 @@ flowchart TD
 | **Operation** | Folder under the API root, e.g. `user/get/` |
 | **Trunk** | Root method `$`. File `$.sql` when present. Omitted when only sibling files exist. |
 | **Branch** | Nested method under `$`, e.g. `$.paging` from `$.paging.sql` |
-| **Twig** | One statement inside a file, split by `--sql--` or `--sql(connection)--` |
+| **Twig** | One statement inside a file, split by `--sql--` |
 
 ## How files and output meet
 

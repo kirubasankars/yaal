@@ -1,3 +1,9 @@
+<!--
+Copyright 2018 Kiruba Sankar Swaminathan. All rights reserved.
+Use of this source code is governed by a MIT style
+license that can be found in the LICENSE file.
+-->
+
 # Optional groups DSL
 
 Why groups elide independently of a wrapping `optional`: [Optional semantics](../concepts/optional-semantics.md).

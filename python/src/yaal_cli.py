@@ -110,11 +110,6 @@ def _build_parser():
         help="Database URL. If omitted, a temp SQLite DB is seeded from docker/sqlite/schema.sql",
     )
     parser.add_argument(
-        "--provider",
-        default="db",
-        help="Data provider name (default: db)",
-    )
-    parser.add_argument(
         "--schema",
         default=str(DEFAULT_SCHEMA),
         help="SQLite schema used when --db is omitted",
@@ -174,17 +169,16 @@ def _build_parser():
 
 def _with_yaal(ns, fn):
     from yaal import Yaal
+    from yaal_drivers import open as open_db
 
     y = Yaal(ns.api, debug=ns.debug, precompiled=ns.precompiled)
     if ns.db:
-        y.setup_data_provider(ns.provider, ns.db)
-        return fn(y)
+        return fn(y, open_db(ns.db))
     schema = Path(ns.schema)
     if not schema.is_file():
         raise SystemExit("schema file not found: %s" % schema)
     with _demo_db_url(schema) as url:
-        y.setup_data_provider(ns.provider, url)
-        return fn(y)
+        return fn(y, open_db(url))
 
 
 def cmd_list(ns):
@@ -207,8 +201,8 @@ def cmd_query(ns):
     args = _merge_args(ns)
     payload = _parse_payload(ns.payload)
 
-    def run(y):
-        result = y.query(ns.path, args=args, payload=payload)
+    def run(y, provider):
+        result = y.query(provider, ns.path, args=args, payload=payload)
         print(json.dumps(result, indent=2))
 
     _with_yaal(ns, run)
@@ -219,8 +213,8 @@ def cmd_explain(ns):
     args = _merge_args(ns)
     payload = _parse_payload(ns.payload)
 
-    def run(y):
-        for twig in y.explain_sql(ns.path, args=args, payload=payload):
+    def run(y, provider):
+        for twig in y.explain_sql(provider, ns.path, args=args, payload=payload):
             print(twig["sql"].strip())
             print("binds:", twig["parameters"])
             print()

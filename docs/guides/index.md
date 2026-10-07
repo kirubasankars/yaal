@@ -1,3 +1,9 @@
+<!--
+Copyright 2018 Kiruba Sankar Swaminathan. All rights reserved.
+Use of this source code is governed by a MIT style
+license that can be found in the LICENSE file.
+-->
+
 # Guides
 
 Task-sized pages. Each one states the problem, shows the SQL, and says what `yaal explain` should show. Behavior is defined in [Concepts](../concepts/index.md). Grammar is in the [Reference](../reference/index.md).
@@ -11,7 +17,6 @@ Task-sized pages. Each one states the problem, shows the SQL, and says what `yaa
 | Map columns and nest joins | [Output shaping](output-shaping.md) |
 | Split a nest into another SQL file | [Child SQL and siblings](child-sql-and-siblings.md) |
 | Page a list | [Pagination and mode params](pagination-and-mode-params.md) |
-| Read two databases | [Multi-database](multi-database.md) |
 | Skip lexing at startup | [Precompile](precompile.md) |
 | See SQL without running it | [Explain and debug](explain-and-debug.md) |
 | Insert, then select | [Writes and modes](writes-and-modes.md) |

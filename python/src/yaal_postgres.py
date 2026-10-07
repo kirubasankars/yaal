@@ -55,6 +55,8 @@ class PostgresContextManager:
 
 class PostgresDataProvider:
 
+    placeholder = "%s"
+
     def __init__(self, pool):
         self._pool = pool
         self._conn = None
@@ -91,13 +93,11 @@ class PostgresDataProvider:
             return next(iter(row.values()))
         return None
 
-    def execute(self, twig, input_shape, helper):
+    def execute(self, sql, parameters):
         con = self._conn
-        sql = helper.get_executable_content("%s", twig, input_shape)
         cur = con.cursor(cursor_factory=RealDictCursor)
         try:
-            args = helper.build_parameters(sql, input_shape, self.get_value_converter)
-            cur.execute(sql["content"], args)
+            cur.execute(sql, parameters)
             rows = [dict(row) for row in fetch_dict_rows(cur)]
             return rows, self._last_inserted_id(cur, rows)
         finally:

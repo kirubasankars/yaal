@@ -1,3 +1,9 @@
+<!--
+Copyright 2018 Kiruba Sankar Swaminathan. All rights reserved.
+Use of this source code is governed by a MIT style
+license that can be found in the LICENSE file.
+-->
+
 # Mode rows
 
 `$mode` is an optional result-column control key. When the first row of a twig includes `$mode`, that result is not shaped as ordinary output.

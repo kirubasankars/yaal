@@ -1,3 +1,7 @@
+# Copyright 2018 Kiruba Sankar Swaminathan. All rights reserved.
+# Use of this source code is governed by a MIT style
+# license that can be found in the LICENSE file.
+
 site_name: Yaal
 site_description: Subtractive SQL ORM — SQL and JSON descriptors to nested JSON
 site_url: https://kirubasankars.github.io/yaal/
@@ -48,7 +52,6 @@ nav:
       - Child SQL: tutorial/06-child-sql.md
       - Pagination: tutorial/07-pagination.md
       - Real SQL: tutorial/08-real-sql.md
-      - Multi-database: tutorial/09-multi-database.md
       - Precompile: tutorial/10-precompile.md
   - Guides:
       - guides/index.md
@@ -59,7 +62,6 @@ nav:
       - Output shaping: guides/output-shaping.md
       - Child SQL and siblings: guides/child-sql-and-siblings.md
       - Pagination and mode params: guides/pagination-and-mode-params.md
-      - Multi-database: guides/multi-database.md
       - Precompile: guides/precompile.md
       - Explain and debug: guides/explain-and-debug.md
       - Writes and modes: guides/writes-and-modes.md

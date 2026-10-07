@@ -1,3 +1,9 @@
+<!--
+Copyright 2018 Kiruba Sankar Swaminathan. All rights reserved.
+Use of this source code is governed by a MIT style
+license that can be found in the LICENSE file.
+-->
+
 # Tutorial
 
 This path walks the shared fixtures. The examples are read-only except where a later guide says otherwise. Each step has a goal, commands, files to open, and one exercise.
@@ -12,8 +18,7 @@ This path walks the shared fixtures. The examples are read-only except where a l
 | 6 | Roles from a second SQL file | [Child SQL](06-child-sql.md) |
 | 7 | Paging with `$mode=params` | [Pagination](07-pagination.md) |
 | 8 | CTEs and aggregates | [Real SQL](08-real-sql.md) |
-| 9 | Two databases, one operation | [Multi-database](09-multi-database.md) |
-| 10 | Compile once, elide per request | [Precompile](10-precompile.md) |
+| 9 | Compile once, elide per request | [Precompile](10-precompile.md) |
 
 After the tour, edit a copy of the fixtures in the [experiment sandbox](../guides/experiment-sandbox.md).
 

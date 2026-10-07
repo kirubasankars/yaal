@@ -3,6 +3,7 @@
 // license that can be found in the LICENSE file.
 
 using FluentAssertions;
+using Yaal.Drivers;
 
 namespace Yaal.Tests;
 
@@ -29,9 +30,9 @@ public class IntegrationTests
         Skip.IfNot(IntegrationEnabled, "Set YAAL_INTEGRATION=1 to run engine integration tests");
 
         var y = new Yaal(FixtureApi, debug: true);
-        y.SetupDataProvider("db", Environment.GetEnvironmentVariable("YAAL_PG_URL")
+        var db = DriverRegistry.Open(Environment.GetEnvironmentVariable("YAAL_PG_URL")
                                   ?? "postgresql://yaal:yaal@127.0.0.1:54329/yaal");
-        AssertUserAdmin(y.Query("user/get", args: new { id = 1 }));
+        AssertUserAdmin(y.Query(db, "user/get", args: new { id = 1 }));
     }
 
     [SkippableFact]
@@ -40,9 +41,9 @@ public class IntegrationTests
         Skip.IfNot(IntegrationEnabled, "Set YAAL_INTEGRATION=1 to run engine integration tests");
 
         var y = new Yaal(FixtureApi, debug: true);
-        y.SetupDataProvider("db", Environment.GetEnvironmentVariable("YAAL_MYSQL_URL")
+        var db = DriverRegistry.Open(Environment.GetEnvironmentVariable("YAAL_MYSQL_URL")
                                   ?? "mysql://yaal:yaal@127.0.0.1:33069/yaal");
-        AssertUserAdmin(y.Query("user/get", args: new { id = 1 }));
+        AssertUserAdmin(y.Query(db, "user/get", args: new { id = 1 }));
     }
 
     [SkippableFact]
@@ -51,8 +52,8 @@ public class IntegrationTests
         Skip.IfNot(IntegrationEnabled, "Set YAAL_INTEGRATION=1 to run engine integration tests");
 
         var y = new Yaal(FixtureApi, debug: true);
-        y.SetupDataProvider("db", Environment.GetEnvironmentVariable("YAAL_CH_URL")
+        var db = DriverRegistry.Open(Environment.GetEnvironmentVariable("YAAL_CH_URL")
                                   ?? "clickhouse://yaal:yaal@127.0.0.1:9000/yaal");
-        AssertUserAdmin(y.Query("user/get", args: new { id = 1 }));
+        AssertUserAdmin(y.Query(db, "user/get", args: new { id = 1 }));
     }
 }

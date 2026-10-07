@@ -1,3 +1,9 @@
+<!--
+Copyright 2018 Kiruba Sankar Swaminathan. All rights reserved.
+Use of this source code is governed by a MIT style
+license that can be found in the LICENSE file.
+-->
+
 # Why SQL-first fits ClickHouse-like engines and complex reporting
 
 This is not a feature-by-feature comparison against any specific ORM. It is the reasoning behind why a **SQL-first, subtractive** tool (Yaal's model) tends to fit two related workloads better than a traditional **additive, entity-tracking** ORM: analytical/OLAP databases like ClickHouse, and complex reporting applications in general — which often run on ordinary Postgres/MySQL, not just OLAP engines, but share the same query *shape*.
@@ -96,7 +102,7 @@ Reporting and dashboard UIs are defined by a query *shape*, not a specific engin
   SELECT {{$args.page}} AS page, {{$args.page_size}} AS page_size, {{$params.total_count}} AS total_count
   ```
 
-- **Multi-source reports** — `--sql(name)--` twigs run against a second named connection (a flags DB, an analytics replica, a warehouse) and combine into one shape in a single operation ([`user/combine`](https://github.com/kirubasankars/yaal/blob/master/tests/fixtures/api/user/combine/$.output.json)), instead of requiring a separate query outside the ORM's own `DbContext`/session.
+- **A second database** — call `query` again with another provider. Yaal does not keep a named-connection registry.
 
 None of this is ClickHouse-specific — it's the same argument for a Postgres or MySQL reporting schema. The report-shaped parts of an app (ad hoc filters, dynamic sort, aggregation, multi-source joins, pagination) are exactly where additive ORMs are weakest, because that shape doesn't map onto entities and relations in the first place.
 
@@ -109,4 +115,4 @@ This isn't "ORMs are bad." A simple OLTP CRUD app on Postgres/MySQL — transact
 - [Optional DSL](../reference/optional-dsl.md) and [sort and dir](../reference/sort-and-dir.md) — the mechanics behind `optional()` / `sort()` / `dir()`
 - [Mode rows](../reference/mode-rows.md) — the `params` mode behind paginated counts
 - [Database URLs](../reference/database-urls.md) — connecting to SQLite, Postgres, MySQL, and ClickHouse
-- [Real SQL](../tutorial/08-real-sql.md), [Pagination](../guides/pagination-and-mode-params.md), [Multi-database](../guides/multi-database.md), and the [experiment sandbox](../guides/experiment-sandbox.md)
+- [Real SQL](../tutorial/08-real-sql.md), [Pagination](../guides/pagination-and-mode-params.md), and the [experiment sandbox](../guides/experiment-sandbox.md)

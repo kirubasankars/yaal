@@ -39,7 +39,7 @@ class ScriptedProvider:
     def error(self):
         self.errored = True
 
-    def execute(self, twig, ctx, helper):
+    def execute(self, sql, parameters):
         return self._responses.pop(0)
 
 
@@ -53,7 +53,7 @@ class TestModes(unittest.TestCase):
         )
         ctx = create_context({"path": "op"})
         out, errors = _execute_branch(
-            _branch(twig_count=2), True, {"db": provider}, ctx, []
+            _branch(twig_count=2), True, provider, ctx, []
         )
         self.assertIsNone(errors)
         self.assertEqual(out, [{"page": 1, "total_count": 42}])
@@ -67,7 +67,7 @@ class TestModes(unittest.TestCase):
             [([{"$mode": "error", "message": "nope", "code": 1}], None)]
         )
         ctx = create_context({"path": "op"})
-        out, errors = _execute_branch(_branch(), True, {"db": provider}, ctx, [])
+        out, errors = _execute_branch(_branch(), True, provider, ctx, [])
         self.assertIsNone(out)
         self.assertEqual(len(errors), 1)
         self.assertEqual(errors[0]["message"], "nope")
@@ -87,7 +87,7 @@ class TestModes(unittest.TestCase):
             ]
         )
         ctx = create_context({"path": "op"})
-        out, errors = _execute_branch(_branch(), True, {"db": provider}, ctx, [])
+        out, errors = _execute_branch(_branch(), True, provider, ctx, [])
         self.assertIsNone(errors)
         self.assertEqual(out, [{"id": 1, "name": "a"}, {"id": 2, "name": "b"}])
         for row in out:
@@ -99,7 +99,7 @@ class TestModes(unittest.TestCase):
             [([{"$mode": "json", "json": '{"id": 7, "ok": true}'}], None)]
         )
         ctx = create_context({"path": "op"})
-        out, errors = _execute_branch(_branch(), True, {"db": provider}, ctx, [])
+        out, errors = _execute_branch(_branch(), True, provider, ctx, [])
         self.assertIsNone(errors)
         self.assertEqual(out, [{"id": 7, "ok": True}])
         self.assertTrue(provider.ended)
@@ -108,14 +108,14 @@ class TestModes(unittest.TestCase):
         payload = {"id": 3, "name": "x"}
         provider = ScriptedProvider([([{"$mode": "json", "json": payload}], None)])
         ctx = create_context({"path": "op"})
-        out, errors = _execute_branch(_branch(), True, {"db": provider}, ctx, [])
+        out, errors = _execute_branch(_branch(), True, provider, ctx, [])
         self.assertIsNone(errors)
         self.assertEqual(out, [payload])
 
     def test_ordinary_rows_without_mode(self):
         provider = ScriptedProvider([([{"id": 1}, {"id": 2}], None)])
         ctx = create_context({"path": "op"})
-        out, errors = _execute_branch(_branch(), True, {"db": provider}, ctx, [])
+        out, errors = _execute_branch(_branch(), True, provider, ctx, [])
         self.assertIsNone(errors)
         self.assertEqual(out, [{"id": 1}, {"id": 2}])
 

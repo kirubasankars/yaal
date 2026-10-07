@@ -759,7 +759,8 @@ class TestOptionalGroupsEndToEnd(unittest.TestCase):
         os.close(fd)
         sqlite3.connect(self._db_path).executescript(SCHEMA.read_text())
         self._yaal = Yaal(str(FIXTURE_API))
-        self._yaal.setup_data_provider("db", "sqlite3:///" + self._db_path)
+        from yaal_drivers import open as open_db
+        self._provider = open_db("sqlite3:///" + self._db_path)
 
     def tearDown(self):
         try:
@@ -769,38 +770,38 @@ class TestOptionalGroupsEndToEnd(unittest.TestCase):
 
     def test_single_row_filters(self):
         self.assertEqual(
-            self._yaal.query("user/groups", args={"pairs": [{"id": 1}]}),
+            self._yaal.query(self._provider, "user/groups", args={"pairs": [{"id": 1}]}),
             [{"id": 1}],
         )
 
     def test_two_rows_or_joined(self):
         self.assertEqual(
-            self._yaal.query("user/groups", args={"pairs": [{"id": 1}, {"id": 2}]}),
+            self._yaal.query(self._provider, "user/groups", args={"pairs": [{"id": 1}, {"id": 2}]}),
             [{"id": 1}, {"id": 2}],
         )
 
     def test_omitted_blob_elides_filter(self):
         self.assertEqual(
-            self._yaal.query("user/groups"),
+            self._yaal.query(self._provider, "user/groups"),
             [{"id": 1}, {"id": 2}],
         )
 
     def test_empty_blob_elides_filter(self):
         self.assertEqual(
-            self._yaal.query("user/groups", args={"pairs": []}),
+            self._yaal.query(self._provider, "user/groups", args={"pairs": []}),
             [{"id": 1}, {"id": 2}],
         )
 
     def test_explain_shows_one_branch_per_row(self):
-        explained = self._yaal.explain_sql(
+        explained = self._yaal.explain_sql(self._provider, 
             "user/groups", args={"pairs": [{"id": 1}, {"id": 2}]}
         )
         self.assertIn("((id = ?) or (id = ?))", explained[0]["sql"])
         self.assertEqual(explained[0]["parameters"], [1, 2])
 
     def test_row_count_change_recompiles(self):
-        one = self._yaal.explain_sql("user/groups", args={"pairs": [{"id": 1}]})
-        two = self._yaal.explain_sql(
+        one = self._yaal.explain_sql(self._provider, "user/groups", args={"pairs": [{"id": 1}]})
+        two = self._yaal.explain_sql(self._provider, 
             "user/groups", args={"pairs": [{"id": 1}, {"id": 2}]}
         )
         self.assertNotEqual(one[0]["sql"], two[0]["sql"])

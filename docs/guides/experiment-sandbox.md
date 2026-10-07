@@ -1,3 +1,9 @@
+<!--
+Copyright 2018 Kiruba Sankar Swaminathan. All rights reserved.
+Use of this source code is governed by a MIT style
+license that can be found in the LICENSE file.
+-->
+
 # Experiment sandbox
 
 **Problem:** edit descriptors without changing `tests/fixtures/api`.
@@ -20,8 +26,6 @@ make experiment-clickhouse-reset
 ```
 
 `experiment-reset` reseeds SQLite and keeps API edits. `experiment-clean` deletes the directory. The ClickHouse targets share `experiment/api/` and point `--db` at Compose (`clickhouse://yaal:yaal@127.0.0.1:9000/yaal`). Seed SQL: `docker/clickhouse/experiment_seed.sql`.
-
-`user/combine` needs a second flags database. Use the SQLite experiment for that, not the ClickHouse one.
 
 ## Your own tree
 

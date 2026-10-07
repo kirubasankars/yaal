@@ -5,7 +5,6 @@
 using Yaal.Descriptors;
 using Yaal.Execution;
 using Yaal.Providers;
-using Yaal.Sql;
 
 namespace Yaal;
 
@@ -15,8 +14,6 @@ public sealed class Yaal
     private readonly IContentReader _contentReader;
     private readonly Dictionary<string, Branch> _descriptors = new();
     private readonly Dictionary<string, Branch> _registered = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, IDataProviderContextManager> _dataProviders = new();
-    private readonly Dictionary<string, string> _dataProviderSchemes = new();
     private readonly bool _debug;
     private readonly string? _precompiled;
 
@@ -33,40 +30,6 @@ public sealed class Yaal
     }
 
     public string GetRootPath() => _rootPath;
-
-    public void SetupDataProvider(string name, string databaseUri)
-    {
-        var (providerName, options) = DatabaseUrl.Parse(databaseUri);
-        _dataProviders[name] = providerName switch
-        {
-            "postgresql" => PostgresProviderFactory.Create(options),
-            "mysql" => MySqlProviderFactory.Create(options),
-            "clickhouse" => ClickHouseProviderFactory.Create(options),
-            "sqlite3" => SqliteProviderFactory.Create(options),
-            _ => throw new UnsupportedDatabaseUrlException(
-                $"Unsupported database URL scheme '{providerName}' for provider '{name}'. " +
-                "Supported schemes: sqlite3, postgresql, mysql, clickhouse"),
-        };
-        _dataProviderSchemes[name] = providerName;
-    }
-
-    /// <summary>Register an app-supplied provider (custom engine, mock, wrapper).</summary>
-    public void SetupDataProvider(string name, IDataProviderContextManager manager, string? scheme = null)
-    {
-        ArgumentNullException.ThrowIfNull(manager);
-        _dataProviders[name] = manager;
-        _dataProviderSchemes[name] = scheme ?? "";
-    }
-
-    public IDataProvider GetDataProvider(string name)
-    {
-        if (!_dataProviders.TryGetValue(name, out var manager))
-        {
-            throw new YaalException(
-                $"Data provider '{name}' is not configured. Call setup_data_provider('{name}', url) first.");
-        }
-        return manager.GetContext();
-    }
 
     public Branch CreateDescriptor(string path, string? outputMapper = null)
     {
@@ -104,37 +67,43 @@ public sealed class Yaal
     }
 
     public object? Query(
+        IDataProvider provider,
         string descriptorPath,
         object? payload = null,
         object? args = null,
         string? outputMapper = null)
     {
+        ArgumentNullException.ThrowIfNull(provider);
         var descriptor = LoadDescriptor(descriptorPath, outputMapper);
         var context = ContextFactory.CreateContext(descriptor, payload, args);
-        return GetResult(descriptor, context);
+        return GetResult(provider, descriptor, context);
     }
 
     public string QueryJson(
+        IDataProvider provider,
         string descriptorPath,
         object? payload = null,
         object? args = null,
         string? outputMapper = null)
     {
+        ArgumentNullException.ThrowIfNull(provider);
         var descriptor = LoadDescriptor(descriptorPath, outputMapper);
         var context = ContextFactory.CreateContext(descriptor, payload, args);
-        return GetResultJson(descriptor, context);
+        return GetResultJson(provider, descriptor, context);
     }
 
     public List<Dictionary<string, object?>> ExplainSql(
+        IDataProvider provider,
         string descriptorPath,
         object? payload = null,
         object? args = null,
         string? outputMapper = null,
         string? placeholder = null)
     {
+        ArgumentNullException.ThrowIfNull(provider);
         var descriptor = LoadDescriptor(descriptorPath, outputMapper);
         var context = ContextFactory.CreateContext(descriptor, payload, args);
-        placeholder ??= DefaultPlaceholder();
+        placeholder ??= string.IsNullOrEmpty(provider.Placeholder) ? "?" : provider.Placeholder;
 
         var helper = new DataProviderHelper();
         var explained = new List<Dictionary<string, object?>>();
@@ -149,7 +118,6 @@ public sealed class Yaal
                     explained.Add(new Dictionary<string, object?>
                     {
                         ["method"] = branch.Method,
-                        ["connection"] = twig.Connection,
                         ["sql"] = compiled.Content,
                         ["parameters"] = helper.BuildParameters(compiled, shape, (_, v) => v),
                     });
@@ -177,11 +145,11 @@ public sealed class Yaal
         return explained;
     }
 
-    public object? GetResult(Branch descriptor, Shape context) =>
-        Executor.GetResult(descriptor, GetDataProvider, context);
+    public object? GetResult(IDataProvider provider, Branch descriptor, Shape context) =>
+        Executor.GetResult(descriptor, provider, context);
 
-    public string GetResultJson(Branch descriptor, Shape context) =>
-        Executor.GetResultJson(descriptor, GetDataProvider, context);
+    public string GetResultJson(IDataProvider provider, Branch descriptor, Shape context) =>
+        Executor.GetResultJson(descriptor, provider, context);
 
     private Branch LoadDescriptor(string descriptorPath, string? outputMapper)
     {
@@ -203,16 +171,4 @@ public sealed class Yaal
 
     private static string DescriptorKey(string descriptorPath, string? outputMapper) =>
         string.IsNullOrEmpty(outputMapper) ? descriptorPath : descriptorPath + "#" + outputMapper;
-
-    private string DefaultPlaceholder()
-    {
-        foreach (var scheme in _dataProviderSchemes.Values)
-        {
-            if (scheme is "postgresql" or "mysql" or "clickhouse")
-                return "%s";
-            if (scheme == "sqlite3")
-                return "?";
-        }
-        return "?";
-    }
 }

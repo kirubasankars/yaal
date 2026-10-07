@@ -1,3 +1,9 @@
+<!--
+Copyright 2018 Kiruba Sankar Swaminathan. All rights reserved.
+Use of this source code is governed by a MIT style
+license that can be found in the LICENSE file.
+-->
+
 # Pagination and `$mode=params`
 
 **Problem:** return a page of rows plus the total count, without a second round trip in application code.

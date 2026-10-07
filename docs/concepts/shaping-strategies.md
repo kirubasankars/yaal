@@ -1,3 +1,9 @@
+<!--
+Copyright 2018 Kiruba Sankar Swaminathan. All rights reserved.
+Use of this source code is governed by a MIT style
+license that can be found in the LICENSE file.
+-->
+
 # Shaping strategies
 
 Flat rows become nested JSON in one of four ways. Pick the one that matches where the rows come from.

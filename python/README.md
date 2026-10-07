@@ -1,8 +1,14 @@
+<!--
+Copyright 2018 Kiruba Sankar Swaminathan. All rights reserved.
+Use of this source code is governed by a MIT style
+license that can be found in the LICENSE file.
+-->
+
 # Yaal for Python
 
-Python implementation of the Yaal SQL→JSON library. Descriptor-driven queries, subtractive `optional()` / `optional_groups` SQL DSL, header array params (`integer[]` for `IN`), nested JSON shaping, and multi-engine providers.
+Python implementation of the Yaal SQL→JSON library. Descriptor-driven queries, subtractive `optional()` / `optional_groups` SQL DSL, header array params (`integer[]` for `IN`), and nested JSON shaping.
 
-Package: `yaal` `0.8.0` (MIT). Database drivers are extras — add the client your app uses. SQLite is stdlib.
+Package: `yaal` `0.8.0` (MIT). The library does not open a connection. Pass a provider to `query`. Driver extras are for the `yaal` command. SQLite is stdlib.
 
 ```bash
 pip install yaal
@@ -36,14 +42,12 @@ make test-integration            # also Postgres/MySQL/ClickHouse
 from yaal import Yaal
 
 y = Yaal("tests/fixtures/api", debug=True)
-y.setup_data_provider("db", "sqlite3:////tmp/app.db")
-# y.setup_data_provider("db", MyContextManager())  # app-supplied provider
 
-result = y.query("user/get", args={"id": 1})
-raw = y.query_json("user/get", args={"id": 1})
-page = y.query("user/page", args={"page": 1, "page_size": 10})
+result = y.query(provider, "user/get", args={"id": 1})
+raw = y.query_json(provider, "user/get", args={"id": 1})
+page = y.query(provider, "user/page", args={"page": 1, "page_size": 10})
 
-for twig in y.explain_sql("user/get", args={"id": 1}):
+for twig in y.explain_sql(provider, "user/get", args={"id": 1}):
     print(twig["sql"])
 ```
 
@@ -56,7 +60,7 @@ y = Yaal("tests/fixtures/api", precompiled="/tmp/yaal-precompiled")
 
 `debug=True` forces live SQL/JSON and ignores `precompiled`. See [precompiled artifacts](../docs/reference/precompiled-artifacts.md).
 
-Descriptors are shared with the .NET library under [`../tests/fixtures/api/`](../tests/fixtures/api/) (`user/get`, `user/nested`, `user/list`, `user/groups`, `user/page`, `report/summary`, `user/combine`). Compile goldens for optional filters and groups: [`../tests/fixtures/sql_compile/`](../tests/fixtures/sql_compile/).
+Descriptors are shared with the .NET library under [`../tests/fixtures/api/`](../tests/fixtures/api/) (`user/get`, `user/nested`, `user/list`, `user/groups`, `user/page`, `report/summary`). Compile goldens for optional filters and groups: [`../tests/fixtures/sql_compile/`](../tests/fixtures/sql_compile/).
 
 ## Database URLs
 

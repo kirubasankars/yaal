@@ -3,8 +3,6 @@
 // license that can be found in the LICENSE file.
 
 using MySqlConnector;
-using Yaal.Execution;
-using Yaal.Sql;
 
 namespace Yaal.Providers;
 
@@ -74,6 +72,8 @@ public sealed class MySqlContextManager : IDataProviderContextManager
 
 public sealed class MySqlDataProvider : IDataProvider
 {
+    public string Placeholder => "%s";
+
     private readonly string _connectionString;
     private MySqlConnection? _conn;
     private MySqlTransaction? _tx;
@@ -120,16 +120,14 @@ public sealed class MySqlDataProvider : IDataProvider
     }
 
     public (IReadOnlyList<IDictionary<string, object?>> Rows, object? LastInsertedId) Execute(
-        Twig twig, Shape inputShape, DataProviderHelper helper)
+        string sql, IReadOnlyList<object?> parameters)
     {
         var con = _conn!;
-        var sql = helper.GetExecutableContent("%s", twig, inputShape);
-        var args = helper.BuildParameters(sql, inputShape, (_, v) => v);
-        var (content, names) = PlaceholderUtil.ToNumbered(sql.Content, args.Count, i => "@p" + i);
+        var (content, names) = PlaceholderUtil.ToNumbered(sql, parameters.Count, i => "@p" + i);
 
         using var cmd = new MySqlCommand(content, con, _tx);
-        for (var i = 0; i < args.Count; i++)
-            cmd.Parameters.AddWithValue(names[i], args[i] ?? DBNull.Value);
+        for (var i = 0; i < parameters.Count; i++)
+            cmd.Parameters.AddWithValue(names[i], parameters[i] ?? DBNull.Value);
 
         var rows = new List<IDictionary<string, object?>>();
         using var reader = cmd.ExecuteReader();

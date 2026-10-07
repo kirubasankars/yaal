@@ -4,7 +4,9 @@
 
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
+using Yaal.Drivers;
 using Yaal.Execution;
+using Yaal.Providers;
 using Yaal.Sql;
 
 namespace Yaal.Tests;
@@ -106,6 +108,7 @@ public class ParamDefaultIntegrationTests : IDisposable
 {
     private readonly string _dbPath;
     private readonly Yaal _yaal;
+    private readonly IDataProvider _db;
 
     private static string RepoRoot =>
         Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", ".."));
@@ -122,7 +125,7 @@ public class ParamDefaultIntegrationTests : IDisposable
         }
 
         _yaal = new Yaal(Path.Combine(RepoRoot, "tests", "fixtures", "api"), debug: true);
-        _yaal.SetupDataProvider("db", "sqlite3:///" + _dbPath);
+        _db = DriverRegistry.Open("sqlite3:///" + _dbPath);
     }
 
     public void Dispose()
@@ -133,11 +136,11 @@ public class ParamDefaultIntegrationTests : IDisposable
     [Fact]
     public void List_default_sort_id_asc()
     {
-        var result = _yaal.Query("user/list");
+        var result = _yaal.Query(_db, "user/list");
         var rows = ((System.Collections.IEnumerable)result!).Cast<Dictionary<string, object?>>().ToList();
         rows.Select(r => Convert.ToInt64(r["id"])).Should().Equal(1L, 2L);
 
-        var explained = _yaal.ExplainSql("user/list");
+        var explained = _yaal.ExplainSql(_db, "user/list");
         var sql = explained[0]["sql"]!.ToString()!;
         sql.Should().Contain("u.user_id");
         sql.Should().Contain("ASC");

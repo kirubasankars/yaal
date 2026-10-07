@@ -72,6 +72,8 @@ class ClickHouseContextManager:
 
 class ClickHouseDataProvider:
 
+    placeholder = "%s"
+
     def __init__(self, client_kwargs):
         self._client_kwargs = client_kwargs
         self._client = None
@@ -98,11 +100,9 @@ class ClickHouseDataProvider:
     def get_value_converter(param_type, value):
         return value
 
-    def execute(self, twig, input_shape, helper):
+    def execute(self, sql, parameters):
         client = self._client
-        sql = helper.get_executable_content("%s", twig, input_shape)
-        args = helper.build_parameters(sql, input_shape, self.get_value_converter)
-        content, params = _to_pyformat(sql["content"], args)
+        content, params = _to_pyformat(sql, parameters)
         rows_raw, columns_with_types = client.execute(
             content,
             params or None,

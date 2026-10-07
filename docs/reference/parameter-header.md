@@ -1,3 +1,9 @@
+<!--
+Copyright 2018 Kiruba Sankar Swaminathan. All rights reserved.
+Use of this source code is governed by a MIT style
+license that can be found in the LICENSE file.
+-->
+
 # Parameter header
 
 The header is the only input model. It is the first significant token in a SQL file. Leading blank lines are fine. Bind with `{{...}}`. Schemas are the union of headers in the operation.
@@ -44,4 +50,3 @@ Plain `--` line comments are allowed in query text. Yaal directives are only:
 
 - `--(name type, ...)--`
 - `--sql--`
-- `--sql(connection)--`

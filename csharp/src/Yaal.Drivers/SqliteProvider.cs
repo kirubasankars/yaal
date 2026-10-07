@@ -3,8 +3,6 @@
 // license that can be found in the LICENSE file.
 
 using Microsoft.Data.Sqlite;
-using Yaal.Execution;
-using Yaal.Sql;
 
 namespace Yaal.Providers;
 
@@ -20,8 +18,10 @@ public sealed class SqliteContextManager : IDataProviderContextManager
     public IDataProvider GetContext() => new SqliteDataProvider(_options);
 }
 
-public sealed class SqliteDataProvider : IDataProvider
+public sealed class SqliteDataProvider : IDataProvider, IValueConvertingProvider
 {
+    public string Placeholder => "?";
+
     private readonly DatabaseOptions _options;
     private readonly string _database;
     private SqliteConnection? _con;
@@ -77,30 +77,30 @@ public sealed class SqliteDataProvider : IDataProvider
         con.Dispose();
     }
 
+    public object? ConvertValue(string paramType, object? value) => GetValue(paramType, value);
+
     public (IReadOnlyList<IDictionary<string, object?>> Rows, object? LastInsertedId) Execute(
-        Twig twig, Shape inputShape, DataProviderHelper helper)
+        string sql, IReadOnlyList<object?> parameters)
     {
         var con = _con!;
-        var sql = helper.GetExecutableContent("?", twig, inputShape);
         using var cmd = con.CreateCommand();
-        cmd.CommandText = sql.Content;
-        var args = helper.BuildParameters(sql, inputShape, GetValue);
-        for (var i = 0; i < args.Count; i++)
+        cmd.CommandText = sql;
+        for (var i = 0; i < parameters.Count; i++)
         {
             var p = cmd.CreateParameter();
             p.ParameterName = "$p" + i;
-            p.Value = args[i] ?? DBNull.Value;
+            p.Value = parameters[i] ?? DBNull.Value;
             cmd.Parameters.Add(p);
         }
 
         // Rewrite ? placeholders to named $pN for Microsoft.Data.Sqlite
-        if (args.Count > 0)
+        if (parameters.Count > 0)
         {
-            var parts = sql.Content.Split('?');
-            if (parts.Length - 1 == args.Count)
+            var parts = sql.Split('?');
+            if (parts.Length - 1 == parameters.Count)
             {
                 var rendered = parts[0];
-                for (var i = 0; i < args.Count; i++)
+                for (var i = 0; i < parameters.Count; i++)
                     rendered += "$p" + i + parts[i + 1];
                 cmd.CommandText = rendered;
             }

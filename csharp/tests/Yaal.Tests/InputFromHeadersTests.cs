@@ -4,6 +4,7 @@
 
 using FluentAssertions;
 using Yaal.Descriptors;
+using Yaal.Drivers;
 
 namespace Yaal.Tests;
 
@@ -69,8 +70,8 @@ public class InputFromHeadersTests
         {
             ["$"] = "--(id! integer, name! string)--\nselect {{id}} as id, {{name}} as name\n",
         }), debug: true);
-        y.SetupDataProvider("db", "sqlite3:///");
-        var result = (Dictionary<string, object?>)y.Query("op", payload: new { name = "x" })!;
+        var db = DriverRegistry.Open("sqlite3:///");
+        var result = (Dictionary<string, object?>)y.Query(db, "op", payload: new { name = "x" })!;
         result.Should().ContainKey("errors");
     }
 
@@ -81,9 +82,9 @@ public class InputFromHeadersTests
         {
             ["$"] = "--(id integer)--\nselect {{id}} as id\n",
         }), debug: true);
-        y.SetupDataProvider("db", "sqlite3:///");
+        var db = DriverRegistry.Open("sqlite3:///");
         var result = (Dictionary<string, object?>)y.Query(
-            "op", payload: new Dictionary<string, object?> { ["id"] = "not-an-int" })!;
+            db, "op", payload: new Dictionary<string, object?> { ["id"] = "not-an-int" })!;
         result.Should().ContainKey("errors");
     }
 

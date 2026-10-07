@@ -19,6 +19,8 @@ class SQLiteContextManager:
 
 class SQLiteDataProvider:
 
+    placeholder = "?"
+
     def __init__(self, options):
         self._options = options
         self._database = options.get("database") or ""
@@ -61,13 +63,11 @@ class SQLiteDataProvider:
             return sqlite3.Binary(value)
         return value
 
-    def execute(self, twig, input_shape, helper):
+    def execute(self, sql, parameters):
         con = self._con
-        sql = helper.get_executable_content("?", twig, input_shape)
         cur = con.cursor()
         try:
-            args = helper.build_parameters(sql, input_shape, self.get_value)
-            cur.execute(sql["content"], args)
+            cur.execute(sql, parameters)
             rows = fetch_dict_rows(cur)
             return rows, cur.lastrowid
         finally:

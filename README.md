@@ -1,8 +1,14 @@
+<!--
+Copyright 2018 Kiruba Sankar Swaminathan. All rights reserved.
+Use of this source code is governed by a MIT style
+license that can be found in the LICENSE file.
+-->
+
 # Yaal
 
 **Yaal is a subtractive SQL ORM.**
 
-You author full SQL (plus JSON shapes). At bind time Yaal **subtracts** unused `optional(...)` / null-filter fragments, runs the remaining statements (optionally across named databases), and shapes flat rows into **nested JSON**. Aggregations, `WITH` / CTEs, and window functions stay ordinary SQL—not a query-builder escape hatch.
+You author full SQL (plus JSON shapes). At bind time Yaal **subtracts** unused `optional(...)` / null-filter fragments, runs the remaining statements on the provider you pass to `query`, and shapes flat rows into **nested JSON**. Aggregations, `WITH` / CTEs, and window functions stay ordinary SQL—not a query-builder escape hatch.
 
 That is the opposite of additive ORMs that build SQL up from models. Yaal is not ActiveRecord: no entity tracking, migrations, or query-builder DSL. SQL files remain the source of truth.
 
@@ -104,22 +110,6 @@ yaal query user/page --arg page=1 --arg page_size=10
 # {"paging":{"page":1,"page_size":10,"total_count":2},"data":[...]}
 ```
 
-### Multi-database
-
-Named providers + `--sql(name)--` twigs in one operation. [Full example →](docs/guides/multi-database.md)
-
-```python
-y.setup_data_provider("db", "sqlite3:///" + app_db)
-y.setup_data_provider("flags", "sqlite3:///" + flags_db)
-y.query("user/combine", args={"id": 1})
-# {"app":{"id":1,"name":"admin"},"flags":{"user_id":1,"vip":1}}
-```
-
-```sql
---sql(flags)--
-SELECT f.user_id, f.vip FROM external_flags f WHERE f.user_id = {{$args.id}}
-```
-
 ### Real SQL (`WITH` / aggregations)
 
 CTEs and aggregates stay ordinary SQL. [Full example →](docs/tutorial/08-real-sql.md)
@@ -141,11 +131,11 @@ yaal query report/summary
 Python and .NET 8 share [`tests/fixtures/api/`](tests/fixtures/api/). [Full example →](docs/appendix/python.md)
 
 ```python
-y.query("user/get", args={"id": 1})
+y.query(provider, "user/get", args={"id": 1})
 ```
 
 ```csharp
-y.Query("user/get", args: new { id = 1 });
+y.Query(provider, "user/get", args: new { id = 1 });
 ```
 
 ### Ahead-of-time compile
@@ -216,11 +206,11 @@ make experiment-clickhouse
 make experiment-clickhouse-reset      # truncate+reseed CH (keep API edits)
 ```
 
-`make example` runs [`python/examples/demo.py`](python/examples/demo.py): temp SQLite from `docker/sqlite/schema.sql` (+ flags DB), then get / nested / list / page / `report/summary` / `user/combine` plus `explain` elision (read-only). CLI commands with `--db` omitted also seed a temp SQLite DB.
+`make example` runs [`python/examples/demo.py`](python/examples/demo.py): temp SQLite from `docker/sqlite/schema.sql`, then get / nested / list / page / `report/summary` plus `explain` elision (read-only). CLI commands with `--db` omitted also seed a temp SQLite DB.
 
 `make experiment` uses a local sandbox at `experiment/` (gitignored): a copy of `tests/fixtures/api` plus `yaal.db`. Edit `experiment/api/` and re-run; `make experiment-reset` reseeds the DB without wiping API edits.
 
-`make experiment-clickhouse` shares `experiment/api/` and points `--db` at Compose ClickHouse (`clickhouse://yaal:yaal@127.0.0.1:9000/yaal`). It starts the `clickhouse` service if needed; `experiment-clickhouse-reset` reloads rows via [`docker/clickhouse/experiment_seed.sql`](docker/clickhouse/experiment_seed.sql). (`user/combine` still needs a second SQLite flags DB — use the SQLite experiment for that.)
+`make experiment-clickhouse` shares `experiment/api/` and points `--db` at Compose ClickHouse (`clickhouse://yaal:yaal@127.0.0.1:9000/yaal`). It starts the `clickhouse` service if needed; `experiment-clickhouse-reset` reloads rows via [`docker/clickhouse/experiment_seed.sql`](docker/clickhouse/experiment_seed.sql).
 
 ### CLI
 
@@ -240,28 +230,25 @@ yaal query orders/list --api ./my-api --db 'sqlite3:////tmp/app.db' --args '{"st
 from yaal import Yaal
 
 y = Yaal("tests/fixtures/api", debug=True)
-y.setup_data_provider("db", "sqlite3:////tmp/app.db")
-
-result = y.query("user/get", args={"id": 1})
+result = y.query(provider, "user/get", args={"id": 1})
 # {'id': 1, 'name': 'admin', 'roles': [{'id': 1, 'name': 'Administrator'}, ...]}
 ```
 
 ```csharp
 var y = new Yaal.Yaal("tests/fixtures/api", debug: true);
-y.SetupDataProvider("db", "sqlite3:////tmp/app.db");
-var user = y.Query("user/get", args: new { id = 1 });
+var user = y.Query(provider, "user/get", args: new { id = 1 });
 ```
 
 Preview compiled SQL (after null-filter elision):
 
 ```python
-for twig in y.explain_sql("user/get", args={"id": 1}):
+for twig in y.explain_sql(provider, "user/get", args={"id": 1}):
     print(twig["sql"], twig["parameters"])
 ```
 
 ## Documentation
 
-Operations are folders of `*.sql` (+ `$.output.json`), discovered filesystem-first and called by path (`y.query("user/get", ...)`). The docs site splits that material into a tutorial, task guides, concept notes, and a reference.
+Operations are folders of `*.sql` (+ `$.output.json`), discovered filesystem-first and called by path (`y.query(provider, "user/get", ...)`). The docs site splits that material into a tutorial, task guides, concept notes, and a reference.
 
 ```bash
 make docs-install

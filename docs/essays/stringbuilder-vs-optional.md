@@ -1,3 +1,9 @@
+<!--
+Copyright 2018 Kiruba Sankar Swaminathan. All rights reserved.
+Use of this source code is governed by a MIT style
+license that can be found in the LICENSE file.
+-->
+
 # StringBuilder vs `optional()` — SQL construction
 
 Additive `StringBuilder` filter appends versus Yaal subtractive `optional()` elision. **SQL construction only** — no database. The question is how much per-request work Yaal pays to subtract unused predicates compared with typical hand-rolled C# that appends `AND` clauses when a value is present.

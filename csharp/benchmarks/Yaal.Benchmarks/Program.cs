@@ -5,9 +5,11 @@
 using System.Diagnostics;
 using Yaal.Benchmarks.Generated;
 using Yaal.Descriptors;
+using Yaal.Providers;
 using YaalClient = global::Yaal.Yaal;
 
 const string descriptorPath = "user/list";
+var explainProvider = new ExplainProvider();
 const int warmup = 10;
 const int iterations = 200;
 
@@ -44,20 +46,20 @@ try
     Bench("Startup: Yaal + precompiled JSON + ExplainSql", () =>
     {
         var y = new YaalClient(apiRoot, precompiled: precompiledDir);
-        _ = y.ExplainSql(descriptorPath, args: new { active = 1 });
+        _ = y.ExplainSql(explainProvider, descriptorPath, args: new { active = 1 });
     });
 
     Bench("Startup: Yaal + RegisterDescriptor(CS) + ExplainSql", () =>
     {
         var y = new YaalClient(apiRoot);
         y.RegisterDescriptor(descriptorPath, UserList.Descriptor);
-        _ = y.ExplainSql(descriptorPath, args: new { active = 1 });
+        _ = y.ExplainSql(explainProvider, descriptorPath, args: new { active = 1 });
     });
 
     Bench("Startup: Yaal debug + ExplainSql", () =>
     {
         var y = new YaalClient(apiRoot, debug: true);
-        _ = y.ExplainSql(descriptorPath, args: new { active = 1 });
+        _ = y.ExplainSql(explainProvider, descriptorPath, args: new { active = 1 });
     });
 }
 finally
@@ -95,4 +97,16 @@ static string FindRepoRoot()
     }
 
     throw new InvalidOperationException("Could not find tests/fixtures/api");
+}
+
+sealed class ExplainProvider : IDataProvider
+{
+    public string Placeholder => "?";
+    public void Begin() { }
+    public void End() { }
+    public void Error() { }
+
+    public (IReadOnlyList<IDictionary<string, object?>> Rows, object? LastInsertedId) Execute(
+        string sql, IReadOnlyList<object?> parameters) =>
+        (Array.Empty<IDictionary<string, object?>>(), null);
 }

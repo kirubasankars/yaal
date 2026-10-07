@@ -4,6 +4,7 @@
 
 using FluentAssertions;
 using Yaal.Descriptors;
+using Yaal.Drivers;
 
 namespace Yaal.Tests;
 
@@ -23,7 +24,7 @@ public class RegisterDescriptorTests
         var y = new Yaal(FixtureApi);
         y.RegisterDescriptor("user/get", branch);
 
-        var explain = y.ExplainSql("user/get", args: new { id = 1 });
+        var explain = y.ExplainSql(DriverRegistry.Open("sqlite3:///"), "user/get", args: new { id = 1 });
         explain.Should().NotBeEmpty();
     }
 
@@ -41,7 +42,7 @@ public class RegisterDescriptorTests
         {
             var y = new Yaal(FixtureApi, precompiled: corruptDir);
             y.RegisterDescriptor("user/get", branch);
-            var explain = y.ExplainSql("user/get", args: new { id = 1 });
+            var explain = y.ExplainSql(DriverRegistry.Open("sqlite3:///"), "user/get", args: new { id = 1 });
             explain.Should().NotBeEmpty();
         }
         finally
@@ -66,7 +67,7 @@ public class RegisterDescriptorTests
             var y = new Yaal(FixtureApi, precompiled: dir);
             y.RegisterDescriptor("user/list", branch);
             y.UnregisterDescriptor("user/list");
-            var explain = y.ExplainSql("user/list", args: new { active = 1 });
+            var explain = y.ExplainSql(DriverRegistry.Open("sqlite3:///"), "user/list", args: new { active = 1 });
             explain.Should().NotBeEmpty();
         }
         finally

@@ -3,8 +3,6 @@
 // license that can be found in the LICENSE file.
 
 using Npgsql;
-using Yaal.Execution;
-using Yaal.Sql;
 
 namespace Yaal.Providers;
 
@@ -71,6 +69,8 @@ public sealed class PostgresContextManager : IDataProviderContextManager
 
 public sealed class PostgresDataProvider : IDataProvider
 {
+    public string Placeholder => "%s";
+
     private readonly string _connectionString;
     private NpgsqlConnection? _conn;
     private NpgsqlTransaction? _tx;
@@ -120,16 +120,14 @@ public sealed class PostgresDataProvider : IDataProvider
     }
 
     public (IReadOnlyList<IDictionary<string, object?>> Rows, object? LastInsertedId) Execute(
-        Twig twig, Shape inputShape, DataProviderHelper helper)
+        string sql, IReadOnlyList<object?> parameters)
     {
         var con = _conn!;
-        var sql = helper.GetExecutableContent("%s", twig, inputShape);
-        var args = helper.BuildParameters(sql, inputShape, (_, v) => v);
-        var (content, _) = PlaceholderUtil.ToNumbered(sql.Content, args.Count, i => "$" + (i + 1));
+        var (content, _) = PlaceholderUtil.ToNumbered(sql, parameters.Count, i => "$" + (i + 1));
 
         using var cmd = new NpgsqlCommand(content, con, _tx);
-        for (var i = 0; i < args.Count; i++)
-            cmd.Parameters.AddWithValue(args[i] ?? DBNull.Value);
+        for (var i = 0; i < parameters.Count; i++)
+            cmd.Parameters.AddWithValue(parameters[i] ?? DBNull.Value);
 
         var rows = new List<IDictionary<string, object?>>();
         using var reader = cmd.ExecuteReader();

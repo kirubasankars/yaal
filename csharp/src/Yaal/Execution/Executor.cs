@@ -5,6 +5,7 @@
 using System.Text.Json;
 using Yaal.Descriptors;
 using Yaal.Providers;
+using Yaal.Sql;
 
 namespace Yaal.Execution;
 
@@ -12,24 +13,24 @@ public static class Executor
 {
     public static object? GetResult(
         Branch descriptor,
-        Func<string, IDataProvider> getDataProvider,
+        IDataProvider provider,
         Shape context)
     {
-        return GetResultCore(descriptor, getDataProvider, context);
+        return GetResultCore(descriptor, provider, context);
     }
 
     public static string GetResultJson(
         Branch descriptor,
-        Func<string, IDataProvider> getDataProvider,
+        IDataProvider provider,
         Shape context)
     {
-        var result = GetResult(descriptor, getDataProvider, context);
+        var result = GetResult(descriptor, provider, context);
         return JsonUtil.Serialize(result);
     }
 
     private static object? GetResultCore(
         Branch descriptor,
-        Func<string, IDataProvider> getDataProvider,
+        IDataProvider provider,
         Shape ctx)
     {
         var errors = new List<Dictionary<string, object?>>();
@@ -41,11 +42,7 @@ public static class Executor
         if (errors.Count > 0)
             return new Dictionary<string, object?> { ["errors"] = errors };
 
-        var dataProviders = new Dictionary<string, IDataProvider>(StringComparer.Ordinal);
-        foreach (var con in descriptor.Connections ?? new List<string> { "db" })
-            dataProviders[con] = getDataProvider(con);
-
-        var (rs, execErrors) = ExecuteBranch(descriptor, true, dataProviders, ctx, new List<IDictionary<string, object?>>());
+        var (rs, execErrors) = ExecuteBranch(descriptor, true, provider, ctx, new List<IDictionary<string, object?>>());
         if (execErrors != null)
             return new Dictionary<string, object?> { ["errors"] = execErrors };
 
@@ -56,9 +53,24 @@ public static class Executor
             rs ?? new List<IDictionary<string, object?>>());
     }
 
+    private static (IReadOnlyList<IDictionary<string, object?>> Rows, object? LastInsertedId) ExecuteOnProvider(
+        IDataProvider provider,
+        Twig twig,
+        Shape context,
+        DataProviderHelper helper)
+    {
+        ValueConverter converter = (_, value) => value;
+        if (provider is IValueConvertingProvider converting)
+            converter = converting.ConvertValue;
+        var placeholder = string.IsNullOrEmpty(provider.Placeholder) ? "?" : provider.Placeholder;
+        var compiled = helper.GetExecutableContent(placeholder, twig, context);
+        var parameters = helper.BuildParameters(compiled, context, converter);
+        return provider.Execute(compiled.Content, parameters);
+    }
+
     private static (List<IDictionary<string, object?>>? Rows, List<IDictionary<string, object?>>? Errors) ExecuteTwigs(
         Branch branch,
-        Dictionary<string, IDataProvider> dataProviders,
+        IDataProvider provider,
         Shape context,
         DataProviderHelper dataProviderHelper)
     {
@@ -71,12 +83,12 @@ public static class Executor
 
         foreach (var twig in twigs)
         {
-            var connection = twig.Connection;
             IReadOnlyList<IDictionary<string, object?>> output;
             object? outputLastInsertedId;
             try
             {
-                (output, outputLastInsertedId) = dataProviders[connection].Execute(twig, context, dataProviderHelper);
+                (output, outputLastInsertedId) = ExecuteOnProvider(
+                    provider, twig, context, dataProviderHelper);
             }
             catch (SortDirException ex)
             {
@@ -151,36 +163,21 @@ public static class Executor
             _ => value.ToString() ?? "",
         };
 
-    private static void TrunkCleanup(
-        Dictionary<string, IDataProvider> dataProviders,
-        IDataProvider dbDataProvider,
-        bool failed)
+    private static void TrunkCleanup(IDataProvider provider, bool failed)
     {
         if (failed)
         {
-            try { dbDataProvider.Error(); } catch { /* ignore */ }
-            foreach (var (name, dataProvider) in dataProviders)
-            {
-                if (name != "db")
-                {
-                    try { dataProvider.Error(); } catch { /* ignore */ }
-                }
-            }
+            try { provider.Error(); } catch { /* ignore */ }
             return;
         }
 
-        dbDataProvider.End();
-        foreach (var (name, dataProvider) in dataProviders)
-        {
-            if (name != "db")
-                dataProvider.End();
-        }
+        provider.End();
     }
 
     internal static (List<IDictionary<string, object?>>? Rows, List<IDictionary<string, object?>>? Errors) ExecuteBranch(
         Branch branch,
         bool isTrunk,
-        Dictionary<string, IDataProvider> dataProviders,
+        IDataProvider provider,
         Shape context,
         List<IDictionary<string, object?>> parentRows)
     {
@@ -189,7 +186,6 @@ public static class Executor
         var useParentRows = branch.UseParentRows;
         var output = new List<IDictionary<string, object?>>();
         var dataProviderHelper = new DataProviderHelper();
-        var dbDataProvider = dataProviders["db"];
         var began = false;
         var failed = false;
 
@@ -206,8 +202,7 @@ public static class Executor
             {
                 if (isTrunk)
                 {
-                    foreach (var dataProvider in dataProviders.Values)
-                        dataProvider.Begin();
+                    provider.Begin();
                     began = true;
                 }
 
@@ -218,7 +213,7 @@ public static class Executor
                     {
                         dataProviderHelper.ClearCache();
                         var itemCtx = (Shape)context.GetProp("@" + i)!;
-                        var (rs, errors) = ExecuteTwigs(branch, dataProviders, itemCtx, dataProviderHelper);
+                        var (rs, errors) = ExecuteTwigs(branch, provider, itemCtx, dataProviderHelper);
                         if (errors != null)
                         {
                             failed = true;
@@ -229,7 +224,7 @@ public static class Executor
                 }
                 else if (inputType == "object")
                 {
-                    var (rs, errors) = ExecuteTwigs(branch, dataProviders, context, dataProviderHelper);
+                    var (rs, errors) = ExecuteTwigs(branch, provider, context, dataProviderHelper);
                     if (errors != null)
                     {
                         failed = true;
@@ -251,7 +246,7 @@ public static class Executor
                         subNodeShape = nestedShape;
 
                     var (subNodeOutput, errors) = ExecuteBranch(
-                        branchDescriptor, false, dataProviders, subNodeShape, output);
+                        branchDescriptor, false, provider, subNodeShape, output);
                     if (errors != null)
                     {
                         failed = true;
@@ -330,7 +325,7 @@ public static class Executor
         finally
         {
             if (isTrunk && began)
-                TrunkCleanup(dataProviders, dbDataProvider, failed);
+                TrunkCleanup(provider, failed);
         }
     }
 }

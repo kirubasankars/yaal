@@ -4,26 +4,26 @@
 
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
+using Yaal.Drivers;
+using Yaal.Providers;
 
 namespace Yaal.Tests;
 
 public class SqliteIntegrationTests : IDisposable
 {
     private readonly string _dbPath;
-    private readonly string _flagsPath;
     private readonly Yaal _yaal;
+    private readonly IDataProvider _db;
 
     private static string RepoRoot =>
         Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", ".."));
 
     private static string FixtureApi => Path.Combine(RepoRoot, "tests", "fixtures", "api");
     private static string SchemaSql => Path.Combine(RepoRoot, "docker", "sqlite", "schema.sql");
-    private static string FlagsSchemaSql => Path.Combine(RepoRoot, "docker", "sqlite", "flags_schema.sql");
 
     public SqliteIntegrationTests()
     {
         _dbPath = Path.Combine(Path.GetTempPath(), "yaal-csharp-" + Guid.NewGuid().ToString("N") + ".db");
-        _flagsPath = Path.Combine(Path.GetTempPath(), "yaal-csharp-flags-" + Guid.NewGuid().ToString("N") + ".db");
 
         using (var con = new SqliteConnection("Data Source=" + _dbPath))
         {
@@ -33,29 +33,19 @@ public class SqliteIntegrationTests : IDisposable
             cmd.ExecuteNonQuery();
         }
 
-        using (var con = new SqliteConnection("Data Source=" + _flagsPath))
-        {
-            con.Open();
-            using var cmd = con.CreateCommand();
-            cmd.CommandText = File.ReadAllText(FlagsSchemaSql);
-            cmd.ExecuteNonQuery();
-        }
-
         _yaal = new Yaal(FixtureApi, debug: true);
-        _yaal.SetupDataProvider("db", "sqlite3:///" + _dbPath);
-        _yaal.SetupDataProvider("flags", "sqlite3:///" + _flagsPath);
+        _db = DriverRegistry.Open("sqlite3:///" + _dbPath);
     }
 
     public void Dispose()
     {
         try { File.Delete(_dbPath); } catch { /* ignore */ }
-        try { File.Delete(_flagsPath); } catch { /* ignore */ }
     }
 
     [Fact]
     public void User_with_nested_roles()
     {
-        var result = _yaal.Query("user/get", args: new { id = 1 });
+        var result = _yaal.Query(_db, "user/get", args: new { id = 1 });
         var json = JsonUtil.Serialize(result);
         json.Should().Contain("\"admin\"");
         json.Should().Contain("Administrator");
@@ -71,15 +61,15 @@ public class SqliteIntegrationTests : IDisposable
     [Fact]
     public void User_nested_child_sql_matches_parent_rows()
     {
-        var nested = JsonUtil.Serialize(_yaal.Query("user/nested", args: new { id = 1 }));
-        var joined = JsonUtil.Serialize(_yaal.Query("user/get", args: new { id = 1 }));
+        var nested = JsonUtil.Serialize(_yaal.Query(_db, "user/nested", args: new { id = 1 }));
+        var joined = JsonUtil.Serialize(_yaal.Query(_db, "user/get", args: new { id = 1 }));
         nested.Should().Be(joined);
     }
 
     [Fact]
     public void User_with_single_role()
     {
-        var result = _yaal.Query("user/get", args: new { id = 2 });
+        var result = _yaal.Query(_db, "user/get", args: new { id = 2 });
         var dict = (Dictionary<string, object?>)result!;
         dict["id"].Should().Be(2L);
         dict["name"]!.ToString().Should().Be("guest");
@@ -90,7 +80,7 @@ public class SqliteIntegrationTests : IDisposable
     [Fact]
     public void Query_json_returns_string()
     {
-        var json = _yaal.QueryJson("user/get", args: new { id = 1 });
+        var json = _yaal.QueryJson(_db, "user/get", args: new { id = 1 });
         json.Should().StartWith("{");
         json.Should().Contain("admin");
     }
@@ -98,7 +88,7 @@ public class SqliteIntegrationTests : IDisposable
     [Fact]
     public void User_page_branches()
     {
-        var result = _yaal.Query("user/page", args: new { page = 1, page_size = 10 });
+        var result = _yaal.Query(_db, "user/page", args: new { page = 1, page_size = 10 });
         var dict = (Dictionary<string, object?>)result!;
         var paging = (Dictionary<string, object?>)dict["paging"]!;
         AsInt64(paging["page"]).Should().Be(1);
@@ -126,21 +116,21 @@ public class SqliteIntegrationTests : IDisposable
     [Fact]
     public void User_create_multi_twig()
     {
-        var result = _yaal.Query("user/create", payload: new { id = 3, name = "newbie" });
+        var result = _yaal.Query(_db, "user/create", payload: new { id = 3, name = "newbie" });
         var dict = (Dictionary<string, object?>)result!;
         dict["id"].Should().Be(3L);
         dict["name"]!.ToString().Should().Be("newbie");
         var roles = ((System.Collections.IEnumerable)dict["roles"]!).Cast<object>().ToList();
         roles.Should().HaveCount(1);
 
-        var loaded = (Dictionary<string, object?>)_yaal.Query("user/get", args: new { id = 3 })!;
+        var loaded = (Dictionary<string, object?>)_yaal.Query(_db, "user/get", args: new { id = 3 })!;
         loaded["name"]!.ToString().Should().Be("newbie");
     }
 
     [Fact]
     public void Report_summary_with_aggregation()
     {
-        var result = _yaal.Query("report/summary");
+        var result = _yaal.Query(_db, "report/summary");
         var dict = (Dictionary<string, object?>)result!;
         AsInt64(dict["user_count"]).Should().Be(2);
         AsInt64(dict["active_count"]).Should().Be(2);
@@ -148,22 +138,9 @@ public class SqliteIntegrationTests : IDisposable
     }
 
     [Fact]
-    public void User_combine_multi_database()
-    {
-        var result = _yaal.Query("user/combine", args: new { id = 1 });
-        var dict = (Dictionary<string, object?>)result!;
-        var app = (Dictionary<string, object?>)dict["app"]!;
-        AsInt64(app["id"]).Should().Be(1);
-        app["name"]!.ToString().Should().Be("admin");
-        var flags = (Dictionary<string, object?>)dict["flags"]!;
-        AsInt64(flags["user_id"]).Should().Be(1);
-        AsInt64(flags["vip"]).Should().Be(1);
-    }
-
-    [Fact]
     public void Optional_in_elided_returns_all_users()
     {
-        var rows = ((System.Collections.IEnumerable)_yaal.Query("user/optional_in")!)
+        var rows = ((System.Collections.IEnumerable)_yaal.Query(_db, "user/optional_in")!)
             .Cast<object>().ToList();
         rows.Should().HaveCount(2);
         Ids(rows).Should().Equal(1L, 2L);
@@ -172,7 +149,7 @@ public class SqliteIntegrationTests : IDisposable
     [Fact]
     public void Optional_in_filters_by_integer_array()
     {
-        var rows = ((System.Collections.IEnumerable)_yaal.Query(
+        var rows = ((System.Collections.IEnumerable)_yaal.Query(_db, 
             "user/optional_in", args: new { ids = new List<object?> { 2L } })!)
             .Cast<object>().ToList();
         rows.Should().HaveCount(1);
@@ -182,14 +159,14 @@ public class SqliteIntegrationTests : IDisposable
     [Fact]
     public void Optional_multi_all_bound_or_all_elided()
     {
-        var filtered = ((System.Collections.IEnumerable)_yaal.Query(
+        var filtered = ((System.Collections.IEnumerable)_yaal.Query(_db, 
             "user/optional_multi",
             args: new { active = 1, ids = new List<object?> { 1L }, name = "admin" })!)
             .Cast<object>().ToList();
         filtered.Should().HaveCount(1);
         Ids(filtered).Should().Equal(1L);
 
-        var all = ((System.Collections.IEnumerable)_yaal.Query("user/optional_multi")!)
+        var all = ((System.Collections.IEnumerable)_yaal.Query(_db, "user/optional_multi")!)
             .Cast<object>().ToList();
         all.Should().HaveCount(2);
     }
@@ -197,7 +174,7 @@ public class SqliteIntegrationTests : IDisposable
     [Fact]
     public void Optional_multi_partial_args_errors()
     {
-        var act = () => _yaal.Query("user/optional_multi", args: new { active = 1 });
+        var act = () => _yaal.Query(_db, "user/optional_multi", args: new { active = 1 });
         act.Should().Throw<InvalidOperationException>()
             .WithMessage("*partial parameters*");
     }
@@ -210,12 +187,12 @@ public class SqliteIntegrationTests : IDisposable
             BlobRow("ids", new List<object?> { 1L }),
             BlobRow("ids", new List<object?> { 2L }),
         };
-        var rows = ((System.Collections.IEnumerable)_yaal.Query(
+        var rows = ((System.Collections.IEnumerable)_yaal.Query(_db, 
             "user/groups_in", args: new { pairs = pairRows })!)
             .Cast<object>().ToList();
         Ids(rows).Should().Equal(1L, 2L);
 
-        var one = ((System.Collections.IEnumerable)_yaal.Query(
+        var one = ((System.Collections.IEnumerable)_yaal.Query(_db, 
             "user/groups_filter",
             args: new { pairs = new List<object?> { BlobRow("ids", new List<object?> { 1L }) }, active = 1 })!)
             .Cast<object>().ToList();
@@ -231,12 +208,12 @@ public class SqliteIntegrationTests : IDisposable
             BlobRow("ids", new List<object?> { 1L }),
             BlobRow("ids", new List<object?> { 2L }),
         };
-        var rows = ((System.Collections.IEnumerable)_yaal.Query(
+        var rows = ((System.Collections.IEnumerable)_yaal.Query(_db, 
             "user/groups_in_optional", args: new { pairs = pairRows, active = 1 })!)
             .Cast<object>().ToList();
         Ids(rows).Should().Equal(1L, 2L);
 
-        var one = ((System.Collections.IEnumerable)_yaal.Query(
+        var one = ((System.Collections.IEnumerable)_yaal.Query(_db, 
             "user/groups_in_optional",
             args: new { pairs = new List<object?> { BlobRow("ids", new List<object?> { 1L }) }, active = 1 })!)
             .Cast<object>().ToList();
@@ -246,7 +223,7 @@ public class SqliteIntegrationTests : IDisposable
     [Fact]
     public void Optional_groups_inside_optional_all_absent_elides()
     {
-        var rows = ((System.Collections.IEnumerable)_yaal.Query("user/groups_in_optional")!)
+        var rows = ((System.Collections.IEnumerable)_yaal.Query(_db, "user/groups_in_optional")!)
             .Cast<object>().ToList();
         Ids(rows).Should().Equal(1L, 2L);
     }
@@ -254,7 +231,7 @@ public class SqliteIntegrationTests : IDisposable
     [Fact]
     public void Optional_groups_inside_optional_without_pairs_keeps_scalar_filter()
     {
-        var rows = ((System.Collections.IEnumerable)_yaal.Query(
+        var rows = ((System.Collections.IEnumerable)_yaal.Query(_db, 
             "user/groups_in_optional", args: new { active = 1 })!)
             .Cast<object>().ToList();
         Ids(rows).Should().Equal(1L, 2L);
@@ -263,7 +240,7 @@ public class SqliteIntegrationTests : IDisposable
     [Fact]
     public void Optional_when_condition_gates_the_filter()
     {
-        var rows = ((System.Collections.IEnumerable)_yaal.Query(
+        var rows = ((System.Collections.IEnumerable)_yaal.Query(_db, 
             "user/when_optional", args: new { apply = true, id = 1 })!)
             .Cast<object>().ToList();
         Ids(rows).Should().Equal(1L);
@@ -272,7 +249,7 @@ public class SqliteIntegrationTests : IDisposable
     [Fact]
     public void Optional_when_condition_absent_elides_the_filter()
     {
-        var rows = ((System.Collections.IEnumerable)_yaal.Query(
+        var rows = ((System.Collections.IEnumerable)_yaal.Query(_db, 
             "user/when_optional", args: new { id = 1 })!)
             .Cast<object>().ToList();
         Ids(rows).Should().Equal(1L, 2L);
@@ -281,7 +258,7 @@ public class SqliteIntegrationTests : IDisposable
     [Fact]
     public void Optional_when_false_condition_still_applies_the_filter()
     {
-        var rows = ((System.Collections.IEnumerable)_yaal.Query(
+        var rows = ((System.Collections.IEnumerable)_yaal.Query(_db, 
             "user/when_optional", args: new { apply = false, id = 1 })!)
             .Cast<object>().ToList();
         Ids(rows).Should().Equal(1L);

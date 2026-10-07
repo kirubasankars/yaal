@@ -82,7 +82,8 @@ class TestParamDefaultRuntime(unittest.TestCase):
         os.close(fd)
         sqlite3.connect(self._db_path).executescript(SCHEMA.read_text())
         self._yaal = Yaal(str(FIXTURE_API), debug=True)
-        self._yaal.setup_data_provider("db", "sqlite3:///" + self._db_path)
+        from yaal_drivers import open as open_db
+        self._provider = open_db("sqlite3:///" + self._db_path)
 
     def tearDown(self):
         try:
@@ -91,9 +92,9 @@ class TestParamDefaultRuntime(unittest.TestCase):
             pass
 
     def test_list_default_sort_id_asc(self):
-        rows = self._yaal.query("user/list")
+        rows = self._yaal.query(self._provider, "user/list")
         self.assertEqual([r["id"] for r in rows], [1, 2])
-        explained = self._yaal.explain_sql("user/list")
+        explained = self._yaal.explain_sql(self._provider, "user/list")
         sql = explained[0]["sql"]
         self.assertIn("u.user_id", sql)
         self.assertIn("ASC", sql)

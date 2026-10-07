@@ -5,6 +5,7 @@
 import unittest
 import json
 from yaal import Yaal, create_context
+from yaal_drivers import open as open_db
 
 
 class ContentReader:
@@ -33,7 +34,7 @@ class TestYaal(unittest.TestCase):
 
     def setUp(self):
         self._yaal = Yaal("", ContentReader(), debug=True)
-        self._yaal.setup_data_provider("db", "sqlite3:///")
+        self._provider = open_db("sqlite3:///")
 
     def tearDown(self):
         pass
@@ -46,6 +47,6 @@ class TestYaal(unittest.TestCase):
         self.assertTrue(descriptor["method"] == "$")
 
         ctx = create_context(descriptor, payload={"Name": "First"})
-        r = y.get_result_json(descriptor, ctx)
+        r = y.get_result_json(self._provider, descriptor, ctx)
 
         self.assertListEqual([{"name": "First Last"}], json.loads(r))

@@ -1,6 +1,12 @@
+<!--
+Copyright 2018 Kiruba Sankar Swaminathan. All rights reserved.
+Use of this source code is governed by a MIT style
+license that can be found in the LICENSE file.
+-->
+
 # Yaal
 
-Yaal is a **subtractive SQL ORM**. You write SQL and a JSON shape. At bind time Yaal removes unused `optional(...)` filters, runs the remaining statements (optionally across named databases), and shapes flat rows into nested JSON.
+Yaal is a **subtractive SQL ORM**. You write SQL and a JSON shape. At bind time Yaal removes unused `optional(...)` filters, runs the remaining statements on the provider you pass to `query`, and shapes flat rows into nested JSON.
 
 ```mermaid
 flowchart LR

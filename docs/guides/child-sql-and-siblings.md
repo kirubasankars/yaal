@@ -1,3 +1,9 @@
+<!--
+Copyright 2018 Kiruba Sankar Swaminathan. All rights reserved.
+Use of this source code is governed by a MIT style
+license that can be found in the LICENSE file.
+-->
+
 # Child SQL and siblings
 
 **Problem:** either load a nested array from its own statement, or build one JSON object from several SQL files.

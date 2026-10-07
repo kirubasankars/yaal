@@ -59,7 +59,7 @@ public class BugfixTests
         };
         var ctx = ContextFactory.CreateContext(new Branch { Path = "p" });
         var (rows, errors) = Executor.ExecuteBranch(
-            descriptor, true, new Dictionary<string, IDataProvider> { ["db"] = leak }, ctx,
+            descriptor, true, leak, ctx,
             new List<IDictionary<string, object?>>());
         rows.Should().BeNull();
         errors.Should().NotBeNull().And.NotBeEmpty();
@@ -90,7 +90,7 @@ public class BugfixTests
             new Dictionary<string, object?> { ["user_id"] = 1, ["role_id"] = 1 },
         };
         var (rows, err) = Executor.ExecuteBranch(
-            branch, false, new Dictionary<string, IDataProvider> { ["db"] = dp }, ctx, parent);
+            branch, false, dp, ctx, parent);
         err.Should().BeNull();
         dp.Calls.Should().Be(0);
         rows.Should().HaveCount(1);
@@ -99,6 +99,7 @@ public class BugfixTests
 
     private sealed class LeakProvider : IDataProvider
     {
+        public string Placeholder => "?";
         public bool Begun { get; private set; }
         public bool Ended { get; private set; }
         public bool Errored { get; private set; }
@@ -108,7 +109,7 @@ public class BugfixTests
         public void Error() => Errored = true;
 
         public (IReadOnlyList<IDictionary<string, object?>> Rows, object? LastInsertedId) Execute(
-            Twig twig, Shape inputShape, DataProviderHelper helper) =>
+            string sql, IReadOnlyList<object?> parameters) =>
             (new List<IDictionary<string, object?>>
             {
                 new Dictionary<string, object?> { ["$mode"] = "error", ["message"] = "boom" },
@@ -117,13 +118,14 @@ public class BugfixTests
 
     private sealed class CountingProvider : IDataProvider
     {
+        public string Placeholder => "?";
         public int Calls { get; private set; }
         public void Begin() { }
         public void End() { }
         public void Error() { }
 
         public (IReadOnlyList<IDictionary<string, object?>> Rows, object? LastInsertedId) Execute(
-            Twig twig, Shape inputShape, DataProviderHelper helper)
+            string sql, IReadOnlyList<object?> parameters)
         {
             Calls++;
             return (new List<IDictionary<string, object?>>

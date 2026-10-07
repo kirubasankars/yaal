@@ -4,8 +4,6 @@
 
 using ClickHouse.Client.ADO;
 using ClickHouse.Client.ADO.Parameters;
-using Yaal.Execution;
-using Yaal.Sql;
 
 namespace Yaal.Providers;
 
@@ -49,6 +47,8 @@ public sealed class ClickHouseContextManager : IDataProviderContextManager
 
 public sealed class ClickHouseDataProvider : IDataProvider
 {
+    public string Placeholder => "%s";
+
     private readonly string _connectionString;
     private ClickHouseConnection? _client;
 
@@ -78,24 +78,22 @@ public sealed class ClickHouseDataProvider : IDataProvider
     }
 
     public (IReadOnlyList<IDictionary<string, object?>> Rows, object? LastInsertedId) Execute(
-        Twig twig, Shape inputShape, DataProviderHelper helper)
+        string sql, IReadOnlyList<object?> parameters)
     {
         var client = _client!;
-        var sql = helper.GetExecutableContent("%s", twig, inputShape);
-        var args = helper.BuildParameters(sql, inputShape, (_, v) => v);
         var (content, _) = PlaceholderUtil.ToNumbered(
-            sql.Content,
-            args.Count,
-            i => "{p" + i + ":" + ClickHouseTypeName(args[i]) + "}");
+            sql,
+            parameters.Count,
+            i => "{p" + i + ":" + ClickHouseTypeName(parameters[i]) + "}");
 
         using var cmd = client.CreateCommand();
         cmd.CommandText = content;
-        for (var i = 0; i < args.Count; i++)
+        for (var i = 0; i < parameters.Count; i++)
         {
             cmd.Parameters.Add(new ClickHouseDbParameter
             {
                 ParameterName = "p" + i,
-                Value = args[i] ?? DBNull.Value,
+                Value = parameters[i] ?? DBNull.Value,
             });
         }
 

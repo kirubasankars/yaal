@@ -82,6 +82,8 @@ class MySQLContextManager:
 
 class MySQLDataProvider:
 
+    placeholder = "%s"
+
     def __init__(self, pool):
         self._pool = pool
         self._conn = None
@@ -103,13 +105,11 @@ class MySQLDataProvider:
     def get_value_converter(param_type, value):
         return value
 
-    def execute(self, twig, input_shape, helper):
+    def execute(self, sql, parameters):
         con = self._conn
-        sql = helper.get_executable_content("%s", twig, input_shape)
         cur = con.cursor(dictionary=True)
         try:
-            args = helper.build_parameters(sql, input_shape, self.get_value_converter)
-            cur.execute(sql["content"], args)
+            cur.execute(sql, parameters)
             if cur.with_rows:
                 rows = fetch_dict_rows(cur)
             else:

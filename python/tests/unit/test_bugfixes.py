@@ -5,7 +5,8 @@
 import copy
 import unittest
 
-from yaal import create_context, _parse_rfc1738_args
+from yaal import create_context
+from yaal_drivers import _parse_rfc1738_args
 from yaal_executor import DataProviderHelper, _execute_branch
 from yaal_shape import Shape, _to_lower_keys_deep
 
@@ -72,7 +73,7 @@ class TestBugfixes(unittest.TestCase):
             def error(self):
                 self.errored = True
 
-            def execute(self, twig, ctx, helper):
+            def execute(self, sql, parameters):
                 return [{"$mode": "error", "message": "boom"}], None
 
         descriptor = {
@@ -86,7 +87,7 @@ class TestBugfixes(unittest.TestCase):
         }
         ctx = create_context({"path": "p"})
         leak = Leak()
-        out, errors = _execute_branch(descriptor, True, {"db": leak}, ctx, [])
+        out, errors = _execute_branch(descriptor, True, leak, ctx, [])
         self.assertIsNone(out)
         self.assertTrue(errors)
         self.assertTrue(leak.begun)
@@ -97,7 +98,7 @@ class TestBugfixes(unittest.TestCase):
         calls = {"n": 0}
 
         class DP:
-            def execute(self, twig, ctx, helper):
+            def execute(self, sql, parameters):
                 calls["n"] += 1
                 return [{"role_id": 1}], None
 
@@ -111,7 +112,7 @@ class TestBugfixes(unittest.TestCase):
         }
         ctx = create_context({"path": "p"})
         parent = [{"user_id": 1, "role_id": 1}]
-        out, err = _execute_branch(branch, False, {"db": DP()}, ctx, parent)
+        out, err = _execute_branch(branch, False, DP(), ctx, parent)
         self.assertIsNone(err)
         self.assertEqual(calls["n"], 0)
         self.assertEqual(out[0]["user_id"], 1)
@@ -130,7 +131,7 @@ class TestBugfixes(unittest.TestCase):
             def error(self):
                 pass
 
-            def execute(self, twig, ctx, helper):
+            def execute(self, sql, parameters):
                 self.calls += 1
                 if self.calls == 1:
                     return [{"id": 1}, {"id": 2}], None
@@ -153,7 +154,7 @@ class TestBugfixes(unittest.TestCase):
             ],
         }
         ctx = create_context({"path": "p"})
-        out, err = _execute_branch(trunk, True, {"db": DP()}, ctx, [])
+        out, err = _execute_branch(trunk, True, DP(), ctx, [])
         self.assertIsNone(err)
         self.assertIsNot(out[0]["child"], out[1]["child"])
         out[0]["child"].append({"c": 2})

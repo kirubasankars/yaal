@@ -54,7 +54,7 @@ def _build_trunk_map_by_files(name_list):
     return trunk_map
 
 
-def _build_branch(branch, map_by_files, content_reader, payload_model, output_model, model, bag):
+def _build_branch(branch, map_by_files, content_reader, payload_model, output_model, model):
     from yaal_output_schema import normalize_output_model
 
     _properties_str, _type_str, _partition_by_str = "properties", "type", "partition_by"
@@ -115,13 +115,6 @@ def _build_branch(branch, map_by_files, content_reader, payload_model, output_mo
 
         branch["twigs"] = ast["sql_stmts"]
 
-        connections = bag.setdefault("connections", ["db"])
-        for twig in branch["twigs"]:
-            if not twig.get("connection"):
-                twig["connection"] = "db"
-            if twig["connection"] not in connections:
-                connections.append(twig["connection"])
-
     lower_branch_map = _to_lower_keys(branch_map)
     for k in map_by_files:
         if k not in lower_branch_map:
@@ -152,7 +145,7 @@ def _build_branch(branch, map_by_files, content_reader, payload_model, output_mo
         sub_branch_payload_model["$parent"] = payload_model
 
         _build_branch(sub_branch, sub_branch_map, content_reader, sub_branch_payload_model, sub_branch_output_model,
-                      model, bag)
+                      model)
 
         del sub_branch_payload_model["$parent"]
 
@@ -321,8 +314,6 @@ def create_trunk(path, output_mapper, content_reader):
         }
     }
 
-    bag = {"connections": ["db"]}
-    _build_branch(trunk, trunk_map["$"], content_reader, payload_schema, output_schema, trunk["model"], bag)
-    trunk["connections"] = bag["connections"]
+    _build_branch(trunk, trunk_map["$"], content_reader, payload_schema, output_schema, trunk["model"])
 
     return trunk

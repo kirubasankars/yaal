@@ -1,3 +1,9 @@
+<!--
+Copyright 2018 Kiruba Sankar Swaminathan. All rights reserved.
+Use of this source code is governed by a MIT style
+license that can be found in the LICENSE file.
+-->
+
 # Subtractive ORM
 
 Additive ORMs start from models and **add** SQL: a filter object, a join method, a sort clause, assembled in host code. Yaal starts from a full statement and **subtracts** the parts the caller did not supply.

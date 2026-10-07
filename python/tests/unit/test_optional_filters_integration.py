@@ -23,7 +23,8 @@ class TestOptionalFiltersIntegration(unittest.TestCase):
         os.close(fd)
         sqlite3.connect(self._db_path).executescript(SCHEMA.read_text())
         self._yaal = Yaal(str(FIXTURE_API), debug=True)
-        self._yaal.setup_data_provider("db", "sqlite3:///" + self._db_path)
+        from yaal_drivers import open as open_db
+        self._provider = open_db("sqlite3:///" + self._db_path)
 
     def tearDown(self):
         try:
@@ -32,55 +33,55 @@ class TestOptionalFiltersIntegration(unittest.TestCase):
             pass
 
     def test_optional_in_elided_returns_all_users(self):
-        rows = self._yaal.query("user/optional_in")
+        rows = self._yaal.query(self._provider, "user/optional_in")
         self.assertEqual([r["id"] for r in rows], [1, 2])
 
     def test_optional_in_filters_by_list(self):
-        rows = self._yaal.query("user/optional_in", args={"ids": [2]})
+        rows = self._yaal.query(self._provider, "user/optional_in", args={"ids": [2]})
         self.assertEqual(rows, [{"id": 2, "name": "guest"}])
 
     def test_optional_in_expands_placeholders(self):
-        explained = self._yaal.explain_sql(
+        explained = self._yaal.explain_sql(self._provider, 
             "user/optional_in", args={"ids": [1, 2]}
         )
         self.assertIn("in (?, ?)", explained[0]["sql"].lower())
         self.assertEqual(explained[0]["parameters"], [1, 2])
 
     def test_optional_multi_all_bound(self):
-        rows = self._yaal.query(
+        rows = self._yaal.query(self._provider, 
             "user/optional_multi",
             args={"active": 1, "ids": [1], "name": "admin"},
         )
         self.assertEqual(rows, [{"id": 1, "name": "admin", "active": 1}])
 
     def test_optional_multi_all_elided(self):
-        rows = self._yaal.query("user/optional_multi")
+        rows = self._yaal.query(self._provider, "user/optional_multi")
         self.assertEqual(len(rows), 2)
 
     def test_optional_multi_partial_args_errors(self):
         with self.assertRaises(ValueError) as ctx:
-            self._yaal.query("user/optional_multi", args={"active": 1})
+            self._yaal.query(self._provider, "user/optional_multi", args={"active": 1})
         self.assertIn("partial parameters", str(ctx.exception).lower())
 
     def test_optional_groups_in_per_row(self):
-        rows = self._yaal.query(
+        rows = self._yaal.query(self._provider, 
             "user/groups_in",
             args={"pairs": [{"ids": [1]}, {"ids": [2]}]},
         )
         self.assertEqual([r["id"] for r in rows], [1, 2])
 
     def test_optional_groups_in_single_row_list(self):
-        rows = self._yaal.query(
+        rows = self._yaal.query(self._provider, 
             "user/groups_in", args={"pairs": [{"ids": [1, 2]}]}
         )
         self.assertEqual([r["id"] for r in rows], [1, 2])
 
     def test_optional_groups_in_elided(self):
-        rows = self._yaal.query("user/groups_in")
+        rows = self._yaal.query(self._provider, "user/groups_in")
         self.assertEqual([r["id"] for r in rows], [1, 2])
 
     def test_optional_groups_in_multi_row_parenthesized_beside_and(self):
-        explained = self._yaal.explain_sql(
+        explained = self._yaal.explain_sql(self._provider, 
             "user/groups_filter",
             args={"pairs": [{"ids": [1]}, {"ids": [2]}], "active": 1},
         )
@@ -90,27 +91,27 @@ class TestOptionalFiltersIntegration(unittest.TestCase):
         self.assertIn("and (", sql)
 
     def test_groups_filter_optional_scalar_and_groups_in(self):
-        rows = self._yaal.query(
+        rows = self._yaal.query(self._provider, 
             "user/groups_filter",
             args={"pairs": [{"ids": [1]}], "active": 1},
         )
         self.assertEqual(rows, [{"id": 1, "name": "admin"}])
 
     def test_groups_filter_elided_optional_keeps_group(self):
-        rows = self._yaal.query(
+        rows = self._yaal.query(self._provider, 
             "user/groups_filter", args={"pairs": [{"ids": [2]}]}
         )
         self.assertEqual(rows, [{"id": 2, "name": "guest"}])
 
     def test_groups_in_optional_both_bound(self):
-        rows = self._yaal.query(
+        rows = self._yaal.query(self._provider, 
             "user/groups_in_optional",
             args={"pairs": [{"ids": [1]}, {"ids": [2]}], "active": 1},
         )
         self.assertEqual([r["id"] for r in rows], [1, 2])
 
     def test_groups_in_optional_multi_row_keeps_group_parenthesized(self):
-        explained = self._yaal.explain_sql(
+        explained = self._yaal.explain_sql(self._provider, 
             "user/groups_in_optional",
             args={"pairs": [{"ids": [1]}, {"ids": [2]}], "active": 1},
         )
@@ -119,42 +120,42 @@ class TestOptionalFiltersIntegration(unittest.TestCase):
         self.assertEqual(explained[0]["parameters"], [1, 1, 2])
 
     def test_groups_in_optional_single_row(self):
-        rows = self._yaal.query(
+        rows = self._yaal.query(self._provider, 
             "user/groups_in_optional",
             args={"pairs": [{"ids": [1]}], "active": 1},
         )
         self.assertEqual(rows, [{"id": 1, "name": "admin"}])
 
     def test_groups_in_optional_all_absent_elides(self):
-        rows = self._yaal.query("user/groups_in_optional")
+        rows = self._yaal.query(self._provider, "user/groups_in_optional")
         self.assertEqual([r["id"] for r in rows], [1, 2])
 
     def test_groups_in_optional_without_pairs_keeps_scalar_filter(self):
-        rows = self._yaal.query("user/groups_in_optional", args={"active": 1})
+        rows = self._yaal.query(self._provider, "user/groups_in_optional", args={"active": 1})
         self.assertEqual([r["id"] for r in rows], [1, 2])
-        explained = self._yaal.explain_sql(
+        explained = self._yaal.explain_sql(self._provider, 
             "user/groups_in_optional", args={"active": 1}
         )
         self.assertNotIn("()", explained[0]["sql"])
         self.assertEqual(explained[0]["parameters"], [1])
 
     def test_when_optional_condition_gates_the_filter(self):
-        rows = self._yaal.query("user/when_optional", args={"apply": True, "id": 1})
+        rows = self._yaal.query(self._provider, "user/when_optional", args={"apply": True, "id": 1})
         self.assertEqual(rows, [{"id": 1, "name": "admin"}])
 
-        explained = self._yaal.explain_sql(
+        explained = self._yaal.explain_sql(self._provider, 
             "user/when_optional", args={"apply": True, "id": 1}
         )
         self.assertEqual(explained[0]["parameters"], [1])
 
     def test_when_optional_condition_absent_elides_the_filter(self):
-        rows = self._yaal.query("user/when_optional", args={"id": 1})
+        rows = self._yaal.query(self._provider, "user/when_optional", args={"id": 1})
         self.assertEqual([r["id"] for r in rows], [1, 2])
-        explained = self._yaal.explain_sql("user/when_optional", args={"id": 1})
+        explained = self._yaal.explain_sql(self._provider, "user/when_optional", args={"id": 1})
         self.assertEqual(explained[0]["parameters"], [])
 
     def test_when_optional_false_condition_still_applies_the_filter(self):
-        rows = self._yaal.query("user/when_optional", args={"apply": False, "id": 1})
+        rows = self._yaal.query(self._provider, "user/when_optional", args={"apply": False, "id": 1})
         self.assertEqual(rows, [{"id": 1, "name": "admin"}])
 
 

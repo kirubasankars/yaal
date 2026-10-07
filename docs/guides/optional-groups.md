@@ -1,3 +1,9 @@
+<!--
+Copyright 2018 Kiruba Sankar Swaminathan. All rights reserved.
+Use of this source code is governed by a MIT style
+license that can be found in the LICENSE file.
+-->
+
 # Optional groups
 
 **Problem:** repeat one predicate for each object in a JSON array, OR-joined (any row matches) or AND-joined (every row matches). Omit the array and the clause disappears.

@@ -1,3 +1,9 @@
+<!--
+Copyright 2018 Kiruba Sankar Swaminathan. All rights reserved.
+Use of this source code is governed by a MIT style
+license that can be found in the LICENSE file.
+-->
+
 # Child SQL
 
 **Goal:** the same JSON as `user/get`, with roles loaded from `$.roles.sql` instead of a join plus `parent_rows`.

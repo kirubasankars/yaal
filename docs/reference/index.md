@@ -1,3 +1,9 @@
+<!--
+Copyright 2018 Kiruba Sankar Swaminathan. All rights reserved.
+Use of this source code is governed by a MIT style
+license that can be found in the LICENSE file.
+-->
+
 # Reference
 
 Lookup pages for authoring descriptors and using the CLI. Why a rule exists is under [Concepts](../concepts/index.md).

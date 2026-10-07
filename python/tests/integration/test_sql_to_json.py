@@ -10,6 +10,7 @@ import unittest
 from pathlib import Path
 
 from yaal import Yaal
+from yaal_drivers import open as open_db
 
 ROOT = Path(__file__).resolve().parents[3]
 FIXTURE_API = ROOT / "tests" / "fixtures" / "api"
@@ -34,20 +35,19 @@ def _wait_for(connect, attempts=60, delay=0.5):
 
 def _build_yaal(db_url):
     y = Yaal(str(FIXTURE_API), debug=True)
-    y.setup_data_provider("db", db_url)
-    return y
+    return y, open_db(db_url)
 
 
-def _fetch_user(y, user_id):
-    return y.query("user/get", args={"id": user_id})
+def _fetch_user(y, provider, user_id):
+    return y.query(provider, "user/get", args={"id": user_id})
 
 
 class SqlToJsonMixin:
     db_url = None
 
     def test_user_with_nested_roles(self):
-        y = _build_yaal(self.db_url)
-        result = _fetch_user(y, 1)
+        y, provider = _build_yaal(self.db_url)
+        result = _fetch_user(y, provider, 1)
         self.assertEqual(
             result,
             {
@@ -61,8 +61,8 @@ class SqlToJsonMixin:
         )
 
     def test_user_with_single_role(self):
-        y = _build_yaal(self.db_url)
-        result = _fetch_user(y, 2)
+        y, provider = _build_yaal(self.db_url)
+        result = _fetch_user(y, provider, 2)
         self.assertEqual(
             result,
             {

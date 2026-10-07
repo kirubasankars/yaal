@@ -1,3 +1,9 @@
+<!--
+Copyright 2018 Kiruba Sankar Swaminathan. All rights reserved.
+Use of this source code is governed by a MIT style
+license that can be found in the LICENSE file.
+-->
+
 # Examples
 
 This page moved. Task write-ups are the [guides](guides/index.md). The fixture table is the [cookbook](cookbook/fixtures.md).
@@ -11,7 +17,6 @@ This page moved. Task write-ups are the [guides](guides/index.md). The fixture t
 | Optional groups | [Optional groups](guides/optional-groups.md) |
 | Paginated nest | [Pagination](guides/pagination-and-mode-params.md) |
 | Real SQL | [Tutorial: real SQL](tutorial/08-real-sql.md) |
-| Multi-database | [Multi-database](guides/multi-database.md) |
 | Precompiled descriptors | [Precompile](guides/precompile.md) |
 | Explain | [Explain and debug](guides/explain-and-debug.md) |
 | Writes | [Writes and modes](guides/writes-and-modes.md) |

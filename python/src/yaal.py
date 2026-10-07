@@ -5,20 +5,15 @@
 import copy
 import json
 import os
-import re
 import uuid
-from urllib.parse import parse_qsl, unquote_plus
 
 from yaal_builder import create_trunk
 from yaal_errors import (
     DescriptorNotFoundError,
     PathEscapeError,
-    UnsupportedDatabaseUrlError,
-    YaalError,
 )
 from yaal_executor import DataProviderHelper, get_result, get_result_json
 from yaal_shape import Shape
-from yaal_sqlite import SQLiteContextManager
 
 path_join = os.path.join
 
@@ -101,67 +96,6 @@ def create_context(descriptor, payload=None, args=None):
     return Shape(schema=payload_schema, data=payload, extras=extras)
 
 
-def _normalize_sqlite_options(options):
-    """Repair common sqlite3:// URL shapes into a usable filesystem path."""
-    options = dict(options)
-    database = options.get("database")
-    host = options.get("host")
-    if database is None:
-        database = ""
-
-    if host == ".":
-        database = "./" + database if database else "."
-    elif host:
-        database = host + ("/" + database if database else "")
-
-    options["database"] = database
-    options["host"] = None
-    return options
-
-
-def _parse_rfc1738_args(connection_url):
-    pattern = re.compile(r'''(?P<name>[\w\+]+)://
-            (?:
-                (?P<username>[^:/]*)
-                (?::(?P<password>[^/]*))?
-            @)?
-            (?:
-                (?P<host>[^/:]*)
-                (?::(?P<port>[^/]*))?
-            )?
-            (?:/(?P<database>.*))?
-            ''', re.X)
-
-    m = pattern.match(connection_url)
-    if m is not None:
-        components = m.groupdict()
-        if components['database'] is not None:
-            tokens = components['database'].split('?', 2)
-            components['database'] = tokens[0]
-            query = (len(tokens) > 1 and dict(parse_qsl(tokens[1]))) or None
-        else:
-            query = None
-        components['query'] = query
-
-        if components['username'] is not None:
-            components['username'] = unquote_plus(components['username'])
-        if components['password'] is not None:
-            components['password'] = unquote_plus(components['password'])
-
-        provider_name = components.pop('name')
-        if provider_name == "sqlite3":
-            components = _normalize_sqlite_options(components)
-        return provider_name, components
-    else:
-        raise ValueError(
-            "Could not parse database URL %r. Expected forms like "
-            "sqlite3:////abs/path.db, sqlite3://./rel/path.db, "
-            "postgresql://user:pass@host:5432/db, mysql://user:pass@host:3306/db, "
-            "clickhouse://user:pass@host:9000/db"
-            % connection_url
-        )
-
-
 class FileContentReader:
 
     def __init__(self, root_path):
@@ -217,8 +151,6 @@ class Yaal:
     def __init__(self, root_path, content_reader=None, *, debug=False, precompiled=None):
         self._root_path = root_path
         self._descriptors = {}
-        self._data_providers = {}
-        self._data_provider_schemes = {}
         self._debug = debug
         self._precompiled = precompiled
 
@@ -226,70 +158,6 @@ class Yaal:
             self._content_reader = FileContentReader(self._root_path)
         else:
             self._content_reader = content_reader
-
-    def setup_data_provider(self, name, database_uri=None, *, manager=None, scheme=None):
-        if manager is not None and database_uri is not None:
-            raise TypeError("pass a database URL or manager, not both")
-        if manager is None and database_uri is not None and not isinstance(database_uri, str):
-            if hasattr(database_uri, "get_context"):
-                manager = database_uri
-                database_uri = None
-            else:
-                raise TypeError(
-                    "setup_data_provider second argument must be a URL string or a manager with get_context()"
-                )
-        if manager is not None:
-            if not hasattr(manager, "get_context"):
-                raise TypeError("manager must implement get_context()")
-            self._data_providers[name] = manager
-            self._data_provider_schemes[name] = scheme or ""
-            return None
-        if database_uri is None:
-            raise TypeError("setup_data_provider requires a database URL or manager")
-
-        provider_name, options = _parse_rfc1738_args(database_uri)
-        if provider_name == "postgresql":
-            try:
-                from yaal_postgres import PostgresContextManager
-            except ImportError as e:
-                raise YaalError(
-                    "PostgreSQL requires psycopg2. pip install 'yaal[postgres]'"
-                ) from e
-            self._data_providers[name] = PostgresContextManager(options)
-        elif provider_name == "mysql":
-            try:
-                from yaal_mysql import MySQLContextManager
-            except ImportError as e:
-                raise YaalError(
-                    "MySQL requires mysql-connector-python. pip install 'yaal[mysql]'"
-                ) from e
-            self._data_providers[name] = MySQLContextManager(options)
-        elif provider_name == "clickhouse":
-            try:
-                from yaal_clickhouse import ClickHouseContextManager
-            except ImportError as e:
-                raise YaalError(
-                    "ClickHouse requires clickhouse-driver. pip install 'yaal[clickhouse]'"
-                ) from e
-            self._data_providers[name] = ClickHouseContextManager(options)
-        elif provider_name == "sqlite3":
-            self._data_providers[name] = SQLiteContextManager(options)
-        else:
-            raise UnsupportedDatabaseUrlError(
-                "Unsupported database URL scheme %r for provider %r. "
-                "Supported schemes: sqlite3, postgresql, mysql, clickhouse"
-                % (provider_name, name)
-            )
-        self._data_provider_schemes[name] = provider_name
-        return None
-
-    def get_data_provider(self, name):
-        if name not in self._data_providers:
-            raise YaalError(
-                "Data provider %r is not configured. Call setup_data_provider(%r, url) first."
-                % (name, name)
-            )
-        return self._data_providers[name].get_context()
 
     def create_descriptor(self, path, output_mapper=None):
         descriptor = create_trunk(path, output_mapper, self._content_reader)
@@ -335,33 +203,25 @@ class Yaal:
             )
         return load_precompiled_file(file_path)
 
-    def _default_placeholder(self):
-        for scheme in self._data_provider_schemes.values():
-            if scheme in ("postgresql", "mysql", "clickhouse"):
-                return "%s"
-            if scheme == "sqlite3":
-                return "?"
-        return "?"
-
-    def query(self, descriptor_path, *, payload=None, args=None, output_mapper=None):
+    def query(self, provider, descriptor_path, *, payload=None, args=None, output_mapper=None):
         """Load a descriptor, build context, and return the SQL→JSON result."""
         descriptor = self._load_descriptor(descriptor_path, output_mapper)
         context = create_context(descriptor, payload=payload, args=args)
-        return self.get_result(descriptor, context)
+        return self.get_result(provider, descriptor, context)
 
-    def query_json(self, descriptor_path, *, payload=None, args=None, output_mapper=None):
+    def query_json(self, provider, descriptor_path, *, payload=None, args=None, output_mapper=None):
         """Same as query, but return a JSON string."""
         descriptor = self._load_descriptor(descriptor_path, output_mapper)
         context = create_context(descriptor, payload=payload, args=args)
-        return self.get_result_json(descriptor, context)
+        return self.get_result_json(provider, descriptor, context)
 
-    def explain_sql(self, descriptor_path, *, payload=None, args=None,
+    def explain_sql(self, provider, descriptor_path, *, payload=None, args=None,
                     output_mapper=None, placeholder=None):
         """Return compiled SQL twigs after null-filter elision (for authoring/debug)."""
         descriptor = self._load_descriptor(descriptor_path, output_mapper)
         context = create_context(descriptor, payload=payload, args=args)
         if placeholder is None:
-            placeholder = self._default_placeholder()
+            placeholder = getattr(provider, "placeholder", None) or "?"
 
         helper = DataProviderHelper()
         explained = []
@@ -374,7 +234,6 @@ class Yaal:
                 compiled = helper.get_executable_content(placeholder, twig, shape)
                 explained.append({
                     "method": branch.get("method"),
-                    "connection": twig.get("connection", "db"),
                     "sql": compiled["content"],
                     "parameters": helper.build_parameters(
                         compiled, shape, _identity_converter
@@ -392,11 +251,11 @@ class Yaal:
         walk(descriptor, context)
         return explained
 
-    def get_result(self, descriptor, context):
-        return get_result(descriptor, self.get_data_provider, context)
+    def get_result(self, provider, descriptor, context):
+        return get_result(descriptor, provider, context)
 
-    def get_result_json(self, descriptor, context):
-        return get_result_json(descriptor, self.get_data_provider, context)
+    def get_result_json(self, provider, descriptor, context):
+        return get_result_json(descriptor, provider, context)
 
     def get_root_path(self):
         return self._root_path

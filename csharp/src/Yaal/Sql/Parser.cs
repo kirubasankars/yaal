@@ -21,10 +21,6 @@ public static class SqlParser
     private static readonly Regex BareStringDefaultRx = new(
         @"^\w+$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
-    private static readonly Regex SqlRx = new(
-        @"--sql\(\s*(?<name>\w+)?\s*\)--",
-        RegexOptions.Compiled);
-
     private static readonly Regex PossibleNullParameterRx = new(
         @"^\(\s*{{(?<name>[A-Za-z0-9_.$-]*?)}}\s+is\s+null\s+or",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -354,12 +350,6 @@ public static class SqlParser
                     sqlStmts.Add(sqlStmt);
 
                 sqlStmt = new Twig();
-                var sqlMatch = SqlRx.Match(tokenValue);
-                if (sqlMatch.Success)
-                    sqlStmt.Connection = sqlMatch.Groups["name"].Success &&
-                                         !string.IsNullOrEmpty(sqlMatch.Groups["name"].Value)
-                        ? sqlMatch.Groups["name"].Value
-                        : "db";
                 significantSeen = true;
                 tc += 1;
                 continue;

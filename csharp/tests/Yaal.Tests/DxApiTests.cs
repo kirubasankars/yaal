@@ -4,9 +4,8 @@
 
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
-using Yaal.Execution;
+using Yaal.Drivers;
 using Yaal.Providers;
-using Yaal.Sql;
 
 namespace Yaal.Tests;
 
@@ -36,9 +35,32 @@ public class DxApiTests
         try
         {
             var y = new Yaal(FixtureApi, debug: true);
-            y.SetupDataProvider("db", "sqlite3:///" + path);
-            var result = ((System.Collections.IEnumerable)y.Query("user/list")!).Cast<object>().ToList();
+            var db = DriverRegistry.Open("sqlite3:///" + path);
+            var result = ((System.Collections.IEnumerable)y.Query(db, "user/list")!).Cast<object>().ToList();
             result.Should().HaveCount(2);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void App_provider_leaves_connection_open()
+    {
+        var path = SeedTempDb();
+        using var connection = new SqliteConnection("Data Source=" + path);
+        connection.Open();
+        try
+        {
+            var y = new Yaal(FixtureApi, debug: true);
+            var result = (IDictionary<string, object?>)y.Query(
+                new OpenConnectionProvider(connection), "user/get", args: new { id = 1 })!;
+            result["id"].Should().Be(1L);
+            connection.State.Should().Be(System.Data.ConnectionState.Open);
+            using var cmd = connection.CreateCommand();
+            cmd.CommandText = "select 1";
+            cmd.ExecuteScalar().Should().Be(1L);
         }
         finally
         {
@@ -49,17 +71,8 @@ public class DxApiTests
     [Fact]
     public void Unsupported_scheme_throws()
     {
-        var y = new Yaal(FixtureApi, debug: true);
-        var act = () => y.SetupDataProvider("db", "oracle://x");
+        var act = () => DriverRegistry.Open("oracle://x");
         act.Should().Throw<UnsupportedDatabaseUrlException>();
-    }
-
-    [Fact]
-    public void Missing_provider_throws()
-    {
-        var y = new Yaal(FixtureApi, debug: true);
-        var act = () => y.GetDataProvider("db");
-        act.Should().Throw<YaalException>().WithMessage("*not configured*");
     }
 
     [Fact]
@@ -74,8 +87,7 @@ public class DxApiTests
     public void Explain_sql_binds_args_id()
     {
         var y = new Yaal(FixtureApi, debug: true);
-        y.SetupDataProvider("db", "sqlite3:///");
-        var plan = y.ExplainSql("user/get", args: new { id = 1 });
+        var plan = y.ExplainSql(DriverRegistry.Open("sqlite3:///"), "user/get", args: new { id = 1 });
         plan.Should().NotBeEmpty();
         plan[0]["sql"]!.ToString().Should().Contain("?");
         var parameters = (List<object?>)plan[0]["parameters"]!;
@@ -83,34 +95,65 @@ public class DxApiTests
     }
 
     [Fact]
-    public void Registers_app_provider()
+    public void Opens_clickhouse_provider()
     {
-        var y = new Yaal(FixtureApi, debug: true);
-        y.SetupDataProvider("db", new StubContextManager());
-        y.GetDataProvider("db").Should().BeOfType<StubDataProvider>();
+        DriverRegistry.Open("clickhouse://default:@127.0.0.1:8123/default")
+            .Placeholder.Should().Be("%s");
     }
 
-    [Fact]
-    public void Registers_clickhouse_scheme()
+    private sealed class OpenConnectionProvider : IDataProvider
     {
-        var y = new Yaal(FixtureApi, debug: true);
-        y.SetupDataProvider("db", "clickhouse://default:@127.0.0.1:8123/default");
-        y.GetDataProvider("db").Should().NotBeNull();
-    }
+        private readonly SqliteConnection _connection;
 
-    private sealed class StubContextManager : IDataProviderContextManager
-    {
-        public IDataProvider GetContext() => new StubDataProvider();
-    }
+        public OpenConnectionProvider(SqliteConnection connection) => _connection = connection;
 
-    private sealed class StubDataProvider : IDataProvider
-    {
+        public string Placeholder => "?";
+
         public void Begin() { }
+
         public void End() { }
+
         public void Error() { }
 
         public (IReadOnlyList<IDictionary<string, object?>> Rows, object? LastInsertedId) Execute(
-            Twig twig, Shape inputShape, DataProviderHelper helper) =>
-            (Array.Empty<IDictionary<string, object?>>(), null);
+            string sql, IReadOnlyList<object?> parameters)
+        {
+            using var cmd = _connection.CreateCommand();
+            cmd.CommandText = sql;
+            for (var i = 0; i < parameters.Count; i++)
+            {
+                var p = cmd.CreateParameter();
+                p.ParameterName = "$p" + i;
+                p.Value = parameters[i] ?? DBNull.Value;
+                cmd.Parameters.Add(p);
+            }
+
+            if (parameters.Count > 0)
+            {
+                var parts = sql.Split('?');
+                if (parts.Length - 1 == parameters.Count)
+                {
+                    var rendered = parts[0];
+                    for (var i = 0; i < parameters.Count; i++)
+                        rendered += "$p" + i + parts[i + 1];
+                    cmd.CommandText = rendered;
+                }
+            }
+
+            var rows = new List<IDictionary<string, object?>>();
+            using var reader = cmd.ExecuteReader();
+            if (reader.FieldCount > 0)
+            {
+                while (reader.Read())
+                {
+                    var row = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+                    for (var i = 0; i < reader.FieldCount; i++)
+                        row[reader.GetName(i)] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                    rows.Add(row);
+                }
+            }
+
+            return (rows, null);
+        }
     }
 }

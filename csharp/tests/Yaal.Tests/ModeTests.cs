@@ -46,7 +46,7 @@ public class ModeTests
         });
         var ctx = ContextFactory.CreateContext(new Branch { Path = "op" });
         var (rows, errors) = Executor.ExecuteBranch(
-            Branch(twigCount: 2), true, new Dictionary<string, IDataProvider> { ["db"] = provider }, ctx,
+            Branch(twigCount: 2), true, provider, ctx,
             new List<IDictionary<string, object?>>());
 
         errors.Should().BeNull();
@@ -75,7 +75,7 @@ public class ModeTests
         });
         var ctx = ContextFactory.CreateContext(new Branch { Path = "op" });
         var (rows, errors) = Executor.ExecuteBranch(
-            Branch(), true, new Dictionary<string, IDataProvider> { ["db"] = provider }, ctx,
+            Branch(), true, provider, ctx,
             new List<IDictionary<string, object?>>());
 
         rows.Should().BeNull();
@@ -98,7 +98,7 @@ public class ModeTests
         });
         var ctx = ContextFactory.CreateContext(new Branch { Path = "op" });
         var (rows, errors) = Executor.ExecuteBranch(
-            Branch(), true, new Dictionary<string, IDataProvider> { ["db"] = provider }, ctx,
+            Branch(), true, provider, ctx,
             new List<IDictionary<string, object?>>());
 
         errors.Should().BeNull();
@@ -125,7 +125,7 @@ public class ModeTests
         });
         var ctx = ContextFactory.CreateContext(new Branch { Path = "op" });
         var (rows, errors) = Executor.ExecuteBranch(
-            Branch(), true, new Dictionary<string, IDataProvider> { ["db"] = provider }, ctx,
+            Branch(), true, provider, ctx,
             new List<IDictionary<string, object?>>());
 
         errors.Should().BeNull();
@@ -148,7 +148,7 @@ public class ModeTests
         });
         var ctx = ContextFactory.CreateContext(new Branch { Path = "op" });
         var (rows, errors) = Executor.ExecuteBranch(
-            Branch(), true, new Dictionary<string, IDataProvider> { ["db"] = provider }, ctx,
+            Branch(), true, provider, ctx,
             new List<IDictionary<string, object?>>());
 
         errors.Should().BeNull();
@@ -163,6 +163,7 @@ public class ModeTests
         public ScriptedProvider(IEnumerable<IReadOnlyList<IDictionary<string, object?>>> responses) =>
             _responses = new Queue<IReadOnlyList<IDictionary<string, object?>>>(responses);
 
+        public string Placeholder => "?";
         public bool Begun { get; private set; }
         public bool Ended { get; private set; }
         public bool Errored { get; private set; }
@@ -172,7 +173,7 @@ public class ModeTests
         public void Error() => Errored = true;
 
         public (IReadOnlyList<IDictionary<string, object?>> Rows, object? LastInsertedId) Execute(
-            Twig twig, Shape inputShape, DataProviderHelper helper) =>
+            string sql, IReadOnlyList<object?> parameters) =>
             (_responses.Dequeue(), null);
     }
 }

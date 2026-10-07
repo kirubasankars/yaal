@@ -1,3 +1,9 @@
+<!--
+Copyright 2018 Kiruba Sankar Swaminathan. All rights reserved.
+Use of this source code is governed by a MIT style
+license that can be found in the LICENSE file.
+-->
+
 # Concepts
 
 These pages explain why Yaal behaves the way it does. Syntax tables live in the [reference](../reference/index.md). Worked commands live in the [guides](../guides/index.md).

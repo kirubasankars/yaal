@@ -62,18 +62,12 @@ public static class TrunkBuilder
             },
         };
 
-        var bag = new Dictionary<string, object?>
-        {
-            ["connections"] = new List<string> { "db" },
-        };
-
         if (!trunkMap.TryGetValue("$", out var dollarMapObj) || dollarMapObj == null)
             dollarMapObj = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
 
         var mapByFiles = ConvertMap(dollarMapObj);
 
-        BuildBranch(trunk, mapByFiles, contentReader, payloadSchema, outputSchema, trunk.Model, bag);
-        trunk.Connections = (List<string>)bag["connections"]!;
+        BuildBranch(trunk, mapByFiles, contentReader, payloadSchema, outputSchema, trunk.Model);
 
         return trunk;
     }
@@ -130,8 +124,7 @@ public static class TrunkBuilder
         IContentReader contentReader,
         Dictionary<string, object?> payloadModel,
         Dictionary<string, object?>? outputModel,
-        DescriptorModel model,
-        Dictionary<string, object?> bag)
+        DescriptorModel model)
     {
         var path = branch.Path;
         var method = branch.Method;
@@ -199,15 +192,6 @@ public static class TrunkBuilder
             }
 
             branch.Twigs = ast.SqlStmts;
-
-            var connections = (List<string>)bag["connections"]!;
-            foreach (var twig in branch.Twigs)
-            {
-                if (string.IsNullOrEmpty(twig.Connection))
-                    twig.Connection = "db";
-                if (!connections.Contains(twig.Connection))
-                    connections.Add(twig.Connection);
-            }
         }
 
         var lowerBranchMap = branchMap.Keys.Select(k => k.ToLowerInvariant()).ToHashSet();
@@ -247,7 +231,7 @@ public static class TrunkBuilder
             }
 
             subBranchPayloadModel["$parent"] = payloadModel;
-            BuildBranch(subBranch, subBranchMap, contentReader, subBranchPayloadModel, subBranchOutputModel, model, bag);
+            BuildBranch(subBranch, subBranchMap, contentReader, subBranchPayloadModel, subBranchOutputModel, model);
             subBranchPayloadModel.Remove("$parent");
 
             if (subBranch.UseParentRows && string.IsNullOrEmpty(branch.PartitionBy))

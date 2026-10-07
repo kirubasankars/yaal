@@ -50,8 +50,9 @@ class TestInputFromHeaders(unittest.TestCase):
         yaal = Yaal("", HeaderContentReader({
             "$": "--(id! integer, name! string)--\nselect {{id}} as id, {{name}} as name\n",
         }), debug=True)
-        yaal.setup_data_provider("db", "sqlite3:///")
-        result = yaal.query("op", payload={"name": "x"})
+        from yaal_drivers import open as open_db
+        provider = open_db("sqlite3:///")
+        result = yaal.query(provider, "op", payload={"name": "x"})
         self.assertIn("errors", result)
         self.assertTrue(any("id" in e.get("message", "") for e in result["errors"]))
 
@@ -59,8 +60,9 @@ class TestInputFromHeaders(unittest.TestCase):
         yaal = Yaal("", HeaderContentReader({
             "$": "--(id integer)--\nselect {{id}} as id\n",
         }), debug=True)
-        yaal.setup_data_provider("db", "sqlite3:///")
-        result = yaal.query("op", payload={"id": "not-an-int"})
+        from yaal_drivers import open as open_db
+        provider = open_db("sqlite3:///")
+        result = yaal.query(provider, "op", payload={"id": "not-an-int"})
         self.assertIn("errors", result)
 
     def test_conflict_type_across_files(self):
@@ -104,7 +106,6 @@ class TestInputFromHeaders(unittest.TestCase):
 
         api = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "api"
         yaal = Yaal(str(api), debug=True)
-        yaal.setup_data_provider("db", "sqlite3:///")
         # seed via existing fixture tests' schema is heavy; just ensure descriptor builds
         d = yaal.create_descriptor("user/get")
         self.assertEqual(d["model"]["args"]["properties"]["id"]["type"], "integer")

@@ -174,7 +174,25 @@ def _group_scalar_value(value, source, field):
     )
 
 
-def _execute_twigs(branch, data_providers, context, data_provider_helper):
+def _provider_converter(provider):
+    """Blob/engine conversion hook. App providers may omit it."""
+    fn = getattr(provider, "get_value", None)
+    if fn is None:
+        fn = getattr(provider, "get_value_converter", None)
+    if fn is None:
+        return lambda _param_type, value: value
+    return fn
+
+
+def _execute_on_provider(provider, twig, context, helper):
+    """Compile the twig, then call provider.execute(sql, parameters)."""
+    placeholder = getattr(provider, "placeholder", None) or "?"
+    compiled = helper.get_executable_content(placeholder, twig, context)
+    parameters = helper.build_parameters(compiled, context, _provider_converter(provider))
+    return provider.execute(compiled["content"], parameters)
+
+
+def _execute_twigs(branch, provider, context, data_provider_helper):
     errors = []
 
     twigs = branch.get("twigs")
@@ -186,10 +204,9 @@ def _execute_twigs(branch, data_providers, context, data_provider_helper):
     if twigs:
         for twig in twigs:
 
-            connection = twig["connection"]
             try:
-                output, output_last_inserted_id = data_providers[connection].execute(
-                    twig, context, data_provider_helper
+                output, output_last_inserted_id = _execute_on_provider(
+                    provider, twig, context, data_provider_helper
                 )
             except SortDirError as e:
                 return None, [{"message": e.message}]
@@ -226,32 +243,21 @@ def _execute_twigs(branch, data_providers, context, data_provider_helper):
     return rs, None
 
 
-def _trunk_cleanup(data_providers, db_data_provider, failed):
+def _trunk_cleanup(provider, failed):
     if failed:
         try:
-            db_data_provider.error()
+            provider.error()
         except Exception:
             pass
-        for name, data_provider in data_providers.items():
-            if name != "db":
-                try:
-                    data_provider.error()
-                except Exception:
-                    pass
         return
-
-    db_data_provider.end()
-    for name, data_provider in data_providers.items():
-        if name != "db":
-            data_provider.end()
+    provider.end()
 
 
-def _execute_branch(branch, is_trunk, data_providers, context, parent_rows):
+def _execute_branch(branch, is_trunk, provider, context, parent_rows):
     input_type, output_partition_by = branch["input_type"], branch.get("partition_by")
     use_parent_rows = branch.get("use_parent_rows")
     output = []
     data_provider_helper = DataProviderHelper()
-    db_data_provider = data_providers["db"]
     began = False
     failed = False
 
@@ -260,8 +266,7 @@ def _execute_branch(branch, is_trunk, data_providers, context, parent_rows):
             output = [dict(row) for row in parent_rows]
         else:
             if is_trunk:
-                for name, data_provider in data_providers.items():
-                    data_provider.begin()
+                provider.begin()
                 began = True
 
             if input_type == "array":
@@ -269,14 +274,14 @@ def _execute_branch(branch, is_trunk, data_providers, context, parent_rows):
                 for i in range(0, length):
                     data_provider_helper.clear_cache()
                     item_ctx = context.get_prop("@" + str(i))
-                    rs, errors = _execute_twigs(branch, data_providers, item_ctx, data_provider_helper)
+                    rs, errors = _execute_twigs(branch, provider, item_ctx, data_provider_helper)
                     if errors:
                         failed = True
                         return None, errors
                     output.extend(rs)
 
             elif input_type == "object":
-                output, errors = _execute_twigs(branch, data_providers, context, data_provider_helper)
+                output, errors = _execute_twigs(branch, provider, context, data_provider_helper)
                 if errors:
                     failed = True
                     return None, errors
@@ -292,7 +297,7 @@ def _execute_branch(branch, is_trunk, data_providers, context, parent_rows):
                         sub_node_shape = nested
 
                 sub_node_output, errors = _execute_branch(
-                    branch_descriptor, False, data_providers, sub_node_shape, output
+                    branch_descriptor, False, provider, sub_node_shape, output
                 )
                 if errors:
                     failed = True
@@ -339,7 +344,7 @@ def _execute_branch(branch, is_trunk, data_providers, context, parent_rows):
         raise
     finally:
         if is_trunk and began:
-            _trunk_cleanup(data_providers, db_data_provider, failed)
+            _trunk_cleanup(provider, failed)
 
 
 def _row_has_insensitive(row, key):
@@ -438,7 +443,7 @@ def _output_mapper(output_type, output_modal, branches, result):
     return mapped_result
 
 
-def _get_result(descriptor, get_data_provider, ctx):
+def _get_result(descriptor, provider, ctx):
     errors = []
     args_shape = ctx.get_prop("$args")
     if args_shape is not None:
@@ -448,11 +453,7 @@ def _get_result(descriptor, get_data_provider, ctx):
     if errors:
         return {"errors": errors}
 
-    data_providers = {}
-    for con in descriptor["connections"]:
-        data_providers[con] = get_data_provider(con)
-
-    rs, errors = _execute_branch(descriptor, True, data_providers, ctx, [])
+    rs, errors = _execute_branch(descriptor, True, provider, ctx, [])
 
     if errors:
         return {"errors": errors}
@@ -467,10 +468,10 @@ def _default_date_time_converter(o):
         return o.__str__()
 
 
-def get_result(descriptor, get_data_provider, context):
-    return _get_result(descriptor, get_data_provider, context)
+def get_result(descriptor, provider, context):
+    return _get_result(descriptor, provider, context)
 
 
-def get_result_json(descriptor, get_data_providers, context):
-    return json.dumps(get_result(descriptor, get_data_providers, context),
+def get_result_json(descriptor, provider, context):
+    return json.dumps(get_result(descriptor, provider, context),
                       default=_default_date_time_converter)

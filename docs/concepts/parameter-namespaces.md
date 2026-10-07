@@ -1,3 +1,9 @@
+<!--
+Copyright 2018 Kiruba Sankar Swaminathan. All rights reserved.
+Use of this source code is governed by a MIT style
+license that can be found in the LICENSE file.
+-->
+
 # Parameter namespaces
 
 A `{{name}}` binds from exactly one place. The prefix selects the place. The SQL header declares the type for every name that comes from the caller or from `$params`.

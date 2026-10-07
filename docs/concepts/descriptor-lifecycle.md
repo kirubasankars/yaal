@@ -1,3 +1,9 @@
+<!--
+Copyright 2018 Kiruba Sankar Swaminathan. All rights reserved.
+Use of this source code is governed by a MIT style
+license that can be found in the LICENSE file.
+-->
+
 # Descriptor lifecycle
 
 A call such as `yaal query user/get --arg id=1` crosses five stages. Compile is per request. Discovery and parse are per process unless you pass `--debug`.
@@ -26,7 +32,7 @@ Runtime values decide which optional groups are absent. `compile_sql` rewrites t
 
 ## Execute
 
-Twigs run in order on the named provider (`"db"` unless `--sql(name)--` says otherwise). `$mode` rows can stash `$params`, return a soft error, break early, or pass through engine JSON. Ordinary rows are kept for shaping.
+Twigs run in order on the provider passed to `query`. `$mode` rows can stash `$params`, return a soft error, break early, or pass through engine JSON. Ordinary rows are kept for shaping.
 
 ## Shape
 

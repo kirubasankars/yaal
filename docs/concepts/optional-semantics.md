@@ -1,3 +1,9 @@
+<!--
+Copyright 2018 Kiruba Sankar Swaminathan. All rights reserved.
+Use of this source code is governed by a MIT style
+license that can be found in the LICENSE file.
+-->
+
 # Optional semantics
 
 One `optional(...)` is a single all-or-nothing block. The parameters inside it are kept together or the whole block is removed. A mix of present and missing values is a compile error.

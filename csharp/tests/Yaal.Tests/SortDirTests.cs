@@ -5,7 +5,9 @@
 using System.Text.RegularExpressions;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
+using Yaal.Drivers;
 using Yaal.Execution;
+using Yaal.Providers;
 using Yaal.Sql;
 
 namespace Yaal.Tests;
@@ -535,6 +537,7 @@ public class SortDirIntegrationTests : IDisposable
 {
     private readonly string _dbPath;
     private readonly Yaal _yaal;
+    private readonly IDataProvider _db;
 
     private static string RepoRoot =>
         Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", ".."));
@@ -551,7 +554,7 @@ public class SortDirIntegrationTests : IDisposable
         }
 
         _yaal = new Yaal(Path.Combine(RepoRoot, "tests", "fixtures", "api"), debug: true);
-        _yaal.SetupDataProvider("db", "sqlite3:///" + _dbPath);
+        _db = DriverRegistry.Open("sqlite3:///" + _dbPath);
     }
 
     public void Dispose()
@@ -562,7 +565,7 @@ public class SortDirIntegrationTests : IDisposable
     [Fact]
     public void List_sort_id_desc()
     {
-        var result = _yaal.Query("user/list", args: new { sort = "id", dir = "desc" });
+        var result = _yaal.Query(_db, "user/list", args: new { sort = "id", dir = "desc" });
         var rows = ((System.Collections.IEnumerable)result!).Cast<Dictionary<string, object?>>().ToList();
         rows.Select(r => Convert.ToInt64(r["id"])).Should().Equal(2L, 1L);
     }
@@ -570,7 +573,7 @@ public class SortDirIntegrationTests : IDisposable
     [Fact]
     public void List_multi_column_sort()
     {
-        var result = _yaal.Query("user/list", args: new { sort = "name,id", dir = "desc,asc" });
+        var result = _yaal.Query(_db, "user/list", args: new { sort = "name,id", dir = "desc,asc" });
         var rows = ((System.Collections.IEnumerable)result!).Cast<Dictionary<string, object?>>().ToList();
         rows.Select(r => (string)r["name"]!).Should().Equal("guest", "admin");
     }
@@ -580,7 +583,7 @@ public class SortDirIntegrationTests : IDisposable
     {
         // Only exercises that the *_nulls_last vocabulary round-trips through a real
         // SQLite query without erroring (SQLite supports NULLS LAST).
-        var result = _yaal.Query("user/list", args: new { sort = "name", dir = "desc_nulls_last" });
+        var result = _yaal.Query(_db, "user/list", args: new { sort = "name", dir = "desc_nulls_last" });
         var rows = ((System.Collections.IEnumerable)result!).Cast<Dictionary<string, object?>>().ToList();
         rows.Should().HaveCount(2);
     }
@@ -588,7 +591,7 @@ public class SortDirIntegrationTests : IDisposable
     [Fact]
     public void Unknown_sort_soft_errors()
     {
-        var result = _yaal.Query("user/list", args: new { sort = "nope" });
+        var result = _yaal.Query(_db, "user/list", args: new { sort = "nope" });
         var dict = (Dictionary<string, object?>)result!;
         dict.Should().ContainKey("errors");
     }
@@ -596,7 +599,7 @@ public class SortDirIntegrationTests : IDisposable
     [Fact]
     public void Too_many_dir_values_soft_errors()
     {
-        var result = _yaal.Query("user/list", args: new { sort = "name", dir = "desc,asc" });
+        var result = _yaal.Query(_db, "user/list", args: new { sort = "name", dir = "desc,asc" });
         var dict = (Dictionary<string, object?>)result!;
         dict.Should().ContainKey("errors");
     }
@@ -604,7 +607,7 @@ public class SortDirIntegrationTests : IDisposable
     [Fact]
     public void Explain_shows_resolved_order_by()
     {
-        var explained = _yaal.ExplainSql("user/list", args: new { sort = "name", dir = "desc" });
+        var explained = _yaal.ExplainSql(_db, "user/list", args: new { sort = "name", dir = "desc" });
         var sql = explained[0]["sql"]!.ToString()!;
         sql.Should().Contain("u.user_name");
         sql.Should().Contain("DESC");
@@ -613,7 +616,7 @@ public class SortDirIntegrationTests : IDisposable
     [Fact]
     public void Explain_keeps_static_tiebreaker_when_sort_omitted()
     {
-        var explained = _yaal.ExplainSql("user/list");
+        var explained = _yaal.ExplainSql(_db, "user/list");
         var sql = explained[0]["sql"]!.ToString()!;
         sql.ToLowerInvariant().Should().Contain("order by");
         sql.Should().Contain("u.user_id");

@@ -127,7 +127,6 @@ class TestBuilderFlatSchema(unittest.TestCase):
                 return []
 
         branch = {"path": "p", "method": "$", "name": "$"}
-        bag = {}
         model = {
             "args": {"type": "object", "properties": {}},
             "payload": {"type": "object", "properties": {}},
@@ -144,7 +143,7 @@ class TestBuilderFlatSchema(unittest.TestCase):
         }
         with self.assertRaises(TypeError):
             _build_branch(
-                branch, {}, Reader(), model["payload"], model["output"], model, bag,
+                branch, {}, Reader(), model["payload"], model["output"], model,
             )
 
     def test_builder_flat_with_parent_rows_child(self):
@@ -158,7 +157,6 @@ class TestBuilderFlatSchema(unittest.TestCase):
                 return []
 
         branch = {"path": "p", "method": "$", "name": "$"}
-        bag = {}
         model = {
             "args": {"type": "object", "properties": {}},
             "payload": {"type": "object", "properties": {}},
@@ -179,7 +177,7 @@ class TestBuilderFlatSchema(unittest.TestCase):
             },
         }
         _build_branch(
-            branch, {}, Reader(), model["payload"], model["output"], model, bag,
+            branch, {}, Reader(), model["payload"], model["output"], model,
         )
         self.assertEqual(branch["output_type"], "array")
         self.assertEqual(branch["partition_by"], "id")

@@ -554,7 +554,8 @@ class TestSortDirIntegration(unittest.TestCase):
         os.close(fd)
         sqlite3.connect(self._db_path).executescript(SCHEMA.read_text())
         self._yaal = Yaal(str(FIXTURE_API), debug=True)
-        self._yaal.setup_data_provider("db", "sqlite3:///" + self._db_path)
+        from yaal_drivers import open as open_db
+        self._provider = open_db("sqlite3:///" + self._db_path)
 
     def tearDown(self):
         try:
@@ -563,35 +564,35 @@ class TestSortDirIntegration(unittest.TestCase):
             pass
 
     def test_list_sort_name(self):
-        rows = self._yaal.query("user/list", args={"sort": "name"})
+        rows = self._yaal.query(self._provider, "user/list", args={"sort": "name"})
         self.assertEqual([r["name"] for r in rows], ["admin", "guest"])
 
     def test_list_sort_id_desc(self):
-        rows = self._yaal.query("user/list", args={"sort": "id", "dir": "desc"})
+        rows = self._yaal.query(self._provider, "user/list", args={"sort": "id", "dir": "desc"})
         self.assertEqual([r["id"] for r in rows], [2, 1])
 
     def test_list_multi_column_sort(self):
-        rows = self._yaal.query("user/list", args={"sort": "name,id", "dir": "desc,asc"})
+        rows = self._yaal.query(self._provider, "user/list", args={"sort": "name,id", "dir": "desc,asc"})
         self.assertEqual([r["name"] for r in rows], ["guest", "admin"])
 
     def test_list_nulls_last_dir(self):
         # Only exercises that the *_nulls_last vocabulary round-trips through a
         # real SQLite query without erroring (SQLite supports NULLS LAST).
-        rows = self._yaal.query("user/list", args={"sort": "name", "dir": "desc_nulls_last"})
+        rows = self._yaal.query(self._provider, "user/list", args={"sort": "name", "dir": "desc_nulls_last"})
         self.assertEqual(len(rows), 2)
 
     def test_unknown_sort_soft_errors(self):
-        result = self._yaal.query("user/list", args={"sort": "nope"})
+        result = self._yaal.query(self._provider, "user/list", args={"sort": "nope"})
         self.assertIn("errors", result)
         self.assertTrue(any("unknown sort key" in e.get("message", "") for e in result["errors"]))
 
     def test_too_many_dir_values_soft_errors(self):
-        result = self._yaal.query("user/list", args={"sort": "name", "dir": "desc,asc"})
+        result = self._yaal.query(self._provider, "user/list", args={"sort": "name", "dir": "desc,asc"})
         self.assertIn("errors", result)
         self.assertTrue(any("too many dir values" in e.get("message", "") for e in result["errors"]))
 
     def test_explain_shows_resolved_order_by(self):
-        explained = self._yaal.explain_sql(
+        explained = self._yaal.explain_sql(self._provider, 
             "user/list", args={"sort": "name", "dir": "desc"}
         )
         sql = explained[0]["sql"]
@@ -600,7 +601,7 @@ class TestSortDirIntegration(unittest.TestCase):
         self.assertNotIn("sort(", sql.lower())
 
     def test_explain_keeps_static_tiebreaker_when_sort_omitted(self):
-        explained = self._yaal.explain_sql("user/list")
+        explained = self._yaal.explain_sql(self._provider, "user/list")
         sql = explained[0]["sql"]
         self.assertIn("order by", sql.lower())
         self.assertIn("u.user_id", sql)

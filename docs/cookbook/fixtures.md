@@ -1,6 +1,12 @@
+<!--
+Copyright 2018 Kiruba Sankar Swaminathan. All rights reserved.
+Use of this source code is governed by a MIT style
+license that can be found in the LICENSE file.
+-->
+
 # Fixture index
 
-Every operation under `tests/fixtures/api/`. Seed: `docker/sqlite/schema.sql` (two users, two roles). Flags seed: `docker/sqlite/flags_schema.sql`.
+Every operation under `tests/fixtures/api/`. Seed: `docker/sqlite/schema.sql` (two users, two roles).
 
 ```bash
 make example
@@ -18,7 +24,6 @@ make yaal ARGS='list'
 | `user/when_optional` | `optional_when` | [Optional DSL](../reference/optional-dsl.md) |
 | `user/page` | Siblings + `$mode=params` | [Pagination](../guides/pagination-and-mode-params.md) |
 | `report/summary` | `WITH` and aggregates | [Real SQL](../tutorial/08-real-sql.md) |
-| `user/combine` | `--sql(flags)--` | [Multi-database](../guides/multi-database.md) |
 | `user/create` | Insert twigs + payload | [Writes and modes](../guides/writes-and-modes.md) |
 
 Compile goldens (no database): `tests/fixtures/sql_compile/`.

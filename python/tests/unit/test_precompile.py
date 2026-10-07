@@ -58,17 +58,18 @@ class TestPrecompile(unittest.TestCase):
                 written = compile_api(str(FIXTURE_API), out)
                 self.assertIn("user/get.json", written)
 
+                from yaal_drivers import open as open_db
+                provider = open_db(url)
+
                 src = Yaal(str(FIXTURE_API), debug=True)
-                src.setup_data_provider("db", url)
-                expected = src.query("user/get", args={"id": 1})
+                expected = src.query(provider, "user/get", args={"id": 1})
 
                 pre = Yaal(str(FIXTURE_API), precompiled=out)
-                pre.setup_data_provider("db", url)
-                actual = pre.query("user/get", args={"id": 1})
+                actual = pre.query(provider, "user/get", args={"id": 1})
                 self.assertEqual(actual, expected)
 
                 # Twig tokens still drive explain/compile
-                explained = pre.explain_sql("user/get", args={"id": 1})
+                explained = pre.explain_sql(provider, "user/get", args={"id": 1})
                 self.assertTrue(explained)
                 self.assertIn("select", explained[0]["sql"].lower())
         finally:

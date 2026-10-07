@@ -253,7 +253,6 @@ _PARAMETER_RX = re.compile(
     r"\s*(?P<name>[\$\_\.A-Za-z0-9\[\]]+)(?P<required>!)?\s+(?P<type>\w+(?:\[\])?)"
     r"(?:\s*=\s*(?P<default>.+))?\s*"
 )
-_SQL_RX = re.compile(r"--sql\(\s*(?P<name>\w+)?\s*\)--")
 _POSSIBLE_NULL_PARAMETER_RX = re.compile(
     r"^\(\s*{{(?P<name>[A-Za-z0-9_.$-]*?)}}\s+is\s+null\s+or",
     re.IGNORECASE,
@@ -1666,10 +1665,6 @@ def parser(tokens, method):
                         "content": [],
                         "parameters": []
                     }
-                    m = _SQL_RX.search(token_value)
-                    if m:
-                        d = m.groupdict()
-                        sql_stmt["connection"] = d["name"] or "db"
                 significant_seen = True
                 tc += 1
                 continue

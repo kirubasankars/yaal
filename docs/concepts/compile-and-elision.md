@@ -1,3 +1,9 @@
+<!--
+Copyright 2018 Kiruba Sankar Swaminathan. All rights reserved.
+Use of this source code is governed by a MIT style
+license that can be found in the LICENSE file.
+-->
+
 # Compile and elision
 
 Parse builds a token list. Compile turns that list plus **this request’s values** into SQL and binds. Explain uses the same compile path and does not execute.

@@ -1,6 +1,12 @@
+<!--
+Copyright 2018 Kiruba Sankar Swaminathan. All rights reserved.
+Use of this source code is governed by a MIT style
+license that can be found in the LICENSE file.
+-->
+
 # Yaal
 
-**Subtractive SQL→JSON for .NET 8.** You author full SQL (plus JSON shapes). At bind time Yaal **subtracts** unused `optional(...)`, `optional_when(...)`, and `optional_groups_or(...)` / `optional_groups_and(...)` fragments (including empty `WHERE` / `PREWHERE` / `HAVING` cleanup), expands header `integer[]` (and sibling types) for `IN` lists, runs the remaining statements (optionally across named databases), and shapes flat rows into **nested JSON**.
+**Subtractive SQL→JSON for .NET 8.** You author full SQL (plus JSON shapes). At bind time Yaal **subtracts** unused `optional(...)`, `optional_when(...)`, and `optional_groups_or(...)` / `optional_groups_and(...)` fragments (including empty `WHERE` / `PREWHERE` / `HAVING` cleanup), expands header `integer[]` (and sibling types) for `IN` lists, runs the remaining statements on the provider you pass to `Query`, and shapes flat rows into **nested JSON**.
 
 Yaal is not an additive ORM: no entity tracking, migrations, or query-builder DSL. SQL files stay the source of truth.
 
@@ -10,17 +16,9 @@ Pipeline: *write SQL → subtract optionals → run → shape → JSON*.
 
 ```bash
 dotnet add package Yaal
-dotnet add package Microsoft.Data.Sqlite   # or Npgsql / MySqlConnector / ClickHouse.Client
 ```
 
-Database clients are **not** shipped as NuGet dependencies. Add the driver your app uses. If a client is missing, `SetupDataProvider` throws with the package name to install.
-
-| Engine | Package |
-|---|---|
-| SQLite | [Microsoft.Data.Sqlite](https://www.nuget.org/packages/Microsoft.Data.Sqlite) |
-| PostgreSQL | [Npgsql](https://www.nuget.org/packages/Npgsql) |
-| MySQL | [MySqlConnector](https://www.nuget.org/packages/MySqlConnector) |
-| ClickHouse | [ClickHouse.Client](https://www.nuget.org/packages/ClickHouse.Client) |
+The library does not reference a database driver. Your application implements `IDataProvider` around a connection it already opened. The example and the tests open URLs with `Yaal.Drivers.DriverRegistry.Open`.
 
 Requires **.NET 8**. License: [MIT](https://github.com/kirubasankars/yaal/blob/master/LICENSE).
 
@@ -32,10 +30,8 @@ Point Yaal at a folder of descriptor operations (`*.sql` plus optional `$.output
 using Yaal;
 
 var y = new Yaal("./api");
-y.SetupDataProvider("db", "sqlite3:////tmp/app.db");
-
-var result = y.Query("user/get", args: new { id = 1 });
-string json = y.QueryJson("user/get", args: new { id = 1 });
+var result = y.Query(provider, "user/get", args: new { id = 1 });
+string json = y.QueryJson(provider, "user/get", args: new { id = 1 });
 ```
 
 ### Precompiled descriptors
@@ -90,7 +86,7 @@ make benchmark-csharp
 Preview compiled SQL after optional-filter elision:
 
 ```csharp
-foreach (var twig in y.ExplainSql("user/get", args: new { id = 1 }))
+foreach (var twig in y.ExplainSql(provider, "user/get", args: new { id = 1 }))
     Console.WriteLine($"{twig["sql"]}  {twig["parameters"]}");
 ```
 
@@ -108,36 +104,15 @@ where u.user_id = {{$args.id}}
 
 Python and .NET share the same descriptor files.
 
-## Database URLs
+## Provider
 
-| Engine | Example |
-|---|---|
-| SQLite (absolute) | `sqlite3:////tmp/app.db` |
-| SQLite (relative) | `sqlite3://./data/app.db` |
-| SQLite (memory) | `sqlite3:///` |
-| Postgres | `postgresql://user:pass@127.0.0.1:5432/yaal` |
-| MySQL | `mysql://user:pass@127.0.0.1:3306/yaal` |
-| ClickHouse | `clickhouse://user:pass@127.0.0.1:9000/yaal` |
-
-ClickHouse uses HTTP via ClickHouse.Client. Port `9000` (native default) is remapped to `8123`.
-
-Named providers can run in one operation (`--sql(flags)--` twigs). Register each connection:
+An application that already has a connection implements `IDataProvider` (`Begin`, `Execute(sql, parameters)`, `End`, `Error`) and passes that instance to `Query`. See the [C# appendix](https://github.com/kirubasankars/yaal/blob/master/docs/appendix/csharp.md).
 
 ```csharp
-y.SetupDataProvider("db", "sqlite3:////tmp/app.db");
-y.SetupDataProvider("flags", "sqlite3:////tmp/flags.db");
+var result = y.Query(new MyProvider(connection), "user/get", args: new { id = 1 });
 ```
 
-## Custom providers
-
-Register your own engine, mock, or wrapper by implementing `IDataProviderContextManager`:
-
-```csharp
-y.SetupDataProvider("db", new MyContextManager());
-y.SetupDataProvider("db", new MyContextManager(), scheme: "postgresql");
-```
-
-`scheme` is optional. `postgresql`, `mysql`, and `clickhouse` use `%s` placeholders in `ExplainSql`; anything else uses `?`.
+`Placeholder` is `?` or `%s`. A second database is a second `Query` call with a second provider.
 
 ## Documentation
 

@@ -1,3 +1,9 @@
+<!--
+Copyright 2018 Kiruba Sankar Swaminathan. All rights reserved.
+Use of this source code is governed by a MIT style
+license that can be found in the LICENSE file.
+-->
+
 # Real SQL
 
 **Goal:** see that CTEs and aggregates stay ordinary SQL.
@@ -29,4 +35,4 @@ Why this shape fits reporting workloads: [Why SQL-first](../essays/why-sql-first
 
 Read `$.sql` and name the three selected columns. Match each one to a key in the JSON you just printed.
 
-Next: [Multi-database](09-multi-database.md).
+Next: [Precompile](10-precompile.md).
