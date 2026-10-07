@@ -44,7 +44,7 @@ yaal = "yaal_cli:main"
 
 [project.urls]
 Homepage = "https://github.com/kirubasankars/yaal"
-Documentation = "https://github.com/kirubasankars/yaal/blob/main/docs/index.md"
+Documentation = "https://kirubasankars.github.io/yaal/"
 
 [tool.setuptools]
 package-dir = {"" = "python/src"}

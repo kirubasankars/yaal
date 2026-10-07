@@ -1,8 +1,9 @@
 site_name: Yaal
 site_description: Subtractive SQL ORM — SQL and JSON descriptors to nested JSON
+site_url: https://kirubasankars.github.io/yaal/
 repo_url: https://github.com/kirubasankars/yaal
 repo_name: kirubasankars/yaal
-edit_uri: edit/main/docs/
+edit_uri: edit/master/docs/
 
 docs_dir: docs
 
