@@ -8,7 +8,7 @@ That is the opposite of additive ORMs that build SQL up from models. Yaal is not
 
 Pipeline: *write SQL → subtract optionals → run (any named DB) → shape → JSON*.
 
-License: [MIT](LICENSE). Version: `0.9.0` (Python package + NuGet metadata). Python and .NET 8 share the same descriptor files.
+License: [MIT](LICENSE). Version: `0.9.0` (Python package + NuGet metadata). Python and .NET 10 share the same descriptor files.
 
 ## Features
 
@@ -133,7 +133,7 @@ yaal query report/summary
 
 ### Dual runtime
 
-Python and .NET 8 share [`tests/fixtures/api/`](tests/fixtures/api/). [Full example →](docs/examples.md#dual-runtime-python--c)
+Python and .NET 10 share [`tests/fixtures/api/`](tests/fixtures/api/). [Full example →](docs/examples.md#dual-runtime-python--c)
 
 ```python
 y.query("user/get", args={"id": 1})
@@ -182,7 +182,7 @@ pip install 'yaal[postgres]'   # or [mysql] / [clickhouse] — SQLite is stdlib
 
 CLI entry point after install: `yaal` (same as `python -m yaal_cli`).
 
-C# / .NET 8: `dotnet add package Yaal` (`0.8.0`), then add the client your app uses:
+C# / .NET 10: `dotnet add package Yaal` (`0.9.0`), then add the client your app uses:
 
 ```bash
 dotnet add package Microsoft.Data.Sqlite   # or Npgsql / MySqlConnector / ClickHouse.Client
@@ -300,7 +300,7 @@ CI (GitHub Actions) runs Python unit tests and .NET tests on every PR. Shared SQ
 
 Library, tests, and demo live under [`python/`](python/). See [`python/README.md`](python/README.md).
 
-## C# (.NET 8)
+## C# (.NET 10)
 
 A full-parity .NET port lives under [`csharp/`](csharp/). Consume from nuget.org: [`Yaal`](https://www.nuget.org/packages/Yaal) — see [`csharp/README.md`](csharp/README.md) (the package listing). Includes JSON or C# source precompile, `RegisterDescriptor`, and the `yaal` CLI (`compile --format json|cs`). Tests run in a .NET SDK container (no local `dotnet` required):
 

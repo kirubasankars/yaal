@@ -10,7 +10,7 @@ Yaal turns SQL + JSON descriptors into nested JSON. These docs use the shared fi
 | [why-sql-first.md](why-sql-first.md) | Why SQL-first fits ClickHouse-like engines and complex reporting apps |
 | [stringbuilder-vs-optional.md](stringbuilder-vs-optional.md) | C# microbenchmark: StringBuilder filter appends vs `optional()` elision |
 | [`../python/README.md`](../python/README.md) | Python library layout (`python/src`, tests, examples) |
-| [`../csharp/README.md`](../csharp/README.md) | .NET 8 / NuGet package — install, usage, database URLs, custom providers |
+| [`../csharp/README.md`](../csharp/README.md) | .NET 10 / NuGet package — install, usage, database URLs, custom providers |
 
 ## Try it
 
