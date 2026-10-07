@@ -8,7 +8,7 @@ pip install 'yaal[postgres]'    # or [mysql], [clickhouse], [engines]
 make install                    # from a clone: venv + pip install -e .
 ```
 
-CLI: `yaal`. Library layout: `python/src`, tests, and `python/examples/demo.py`. See [python/README.md](https://github.com/kirubasankars/yaal/blob/main/python/README.md).
+CLI: `yaal`. Library layout: `python/src`, tests, and `python/examples/demo.py`. See [python/README.md](https://github.com/kirubasankars/yaal/blob/master/python/README.md).
 
 Descriptors are the shared tree under `tests/fixtures/api/`. This page is only the runtime.
 

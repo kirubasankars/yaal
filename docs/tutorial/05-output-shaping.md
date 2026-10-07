@@ -15,8 +15,8 @@ Root `type` sets object vs array. Named nested branches each have their own `typ
 
 ## Files to open
 
-- [tests/fixtures/api/user/get/$.output.json](https://github.com/kirubasankars/yaal/blob/main/tests/fixtures/api/user/get/$.output.json)
-- [tests/fixtures/api/user/list/$.output.json](https://github.com/kirubasankars/yaal/blob/main/tests/fixtures/api/user/list/$.output.json)
+- [tests/fixtures/api/user/get/$.output.json](https://github.com/kirubasankars/yaal/blob/master/tests/fixtures/api/user/get/$.output.json)
+- [tests/fixtures/api/user/list/$.output.json](https://github.com/kirubasankars/yaal/blob/master/tests/fixtures/api/user/list/$.output.json)
 
 `user/get` is one object. `user/list` is an array of objects. Both map columns with `mapped`. Only `user/get` nests `roles` from the same row set.
 

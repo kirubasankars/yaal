@@ -11,9 +11,9 @@ yaal explain user/page --arg page=1 --arg page_size=10
 
 ## Files to open
 
-- [tests/fixtures/api/user/page/$.paging.sql](https://github.com/kirubasankars/yaal/blob/main/tests/fixtures/api/user/page/$.paging.sql)
-- [tests/fixtures/api/user/page/$.data.sql](https://github.com/kirubasankars/yaal/blob/main/tests/fixtures/api/user/page/$.data.sql)
-- [tests/fixtures/api/user/page/$.output.json](https://github.com/kirubasankars/yaal/blob/main/tests/fixtures/api/user/page/$.output.json)
+- [tests/fixtures/api/user/page/$.paging.sql](https://github.com/kirubasankars/yaal/blob/master/tests/fixtures/api/user/page/$.paging.sql)
+- [tests/fixtures/api/user/page/$.data.sql](https://github.com/kirubasankars/yaal/blob/master/tests/fixtures/api/user/page/$.data.sql)
+- [tests/fixtures/api/user/page/$.output.json](https://github.com/kirubasankars/yaal/blob/master/tests/fixtures/api/user/page/$.output.json)
 
 ## Three ideas
 

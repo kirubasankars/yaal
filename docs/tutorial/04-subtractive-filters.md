@@ -13,7 +13,7 @@ yaal explain user/groups --arg 'pairs=[{"id":1}]'
 
 ## Files to open
 
-- [tests/fixtures/api/user/list/$.sql](https://github.com/kirubasankars/yaal/blob/main/tests/fixtures/api/user/list/$.sql)
+- [tests/fixtures/api/user/list/$.sql](https://github.com/kirubasankars/yaal/blob/master/tests/fixtures/api/user/list/$.sql)
 
 The interesting fragment:
 

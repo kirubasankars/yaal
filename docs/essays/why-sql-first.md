@@ -39,7 +39,7 @@ With Yaal you author the real, per-engine SQL directly — CTEs, window function
 1. Subtract unused `optional(...)` predicates before running the statement
 2. Shape the resulting flat rows into JSON
 
-That elision is careful enough to also clean up filter clauses: an elided filter that was the only predicate drops the empty `WHERE`, ClickHouse `PREWHERE`, or `HAVING` (see [Optional DSL](../reference/optional-dsl.md)). Because Yaal never owns schema or migrations, it composes cleanly with externally managed ClickHouse DDL such as [`docker/clickhouse/init.sql`](https://github.com/kirubasankars/yaal/blob/main/docker/clickhouse/init.sql):
+That elision is careful enough to also clean up filter clauses: an elided filter that was the only predicate drops the empty `WHERE`, ClickHouse `PREWHERE`, or `HAVING` (see [Optional DSL](../reference/optional-dsl.md)). Because Yaal never owns schema or migrations, it composes cleanly with externally managed ClickHouse DDL such as [`docker/clickhouse/init.sql`](https://github.com/kirubasankars/yaal/blob/master/docker/clickhouse/init.sql):
 
 ```sql
 CREATE TABLE IF NOT EXISTS yaal.users (
@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS yaal.users (
 ORDER BY user_id;
 ```
 
-And a `WITH` CTE + aggregation ([`report/summary`](https://github.com/kirubasankars/yaal/blob/main/tests/fixtures/api/report/summary/$.sql)) runs completely unmodified — Yaal never needed to understand it, only to bind its parameters and shape its output:
+And a `WITH` CTE + aggregation ([`report/summary`](https://github.com/kirubasankars/yaal/blob/master/tests/fixtures/api/report/summary/$.sql)) runs completely unmodified — Yaal never needed to understand it, only to bind its parameters and shape its output:
 
 ```sql
 WITH role_counts AS (
@@ -72,7 +72,7 @@ This same descriptor already runs against SQLite, Postgres, MySQL, and ClickHous
 
 Reporting and dashboard UIs are defined by a query *shape*, not a specific engine: ad hoc filters, sortable/dynamic columns, heavy aggregation, results from more than one source, and paginated counts. Yaal's primitives map onto that shape directly, in SQL, instead of through conditional query-builder branches:
 
-- **Ad hoc filters** — `optional(...)` declares each toggleable predicate in place; the filters a caller omits are subtracted before the statement runs, so there's no branch-per-filter code path to maintain ([`user/list`](https://github.com/kirubasankars/yaal/blob/main/tests/fixtures/api/user/list/$.sql)):
+- **Ad hoc filters** — `optional(...)` declares each toggleable predicate in place; the filters a caller omits are subtracted before the statement runs, so there's no branch-per-filter code path to maintain ([`user/list`](https://github.com/kirubasankars/yaal/blob/master/tests/fixtures/api/user/list/$.sql)):
 
   ```sql
   where 1 = 1
@@ -88,7 +88,7 @@ Reporting and dashboard UIs are defined by a query *shape*, not a specific engin
     u.user_id asc
   ```
 
-- **Paginated counts without a second round trip through the ORM** — `$mode=params` lets one twig's `COUNT(*)` feed the next twig's `page`/`page_size`/`total_count`, in one operation ([`user/page`](https://github.com/kirubasankars/yaal/blob/main/tests/fixtures/api/user/page/$.paging.sql)):
+- **Paginated counts without a second round trip through the ORM** — `$mode=params` lets one twig's `COUNT(*)` feed the next twig's `page`/`page_size`/`total_count`, in one operation ([`user/page`](https://github.com/kirubasankars/yaal/blob/master/tests/fixtures/api/user/page/$.paging.sql)):
 
   ```sql
   SELECT 'params' AS "$mode", COUNT(*) AS total_count FROM users WHERE active = 1
@@ -96,7 +96,7 @@ Reporting and dashboard UIs are defined by a query *shape*, not a specific engin
   SELECT {{$args.page}} AS page, {{$args.page_size}} AS page_size, {{$params.total_count}} AS total_count
   ```
 
-- **Multi-source reports** — `--sql(name)--` twigs run against a second named connection (a flags DB, an analytics replica, a warehouse) and combine into one shape in a single operation ([`user/combine`](https://github.com/kirubasankars/yaal/blob/main/tests/fixtures/api/user/combine/$.output.json)), instead of requiring a separate query outside the ORM's own `DbContext`/session.
+- **Multi-source reports** — `--sql(name)--` twigs run against a second named connection (a flags DB, an analytics replica, a warehouse) and combine into one shape in a single operation ([`user/combine`](https://github.com/kirubasankars/yaal/blob/master/tests/fixtures/api/user/combine/$.output.json)), instead of requiring a separate query outside the ORM's own `DbContext`/session.
 
 None of this is ClickHouse-specific — it's the same argument for a Postgres or MySQL reporting schema. The report-shaped parts of an app (ad hoc filters, dynamic sort, aggregation, multi-source joins, pagination) are exactly where additive ORMs are weakest, because that shape doesn't map onto entities and relations in the first place.
 

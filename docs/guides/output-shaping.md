@@ -4,7 +4,7 @@
 
 ## Shape
 
-`user/get` maps a join into one object and a `roles` array. Open [$.output.json](https://github.com/kirubasankars/yaal/blob/main/tests/fixtures/api/user/get/$.output.json).
+`user/get` maps a join into one object and a `roles` array. Open [$.output.json](https://github.com/kirubasankars/yaal/blob/master/tests/fixtures/api/user/get/$.output.json).
 
 ```json
 {

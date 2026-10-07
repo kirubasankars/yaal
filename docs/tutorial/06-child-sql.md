@@ -11,9 +11,9 @@ yaal query user/get --arg id=1
 
 ## Files to open
 
-- [tests/fixtures/api/user/nested/$.sql](https://github.com/kirubasankars/yaal/blob/main/tests/fixtures/api/user/nested/$.sql)
-- [tests/fixtures/api/user/nested/$.roles.sql](https://github.com/kirubasankars/yaal/blob/main/tests/fixtures/api/user/nested/$.roles.sql)
-- [tests/fixtures/api/user/nested/$.output.json](https://github.com/kirubasankars/yaal/blob/main/tests/fixtures/api/user/nested/$.output.json)
+- [tests/fixtures/api/user/nested/$.sql](https://github.com/kirubasankars/yaal/blob/master/tests/fixtures/api/user/nested/$.sql)
+- [tests/fixtures/api/user/nested/$.roles.sql](https://github.com/kirubasankars/yaal/blob/master/tests/fixtures/api/user/nested/$.roles.sql)
+- [tests/fixtures/api/user/nested/$.output.json](https://github.com/kirubasankars/yaal/blob/master/tests/fixtures/api/user/nested/$.output.json)
 
 ## Compare
 

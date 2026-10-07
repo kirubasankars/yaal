@@ -10,8 +10,8 @@ yaal query report/summary
 
 ## Files to open
 
-- [tests/fixtures/api/report/summary/$.sql](https://github.com/kirubasankars/yaal/blob/main/tests/fixtures/api/report/summary/$.sql)
-- [tests/fixtures/api/report/summary/$.output.json](https://github.com/kirubasankars/yaal/blob/main/tests/fixtures/api/report/summary/$.output.json)
+- [tests/fixtures/api/report/summary/$.sql](https://github.com/kirubasankars/yaal/blob/master/tests/fixtures/api/report/summary/$.sql)
+- [tests/fixtures/api/report/summary/$.output.json](https://github.com/kirubasankars/yaal/blob/master/tests/fixtures/api/report/summary/$.output.json)
 
 The statement uses `WITH role_counts AS (...)` and `COUNT` / `SUM`. Yaal does not rewrite that SQL. It binds parameters (none here) and maps columns:
 

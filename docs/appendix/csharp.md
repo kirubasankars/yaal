@@ -1,6 +1,6 @@
 # C#
 
-.NET 8 package `Yaal` on NuGet. Install the driver you use (`Microsoft.Data.Sqlite`, `Npgsql`, `MySqlConnector`, or `ClickHouse.Client`). Full packaging notes: [csharp/README.md](https://github.com/kirubasankars/yaal/blob/main/csharp/README.md).
+.NET 8 package `Yaal` on NuGet. Install the driver you use (`Microsoft.Data.Sqlite`, `Npgsql`, `MySqlConnector`, or `ClickHouse.Client`). Full packaging notes: [csharp/README.md](https://github.com/kirubasankars/yaal/blob/master/csharp/README.md).
 
 Descriptors are the same folders Python uses. This page is only the runtime.
 

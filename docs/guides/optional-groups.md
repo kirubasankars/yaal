@@ -10,7 +10,7 @@ select * from (select 1 as id union select 2) t
 where optional_groups_or({{$args.pairs}}, id = {{id}})
 ```
 
-Fixture: [tests/fixtures/api/user/groups/$.sql](https://github.com/kirubasankars/yaal/blob/main/tests/fixtures/api/user/groups/$.sql).
+Fixture: [tests/fixtures/api/user/groups/$.sql](https://github.com/kirubasankars/yaal/blob/master/tests/fixtures/api/user/groups/$.sql).
 
 `{{id}}` is a key on each row object. It is not a header parameter. Swap the keyword to `optional_groups_and` when every row must match.
 

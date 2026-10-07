@@ -21,7 +21,7 @@ Deeper treatment: [Descriptor lifecycle](../concepts/descriptor-lifecycle.md) an
 
 ## Files to open
 
-- [tests/fixtures/api/user/get/](https://github.com/kirubasankars/yaal/tree/main/tests/fixtures/api/user/get) — one trunk SQL file plus a shape
+- [tests/fixtures/api/user/get/](https://github.com/kirubasankars/yaal/tree/master/tests/fixtures/api/user/get) — one trunk SQL file plus a shape
 
 ## Exercise
 

@@ -21,8 +21,8 @@ When `--db` is omitted, the CLI seeds a temp SQLite database from `docker/sqlite
 
 ## Files to open
 
-- [python/examples/demo.py](https://github.com/kirubasankars/yaal/blob/main/python/examples/demo.py) — what `make example` runs
-- [docker/sqlite/schema.sql](https://github.com/kirubasankars/yaal/blob/main/docker/sqlite/schema.sql) — two users, two roles
+- [python/examples/demo.py](https://github.com/kirubasankars/yaal/blob/master/python/examples/demo.py) — what `make example` runs
+- [docker/sqlite/schema.sql](https://github.com/kirubasankars/yaal/blob/master/docker/sqlite/schema.sql) — two users, two roles
 
 ## What you should see
 

@@ -6,9 +6,9 @@
 
 ## Files to open
 
-- [tests/fixtures/api/user/combine/$.app.sql](https://github.com/kirubasankars/yaal/blob/main/tests/fixtures/api/user/combine/$.app.sql)
-- [tests/fixtures/api/user/combine/$.flags.sql](https://github.com/kirubasankars/yaal/blob/main/tests/fixtures/api/user/combine/$.flags.sql)
-- [docker/sqlite/flags_schema.sql](https://github.com/kirubasankars/yaal/blob/main/docker/sqlite/flags_schema.sql)
+- [tests/fixtures/api/user/combine/$.app.sql](https://github.com/kirubasankars/yaal/blob/master/tests/fixtures/api/user/combine/$.app.sql)
+- [tests/fixtures/api/user/combine/$.flags.sql](https://github.com/kirubasankars/yaal/blob/master/tests/fixtures/api/user/combine/$.flags.sql)
+- [docker/sqlite/flags_schema.sql](https://github.com/kirubasankars/yaal/blob/master/docker/sqlite/flags_schema.sql)
 
 ## What the files do
 

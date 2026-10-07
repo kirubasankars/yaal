@@ -12,8 +12,8 @@ yaal explain user/get
 
 ## Files to open
 
-- [tests/fixtures/api/user/get/$.sql](https://github.com/kirubasankars/yaal/blob/main/tests/fixtures/api/user/get/$.sql)
-- [tests/fixtures/api/user/get/$.output.json](https://github.com/kirubasankars/yaal/blob/main/tests/fixtures/api/user/get/$.output.json)
+- [tests/fixtures/api/user/get/$.sql](https://github.com/kirubasankars/yaal/blob/master/tests/fixtures/api/user/get/$.sql)
+- [tests/fixtures/api/user/get/$.output.json](https://github.com/kirubasankars/yaal/blob/master/tests/fixtures/api/user/get/$.output.json)
 
 ## What to notice
 
