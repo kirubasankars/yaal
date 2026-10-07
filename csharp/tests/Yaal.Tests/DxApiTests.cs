@@ -21,12 +21,46 @@ public class DxApiTests
     private static string SeedTempDb()
     {
         var path = Path.Combine(Path.GetTempPath(), "yaal-test-" + Guid.NewGuid().ToString("n") + ".db");
-        using var con = new SqliteConnection("Data Source=" + path);
+        using var con = new SqliteConnection("Data Source=" + path + ";Pooling=False");
         con.Open();
         using var cmd = con.CreateCommand();
         cmd.CommandText = File.ReadAllText(SchemaPath);
         cmd.ExecuteNonQuery();
         return path;
+    }
+
+    private static void DeleteWithRetry(string path, int maxAttempts = 20, int delayMs = 100, bool throwOnFailure = true)
+    {
+        Exception? last = null;
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                if (File.Exists(path))
+                    File.Delete(path);
+                return;
+            }
+            catch (IOException ex)
+            {
+                last = ex;
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                last = ex;
+            }
+
+            if (attempt == 3)
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+            }
+
+            if (attempt < maxAttempts)
+                System.Threading.Thread.Sleep(delayMs);
+        }
+
+        if (File.Exists(path) && throwOnFailure)
+            throw new IOException($"Failed to delete temp file '{path}' after {maxAttempts} attempts.", last);
     }
 
     [Fact]
@@ -42,7 +76,7 @@ public class DxApiTests
         }
         finally
         {
-            File.Delete(path);
+            DeleteWithRetry(path, throwOnFailure: false);
         }
     }
 

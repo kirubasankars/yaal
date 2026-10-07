@@ -1,6 +1,6 @@
 # Yaal
 
-**Subtractive SQL→JSON for .NET 8.** You author full SQL (plus JSON shapes). At bind time Yaal **subtracts** unused `optional(...)`, `optional_when(...)`, and `optional_groups_or(...)` / `optional_groups_and(...)` fragments (including empty `WHERE` / `PREWHERE` / `HAVING` cleanup), expands header `integer[]` (and sibling types) for `IN` lists, runs the remaining statements (optionally across named databases), and shapes flat rows into **nested JSON**.
+**Subtractive SQL→JSON for .NET 10.** You author full SQL (plus JSON shapes). At bind time Yaal **subtracts** unused `optional(...)`, `optional_when(...)`, and `optional_groups_or(...)` / `optional_groups_and(...)` fragments (including empty `WHERE` / `PREWHERE` / `HAVING` cleanup), expands header `integer[]` (and sibling types) for `IN` lists, runs the remaining statements (optionally across named databases), and shapes flat rows into **nested JSON**.
 
 Yaal is not an additive ORM: no entity tracking, migrations, or query-builder DSL. SQL files stay the source of truth.
 
@@ -22,7 +22,7 @@ Database clients are **not** shipped as NuGet dependencies. Add the driver your 
 | MySQL | [MySqlConnector](https://www.nuget.org/packages/MySqlConnector) |
 | ClickHouse | [ClickHouse.Client](https://www.nuget.org/packages/ClickHouse.Client) |
 
-Requires **.NET 8**. License: [MIT](https://github.com/kirubasankars/yaal/blob/master/LICENSE).
+Requires **.NET 10**. License: [MIT](https://github.com/kirubasankars/yaal/blob/master/LICENSE).
 
 ## Usage
 

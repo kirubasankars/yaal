@@ -363,7 +363,8 @@ public class SortDirTests
         var twig = Twig();
         var sortMap = SortDirDesugar.ResolveValues(twig, ArgsShape(sort: "name,id", dir: "desc,asc"));
         var compiled = SqlCompiler.Compile(twig, new[] { "$args.active" }, "?", sortMap);
-        compiled.Content.Should().Contain("order by\n  u.user_name DESC, u.user_id ASC");
+        var actual = Regex.Replace(compiled.Content, @"\s+", " ").Trim();
+        actual.Should().Contain("order by u.user_name DESC, u.user_id ASC");
     }
 
     // -- NULLS FIRST/LAST ------------------------------------------------------
