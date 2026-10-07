@@ -2,8 +2,10 @@
 // Use of this source code is governed by a MIT style
 // license that can be found in the LICENSE file.
 
+using System.Data.Common;
+
 using ClickHouse.Client.ADO;
-using ClickHouse.Client.ADO.Parameters;
+
 using Yaal.Execution;
 using Yaal.Sql;
 
@@ -11,7 +13,13 @@ namespace Yaal.Providers;
 
 public sealed class ClickHouseContextManager : IDataProviderContextManager
 {
-    private readonly string _connectionString;
+    private readonly string? _connectionString;
+    private readonly Func<DbConnection>? _dbConnection;
+
+    public ClickHouseContextManager(Func<DbConnection> options)
+    {
+        _dbConnection = options;
+    }
 
     public ClickHouseContextManager(DatabaseOptions options)
     {
@@ -44,22 +52,31 @@ public sealed class ClickHouseContextManager : IDataProviderContextManager
         _connectionString = builder.ConnectionString;
     }
 
-    public IDataProvider GetContext() => new ClickHouseDataProvider(_connectionString);
+    public IDataProvider GetContext() =>
+        _dbConnection != null
+            ? new ClickHouseDataProvider(_dbConnection)
+            : new ClickHouseDataProvider(_connectionString!);
 }
 
 public sealed class ClickHouseDataProvider : IDataProvider
 {
-    private readonly string _connectionString;
-    private ClickHouseConnection? _client;
+    private readonly string? _connectionString;
+    private readonly Func<DbConnection>? _dbConnection;
+    private DbConnection? _client;
 
     public ClickHouseDataProvider(string connectionString)
     {
         _connectionString = connectionString;
     }
 
+    public ClickHouseDataProvider(Func<DbConnection> dbConnection)
+    {
+        _dbConnection = dbConnection;
+    }
+
     public void Begin()
     {
-        _client = new ClickHouseConnection(_connectionString);
+        _client = _dbConnection?.Invoke() ?? new ClickHouseConnection(_connectionString!);
         _client.Open();
     }
 
@@ -92,11 +109,10 @@ public sealed class ClickHouseDataProvider : IDataProvider
         cmd.CommandText = content;
         for (var i = 0; i < args.Count; i++)
         {
-            cmd.Parameters.Add(new ClickHouseDbParameter
-            {
-                ParameterName = "p" + i,
-                Value = args[i] ?? DBNull.Value,
-            });
+            var parameter = cmd.CreateParameter();
+            parameter.ParameterName = "p" + i;
+            parameter.Value = args[i] ?? DBNull.Value;
+            cmd.Parameters.Add(parameter);
         }
 
         var rows = new List<IDictionary<string, object?>>();
