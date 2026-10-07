@@ -6,7 +6,7 @@ license that can be found in the LICENSE file.
 
 # Yaal
 
-**Subtractive SQL→JSON for .NET 8.** You author full SQL (plus JSON shapes). At bind time Yaal **subtracts** unused `optional(...)`, `optional_when(...)`, and `optional_groups_or(...)` / `optional_groups_and(...)` fragments (including empty `WHERE` / `PREWHERE` / `HAVING` cleanup), expands header `integer[]` (and sibling types) for `IN` lists, runs the remaining statements on the provider you pass to `Query`, and shapes flat rows into **nested JSON**.
+**Subtractive SQL→JSON for .NET Standard 2.0.** You author full SQL (plus JSON shapes). At bind time Yaal **subtracts** unused `optional(...)`, `optional_when(...)`, and `optional_groups_or(...)` / `optional_groups_and(...)` fragments (including empty `WHERE` / `PREWHERE` / `HAVING` cleanup), expands header `integer[]` (and sibling types) for `IN` lists, runs the remaining statements on the provider you pass to `Query`, and shapes flat rows into **nested JSON**.
 
 Yaal is not an additive ORM: no entity tracking, migrations, or query-builder DSL. SQL files stay the source of truth.
 
@@ -20,7 +20,7 @@ dotnet add package Yaal
 
 The library does not reference a database driver. Your application implements `IDataProvider` around a connection it already opened. The example and the tests open URLs with `Yaal.Drivers.DriverRegistry.Open`.
 
-Requires **.NET 8**. License: [MIT](https://github.com/kirubasankars/yaal/blob/master/LICENSE).
+The library targets **.NET Standard 2.0**, so it runs on .NET Framework 4.6.1+ and .NET Core 2.0 / .NET 5+. The CLI and the example need the .NET 8 runtime. License: [MIT](https://github.com/kirubasankars/yaal/blob/master/LICENSE).
 
 ## Usage
 

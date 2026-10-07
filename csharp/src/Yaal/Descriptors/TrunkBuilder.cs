@@ -185,7 +185,7 @@ public static class TrunkBuilder
 
             foreach (var (k, v) in branch.Parameters)
             {
-                if (k.StartsWith('$') && !k.Contains("$parent"))
+                if (k.StartsWith("$", StringComparison.Ordinal) && !k.Contains("$parent"))
                     ExpandParameter(AsModelDict(model), k, v);
                 else
                     ExpandParameter(payloadModel, k, v);
@@ -194,7 +194,7 @@ public static class TrunkBuilder
             branch.Twigs = ast.SqlStmts;
         }
 
-        var lowerBranchMap = branchMap.Keys.Select(k => k.ToLowerInvariant()).ToHashSet();
+        var lowerBranchMap = new HashSet<string>(branchMap.Keys.Select(k => k.ToLowerInvariant()));
         foreach (var (k, v) in mapByFiles)
         {
             if (!lowerBranchMap.Contains(k.ToLowerInvariant()))

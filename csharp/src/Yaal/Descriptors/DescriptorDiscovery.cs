@@ -13,12 +13,13 @@ public static class DescriptorDiscovery
             return new List<string>();
 
         var found = new List<string>();
-        foreach (var dir in Directory.EnumerateDirectories(root, "*", SearchOption.AllDirectories)
-                     .Prepend(root))
+        var dirs = new List<string> { root };
+        dirs.AddRange(Directory.EnumerateDirectories(root, "*", SearchOption.AllDirectories));
+        foreach (var dir in dirs)
         {
             if (!Directory.EnumerateFiles(dir, "*.sql").Any())
                 continue;
-            var rel = Path.GetRelativePath(root, dir).Replace('\\', '/');
+            var rel = RelativePath(root, dir).Replace('\\', '/');
             if (rel == ".")
                 rel = "";
             found.Add(rel);
@@ -50,6 +51,17 @@ public static class DescriptorDiscovery
         return mappers;
     }
 
+    private static string RelativePath(string root, string dir)
+    {
+        var prefix = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
+        if (dir.Equals(root, StringComparison.OrdinalIgnoreCase))
+            return ".";
+        if (dir.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            return dir.Substring(prefix.Length);
+        return dir;
+    }
+
     public static string RegistryKey(string path, string? outputMapper) =>
         string.IsNullOrEmpty(outputMapper) ? path : path + "#" + outputMapper;
 
@@ -57,9 +69,9 @@ public static class DescriptorDiscovery
     {
         var segments = string.IsNullOrEmpty(path)
             ? new[] { "Root" }
-            : path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            : path.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
         var parts = segments
-            .Select(p => char.ToUpperInvariant(p[0]) + p[1..].Replace("_", "", StringComparison.Ordinal))
+            .Select(p => char.ToUpperInvariant(p[0]) + p[1..].Replace("_", ""))
             .ToList();
         if (!string.IsNullOrEmpty(outputMapper))
             parts.Add(char.ToUpperInvariant(outputMapper[0]) + outputMapper[1..]);

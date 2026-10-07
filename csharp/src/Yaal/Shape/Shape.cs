@@ -38,7 +38,7 @@ public sealed class Shape
         {
             foreach (var key in schemaProps.Keys)
             {
-                if (key.StartsWith('$'))
+                if (key.StartsWith("$", StringComparison.Ordinal))
                 {
                     throw new ArgumentException(
                         $"schema properties must not start with $. Reserved keyword '{key}' is not allowed.");
@@ -50,7 +50,7 @@ public sealed class Shape
         {
             foreach (var key in dataDict.Keys)
             {
-                if (key.StartsWith('$') && !allowedDollarDataKeys.Contains(key))
+                if (key.StartsWith("$", StringComparison.Ordinal) && !allowedDollarDataKeys.Contains(key))
                 {
                     throw new ArgumentException(
                         $"properties must not start with $. Reserved keyword '{key}' is not allowed.");
@@ -188,7 +188,7 @@ public sealed class Shape
                 return ((List<Shape>)_shapes)[idx].GetProp(remainingPath);
             }
 
-            if (path.StartsWith('$'))
+            if (path.StartsWith("$", StringComparison.Ordinal))
             {
                 if (path == YaalConst.Parent)
                     return parent!.GetProp(remainingPath);
@@ -200,7 +200,7 @@ public sealed class Shape
             return ((Dictionary<string, Shape>)_shapes)[path].GetProp(remainingPath);
         }
 
-        if (prop.StartsWith('$'))
+        if (prop.StartsWith("$", StringComparison.Ordinal))
         {
             if (prop is YaalConst.Json or YaalConst.Parent or YaalConst.Length or YaalConst.Index)
             {

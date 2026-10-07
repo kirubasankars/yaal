@@ -14,7 +14,7 @@ That is the opposite of additive ORMs that build SQL up from models. Yaal is not
 
 Pipeline: *write SQL → subtract optionals → run (any named DB) → shape → JSON*.
 
-License: [MIT](LICENSE). Version: `0.9.0` (Python package + NuGet metadata). Python and .NET 8 share the same descriptor files.
+License: [MIT](LICENSE). Version: `0.9.0` (Python package + NuGet metadata). Python and .NET share the same descriptor files. The C# library targets .NET Standard 2.0.
 
 ## Features
 
@@ -128,7 +128,7 @@ yaal query report/summary
 
 ### Dual runtime
 
-Python and .NET 8 share [`tests/fixtures/api/`](tests/fixtures/api/). [Full example →](docs/appendix/python.md)
+Python and .NET share [`tests/fixtures/api/`](tests/fixtures/api/). [Full example →](docs/appendix/python.md)
 
 ```python
 y.query(provider, "user/get", args={"id": 1})
@@ -177,13 +177,7 @@ pip install 'yaal[postgres]'   # or [mysql] / [clickhouse] — SQLite is stdlib
 
 CLI entry point after install: `yaal` (same as `python -m yaal_cli`).
 
-C# / .NET 8: `dotnet add package Yaal` (`0.9.0`), then add the client your app uses:
-
-```bash
-dotnet add package Microsoft.Data.Sqlite   # or Npgsql / MySqlConnector / ClickHouse.Client
-```
-
-Or add a project reference to [`csharp/src/Yaal/Yaal.csproj`](csharp/src/Yaal/Yaal.csproj).
+C#: `dotnet add package Yaal` (`0.9.0`). The library targets .NET Standard 2.0. The CLI and the example need the .NET 8 runtime. Or add a project reference to [`csharp/src/Yaal/Yaal.csproj`](csharp/src/Yaal/Yaal.csproj).
 
 ## Quick start
 
@@ -300,9 +294,9 @@ CI (GitHub Actions) runs Python unit tests and .NET tests on every PR. Shared SQ
 
 Library, tests, and demo live under [`python/`](python/). See [`python/README.md`](python/README.md).
 
-## C# (.NET 8)
+## C#
 
-A full-parity .NET port lives under [`csharp/`](csharp/). Consume from nuget.org: [`Yaal`](https://www.nuget.org/packages/Yaal) — see [`csharp/README.md`](csharp/README.md) (the package listing). Includes JSON or C# source precompile, `RegisterDescriptor`, and the `yaal` CLI (`compile --format json|cs`). Tests run in a .NET SDK container (no local `dotnet` required):
+A full-parity .NET port lives under [`csharp/`](csharp/). The [`Yaal`](https://www.nuget.org/packages/Yaal) package targets .NET Standard 2.0 — see [`csharp/README.md`](csharp/README.md). Includes JSON or C# source precompile, `RegisterDescriptor`, and the `yaal` CLI (`compile --format json|cs`). The CLI needs the .NET 8 runtime. Tests run in a .NET SDK container (no local `dotnet` required):
 
 ```bash
 make test-csharp

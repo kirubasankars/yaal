@@ -36,7 +36,8 @@ public static class GroupDesugar
                 "optional_groups(...) was renamed: use optional_groups_or(...) to keep the " +
                 "OR join, or optional_groups_and(...) to AND the rows");
         }
-        return GroupJoinByKeyword.GetValueOrDefault(token.Value);
+        GroupJoinByKeyword.TryGetValue(token.Value, out var join);
+        return join;
     }
 
     private static void EnsureNoNestedGroups(List<SqlToken> body)

@@ -126,7 +126,7 @@ public static class SortDirDesugar
                         i += 1;
                         break;
                     }
-                    if (val.EndsWith(',') && !val[..^1].Contains(','))
+                    if (val.EndsWith(",", StringComparison.Ordinal) && !val[..^1].Contains(","))
                     {
                         var trimmed = new SqlToken { Type = t.Type, Value = val[..^1] };
                         if (trimmed.Value != "")
@@ -293,7 +293,7 @@ public static class SortDirDesugar
                     i += 1;
                     continue;
                 }
-                if (val.EndsWith(",", StringComparison.Ordinal) && !val[..^1].Contains(','))
+                if (val.EndsWith(",", StringComparison.Ordinal) && !val[..^1].Contains(","))
                 {
                     var trimmed = new SqlToken { Type = t.Type, Value = val[..^1], Group = t.Group };
                     if (trimmed.Value != "")

@@ -133,9 +133,9 @@ public static class SqlParser
                 method + ".sql");
         }
 
-        if (text.StartsWith('\''))
+        if (text.StartsWith("'", StringComparison.Ordinal))
         {
-            if (text.Length < 2 || !text.EndsWith('\''))
+            if (text.Length < 2 || !text.EndsWith("'", StringComparison.Ordinal))
             {
                 throw new InvalidOperationException(
                     "unclosed string literal in default for {{" + paramName + "}} in " +

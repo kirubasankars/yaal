@@ -6,7 +6,7 @@ license that can be found in the LICENSE file.
 
 # C#
 
-.NET 8 package `Yaal` on NuGet. The library does not reference a database driver. Full packaging notes: [csharp/README.md](https://github.com/kirubasankars/yaal/blob/master/csharp/README.md).
+NuGet package `Yaal`, targeting .NET Standard 2.0 (.NET Framework 4.6.1+ and .NET Core 2.0 / .NET 5+). The library does not reference a database driver. The CLI and the example need the .NET 8 runtime. Full packaging notes: [csharp/README.md](https://github.com/kirubasankars/yaal/blob/master/csharp/README.md).
 
 Descriptors are the same folders Python uses. This page is only the runtime.
 

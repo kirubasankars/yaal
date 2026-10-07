@@ -19,7 +19,7 @@ flowchart LR
 
 SQL stays the source of truth. Aggregations, `WITH`, and window functions are ordinary SQL, not a query-builder escape hatch. Yaal is not ActiveRecord: there is no entity tracking, migration ownership, or query-builder DSL.
 
-Shared fixtures live under `tests/fixtures/api/`. Seed data is `docker/sqlite/schema.sql`. Python and .NET 8 share those descriptors. Runtime APIs are in the [appendices](appendix/python.md).
+Shared fixtures live under `tests/fixtures/api/`. Seed data is `docker/sqlite/schema.sql`. Python and .NET share those descriptors. The C# library targets .NET Standard 2.0. Runtime APIs are in the [appendices](appendix/python.md).
 
 ## Where to start
 

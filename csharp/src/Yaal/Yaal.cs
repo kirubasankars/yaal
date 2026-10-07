@@ -52,7 +52,8 @@ public sealed class Yaal
     /// <summary>Register an in-memory descriptor (overwrites an existing registration for the same key).</summary>
     public void RegisterDescriptor(string descriptorPath, Branch branch, string? outputMapper = null)
     {
-        ArgumentNullException.ThrowIfNull(branch);
+        if (branch == null)
+            throw new ArgumentNullException(nameof(branch));
         var key = DescriptorKey(descriptorPath, outputMapper);
         _registered[key] = branch;
         _descriptors.Remove(key);
@@ -73,7 +74,8 @@ public sealed class Yaal
         object? args = null,
         string? outputMapper = null)
     {
-        ArgumentNullException.ThrowIfNull(provider);
+        if (provider == null)
+            throw new ArgumentNullException(nameof(provider));
         var descriptor = LoadDescriptor(descriptorPath, outputMapper);
         var context = ContextFactory.CreateContext(descriptor, payload, args);
         return GetResult(provider, descriptor, context);
@@ -86,7 +88,8 @@ public sealed class Yaal
         object? args = null,
         string? outputMapper = null)
     {
-        ArgumentNullException.ThrowIfNull(provider);
+        if (provider == null)
+            throw new ArgumentNullException(nameof(provider));
         var descriptor = LoadDescriptor(descriptorPath, outputMapper);
         var context = ContextFactory.CreateContext(descriptor, payload, args);
         return GetResultJson(provider, descriptor, context);
@@ -100,7 +103,8 @@ public sealed class Yaal
         string? outputMapper = null,
         string? placeholder = null)
     {
-        ArgumentNullException.ThrowIfNull(provider);
+        if (provider == null)
+            throw new ArgumentNullException(nameof(provider));
         var descriptor = LoadDescriptor(descriptorPath, outputMapper);
         var context = ContextFactory.CreateContext(descriptor, payload, args);
         placeholder ??= string.IsNullOrEmpty(provider.Placeholder) ? "?" : provider.Placeholder;

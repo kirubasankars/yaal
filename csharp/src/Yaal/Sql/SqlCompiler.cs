@@ -97,20 +97,12 @@ public static class SqlCompiler
         }
 
         sortMap ??= new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
-        var arrayLengthMap = arrayLengths != null
-            ? new Dictionary<string, int>(arrayLengths, StringComparer.OrdinalIgnoreCase)
-            : new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        var groupCountMap = groupCounts != null
-            ? new Dictionary<string, int>(groupCounts, StringComparer.OrdinalIgnoreCase)
-            : new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        var groupFieldLengthMap = groupFieldLengths != null
-            ? new Dictionary<string, List<Dictionary<string, int>>>(
-                groupFieldLengths, StringComparer.OrdinalIgnoreCase)
-            : new Dictionary<string, List<Dictionary<string, int>>>(StringComparer.OrdinalIgnoreCase);
-        var groupFieldIsArrayMap = groupFieldIsArray != null
-            ? new Dictionary<string, List<Dictionary<string, bool>>>(
-                groupFieldIsArray, StringComparer.OrdinalIgnoreCase)
-            : new Dictionary<string, List<Dictionary<string, bool>>>(StringComparer.OrdinalIgnoreCase);
+        var arrayLengthMap = NetstandardCompat.CopyDictionary(arrayLengths, StringComparer.OrdinalIgnoreCase);
+        var groupCountMap = NetstandardCompat.CopyDictionary(groupCounts, StringComparer.OrdinalIgnoreCase);
+        var groupFieldLengthMap = NetstandardCompat.CopyDictionary(
+            groupFieldLengths, StringComparer.OrdinalIgnoreCase);
+        var groupFieldIsArrayMap = NetstandardCompat.CopyDictionary(
+            groupFieldIsArray, StringComparer.OrdinalIgnoreCase);
         var nullsSet = new HashSet<string>(nulls.Select(n => n.ToLowerInvariant()));
         var stmt = sqlStmt.Content;
         var tokens = new List<string>();

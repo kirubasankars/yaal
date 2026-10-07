@@ -124,7 +124,7 @@ public sealed class DataProviderHelper
                     seq = inputShape.GetProp(paramName);
                     _paramCache[paramName] = seq;
                 }
-                var idx = arrayIndexes.GetValueOrDefault(paramName);
+                arrayIndexes.TryGetValue(paramName, out var idx);
                 if (seq is System.Collections.IList list)
                     paramValue = idx < list.Count ? list[idx] : null;
                 else
@@ -138,7 +138,7 @@ public sealed class DataProviderHelper
             else
             {
                 paramValue = inputShape.GetProp(paramName);
-                if (paramName.StartsWith('$') && !paramName.Contains("$parent"))
+                if (paramName.StartsWith("$", StringComparison.Ordinal) && !paramName.Contains("$parent"))
                     _paramCache[paramName] = paramValue;
             }
 
