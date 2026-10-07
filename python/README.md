@@ -8,7 +8,7 @@ license that can be found in the LICENSE file.
 
 Python implementation of the Yaal SQL→JSON library. Descriptor-driven queries, subtractive `optional()` / `optional_groups` SQL DSL, header array params (`integer[]` for `IN`), and nested JSON shaping.
 
-Package: `yaal` `0.8.0` (MIT). The library does not open a connection. Pass a provider to `query`. Driver extras are for the `yaal` command. SQLite is stdlib.
+Package: `yaal` `0.9.0` (MIT). The library does not open a connection. Pass a provider to `query`. Driver extras are for the `yaal` command. SQLite is stdlib.
 
 ```bash
 pip install yaal
