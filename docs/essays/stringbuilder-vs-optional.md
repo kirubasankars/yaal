@@ -44,7 +44,7 @@ Descriptor parse and `RegisterDescriptor` happen once per N, outside the timed l
 | CPU | Intel Core i7-10850H @ 2.70 GHz (12 cores) |
 | OS | Fedora Linux 44 (Workstation Edition) |
 | Runtime | .NET 10.0.11, **Release** |
-| Package | Yaal **0.9.0** |
+| Package | Yaal **0.10.0** |
 | Harness | Stopwatch, 80 warmup iterations, `GC.Collect` between cells, ~1 s measure per cell |
 
 Debug builds are not usable for this comparison.

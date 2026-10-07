@@ -14,7 +14,7 @@ That is the opposite of additive ORMs that build SQL up from models. Yaal is not
 
 Pipeline: *write SQL → subtract optionals → run (any named DB) → shape → JSON*.
 
-License: [MIT](LICENSE). Version: `0.9.0` (Python package + NuGet metadata). Python and .NET share the same descriptor files. The C# library targets .NET Standard 2.0.
+License: [MIT](LICENSE). Version: `0.10.0` (Python package + NuGet metadata). Python and .NET share the same descriptor files. The C# library targets .NET Standard 2.0.
 
 ## Features
 
@@ -177,7 +177,7 @@ pip install 'yaal[postgres]'   # or [mysql] / [clickhouse] — SQLite is stdlib
 
 CLI entry point after install: `yaal` (same as `python -m yaal_cli`).
 
-C#: `dotnet add package Yaal` (`0.9.0`). The library targets .NET Standard 2.0. The CLI and the example need the .NET 8 runtime. Or add a project reference to [`csharp/src/Yaal/Yaal.csproj`](csharp/src/Yaal/Yaal.csproj).
+C#: `dotnet add package Yaal` (`0.10.0`). The library targets .NET Standard 2.0. The CLI and the example need the .NET 8 runtime. Or add a project reference to [`csharp/src/Yaal/Yaal.csproj`](csharp/src/Yaal/Yaal.csproj).
 
 ## Quick start
 
