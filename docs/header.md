@@ -1,6 +1,6 @@
 # Parameter header
 
-The header is the first significant token. It declares every argument.
+The header is the first significant token. Only comments may precede it, and a second header is an error. It declares every argument.
 
 ```sql
 --(id!, name, page)--

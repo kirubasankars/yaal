@@ -91,6 +91,7 @@ Java calls the library with the foreign function API, so the program needs `--en
 - [optional groups](docs/groups.md)
 - [Nested](docs/nested.md)
 - [sort and dir](docs/sort.md)
+- [Safety](docs/safety.md)
 - [examples](docs/examples.md)
 
 ## Build
