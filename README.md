@@ -101,7 +101,7 @@ make docs
 make nuget
 ```
 
-`make nuget` packs the C# binding into `artifacts/`. Publishing happens from a published GitHub release: the tag, such as `v2.0.0`, must match `<Version>` in the C# project. The workflow runs the C# tests, packs, validates the package, and pushes it to NuGet with trusted publishing.
+`make nuget` packs the C# binding into `artifacts/`. Publishing happens from a published GitHub release: the tag, such as `v0.11.0`, must match `<Version>` in the C# project. The workflow runs the C# tests, packs, validates the package, and pushes it to NuGet with trusted publishing.
 
 `make ci` is what GitHub Actions runs: the Rust tests, the language bindings, and `cargo fmt --check`.
 
