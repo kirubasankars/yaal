@@ -1,6 +1,0 @@
-{
-  "type": "array",
-  "properties": {
-    "id": { "mapped": "id" }
-  }
-}
