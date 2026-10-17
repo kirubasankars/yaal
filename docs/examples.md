@@ -141,9 +141,9 @@ where z = 1
 
 `apply` is not bound.
 
-## optional_when around a group
+## Nested
 
-From `optional_when_wrapping_groups_only_keeps` and `optional_when_wrapping_groups_only_cond_absent_elides`.
+From `optional_when_wrapping_groups_only_keeps` and `optional_when_wrapping_groups_only_cond_absent_elides`. `optional_when` wraps `optional_groups_or`.
 
 ```sql
 --(apply, pairs blob)--
@@ -211,6 +211,78 @@ where (
 ```
 
 Omitting `flag` leaves `where ((c1 = ?) or (c1 = ?))`.
+
+`optional` wrapping a group and a header argument, from `optional_with_groups_multi_row` and `optional_with_groups_id_only_keeps_scalar`.
+
+```sql
+--(pairs blob, x)--
+select *
+from t
+where z = 1
+  and optional(
+    a = {{x}}
+    and optional_groups_or({{pairs}}, id = {{self.id}})
+  )
+```
+
+```json
+{
+  "x": 1,
+  "pairs": [
+    {"id": 1},
+    {"id": 1}
+  ]
+}
+```
+
+```sql
+select *
+from t
+where z = 1
+  and (
+    a = ?
+    and (
+      (id = ?)
+      or (id = ?)
+    )
+  )
+```
+
+`{"x": 1, "pairs": null}` compiles to `select * from t where z = 1 and (a = ?)`.
+
+`optional` inside a group, from `optional_inside_groups_body_args_header` and `optional_inside_groups_body_args_header_omitted`.
+
+```sql
+--(pairs blob, flag)--
+select *
+from t
+where optional_groups_or(
+  {{pairs}},
+  col1 = {{self.cv1}}
+  and optional(col2 = {{flag}})
+)
+```
+
+```json
+{
+  "flag": 1,
+  "pairs": [
+    {"cv1": 1},
+    {"cv1": 1}
+  ]
+}
+```
+
+```sql
+select *
+from t
+where (
+  (col1 = ? and (col2 = ?))
+  or (col1 = ? and (col2 = ?))
+)
+```
+
+Omitting `flag` leaves `where ((col1 = ?) or (col1 = ?))`.
 
 ## Group rows
 
@@ -448,6 +520,47 @@ select {{a}}
 
 ```text
 invalid parameter declaration 'a integer junk' in query.sql
+```
+
+### Nested optional_when
+
+From `optional_when_nested_errors`.
+
+```sql
+--(a, b, x)--
+select *
+from t
+where optional_when({{a}}, optional_when({{b}}, c = {{x}}))
+```
+
+```json
+{"a": true, "b": true, "x": 1}
+```
+
+```text
+nested optional_when(...) is not supported
+```
+
+### Nested groups
+
+From `optional_groups_mixed_nested_errors`.
+
+```sql
+--(pairs blob, pairs1 blob)--
+select *
+from t
+where optional_groups_or(
+  {{pairs}},
+  optional_groups_and({{pairs1}}, id = {{self.id}})
+)
+```
+
+```json
+{}
+```
+
+```text
+nested optional_groups_or(...)/optional_groups_and(...) is not supported
 ```
 
 ### is null or without parentheses

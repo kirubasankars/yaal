@@ -17,6 +17,7 @@ PAGES = {
     "/header": ("Parameter header", ROOT / "docs" / "header.md"),
     "/optional": ("optional", ROOT / "docs" / "optional.md"),
     "/groups": ("optional groups", ROOT / "docs" / "groups.md"),
+    "/nested": ("Nested", ROOT / "docs" / "nested.md"),
     "/sort": ("sort and dir", ROOT / "docs" / "sort.md"),
     "/examples": ("Examples", ROOT / "docs" / "examples.md"),
     "/license": ("License", ROOT / "LICENSE"),
@@ -26,6 +27,7 @@ NAV = [
     ("/header", "Header"),
     ("/optional", "Optional"),
     ("/groups", "Groups"),
+    ("/nested", "Nested"),
     ("/sort", "Sort"),
     ("/examples", "Examples"),
 ]
@@ -125,10 +127,13 @@ def site_href(path):
 def href(url):
     if url == "LICENSE":
         return site_href("/license")
+    name = None
     if url.startswith("docs/") and url.endswith(".md"):
         name = url[len("docs/") : -3]
-        if name in {"header", "optional", "groups", "sort", "examples"}:
-            return site_href("/" + name)
+    elif url.endswith(".md") and "/" not in url:
+        name = url[:-3]
+    if name in {"header", "optional", "groups", "nested", "sort", "examples"}:
+        return site_href("/" + name)
     return url
 
 

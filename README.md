@@ -89,6 +89,7 @@ Java calls the library with the foreign function API, so the program needs `--en
 - [Parameter header](docs/header.md)
 - [optional and optional_when](docs/optional.md)
 - [optional groups](docs/groups.md)
+- [Nested](docs/nested.md)
 - [sort and dir](docs/sort.md)
 - [examples](docs/examples.md)
 
