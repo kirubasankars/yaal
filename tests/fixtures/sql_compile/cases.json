@@ -1,35 +1,31 @@
 [
   {
     "name": "null_strips_or_after_one_equals_one",
-    "sql": "--(param1 integer)--\nselect * from a where 1 = 1 or ({{param1}} is null or col1 = {{param1}})\n",
-    "nulls": [
-      "param1"
-    ],
+    "sql": "--(param1)--\nselect * from a where 1 = 1 or ({{param1}} is null or col1 = {{param1}})\n",
+    "params": {},
     "expect_sql": "select * from a",
     "expect_param_names": []
   },
   {
     "name": "null_strips_and_after_predicate",
-    "sql": "--(p integer)--\nselect * from a where a = 1 and ({{p}} is null or col = {{p}})\n",
-    "nulls": [
-      "p"
-    ],
+    "sql": "--(p)--\nselect * from a where a = 1 and ({{p}} is null or col = {{p}})\n",
+    "params": {},
     "expect_sql": "select * from a where a = 1",
     "expect_param_names": []
   },
   {
     "name": "sole_nullable_drops_where",
-    "sql": "--(p integer)--\nselect * from a where ({{p}} is null or col = {{p}})\n",
-    "nulls": [
-      "p"
-    ],
+    "sql": "--(p)--\nselect * from a where ({{p}} is null or col = {{p}})\n",
+    "params": {},
     "expect_sql": "select * from a",
     "expect_param_names": []
   },
   {
     "name": "non_null_strips_is_null_or_prefix",
-    "sql": "--(param1 integer)--\nselect * from a where 1 = 1 or ({{param1}} is null or col1 = {{param1}})\n",
-    "nulls": [],
+    "sql": "--(param1)--\nselect * from a where 1 = 1 or ({{param1}} is null or col1 = {{param1}})\n",
+    "params": {
+      "param1": 1
+    },
     "expect_sql": "select * from a where (col1 = ?)",
     "expect_param_names": [
       "param1"
@@ -37,10 +33,10 @@
   },
   {
     "name": "elided_params_omitted_from_bind_list",
-    "sql": "--(a integer, b integer)--\nselect * from t where col = {{a}} and ({{b}} is null or other = {{b}})\n",
-    "nulls": [
-      "b"
-    ],
+    "sql": "--(a, b)--\nselect * from t where col = {{a}} and ({{b}} is null or other = {{b}})\n",
+    "params": {
+      "a": 1
+    },
     "expect_sql": "select * from t where col = ?",
     "expect_param_names": [
       "a"
@@ -48,38 +44,31 @@
   },
   {
     "name": "nullable_name_match_is_case_insensitive",
-    "sql": "--(Param1 integer)--\nselect * from a where 1 = 1 OR ({{Param1}} is null or col1 = {{Param1}})\n",
-    "nulls": [
-      "PARAM1"
-    ],
+    "sql": "--(Param1)--\nselect * from a where 1 = 1 OR ({{param1}} is null or col1 = {{param1}})\n",
+    "params": {},
     "expect_sql": "select * from a",
-    "expect_param_names": [],
-    "expect_nullable_contains": [
-      "param1"
-    ]
+    "expect_param_names": []
   },
   {
     "name": "args_id_style_filter_like_fixture",
-    "sql": "--($args.id integer)--\nselect * from users u\nwhere u.active = 1\n  and r.active = 1\n  and ({{$args.id}} is null or u.user_id = {{$args.id}})\norder by u.user_id\n",
-    "nulls": [
-      "$args.id"
-    ],
+    "sql": "--(id)--\nselect * from users u\nwhere u.active = 1\n  and r.active = 1\n  and ({{id}} is null or u.user_id = {{id}})\norder by u.user_id\n",
+    "params": {},
     "expect_sql": "select * from users u where u.active = 1 and r.active = 1 order by u.user_id",
     "expect_param_names": []
   },
   {
     "name": "optional_sugar_null_strips_and",
-    "sql": "--(p integer)--\nselect * from a where a = 1 and optional(col = {{p}})\n",
-    "nulls": [
-      "p"
-    ],
+    "sql": "--(p)--\nselect * from a where a = 1 and optional(col = {{p}})\n",
+    "params": {},
     "expect_sql": "select * from a where a = 1",
     "expect_param_names": []
   },
   {
     "name": "optional_sugar_non_null_keeps_binds",
-    "sql": "--(param1 integer)--\nselect * from a where 1 = 1 or optional(col1 = {{param1}})\n",
-    "nulls": [],
+    "sql": "--(param1)--\nselect * from a where 1 = 1 or optional(col1 = {{param1}})\n",
+    "params": {
+      "param1": 1
+    },
     "expect_sql": "select * from a where (col1 = ?)",
     "expect_param_names": [
       "param1"
@@ -87,60 +76,60 @@
   },
   {
     "name": "optional_sugar_non_null_fixture_style",
-    "sql": "--($args.id integer)--\nselect * from users u\nwhere u.active = 1\n  and r.active = 1\n  and optional(u.user_id = {{$args.id}})\norder by u.user_id\n",
-    "nulls": [],
+    "sql": "--(id)--\nselect * from users u\nwhere u.active = 1\n  and r.active = 1\n  and optional(u.user_id = {{id}})\norder by u.user_id\n",
+    "params": {
+      "id": 1
+    },
     "expect_sql": "select * from users u where u.active = 1 and r.active = 1 and (u.user_id = ?) order by u.user_id",
     "expect_param_names": [
-      "$args.id"
+      "id"
     ]
   },
   {
     "name": "optional_sugar_sole_predicate_drops_where",
-    "sql": "--(p integer)--\nselect * from a where optional(col = {{p}})\n",
-    "nulls": [
-      "p"
-    ],
+    "sql": "--(p)--\nselect * from a where optional(col = {{p}})\n",
+    "params": {},
     "expect_sql": "select * from a",
     "expect_param_names": []
   },
   {
     "name": "optional_sugar_args_id_fixture_style",
-    "sql": "--($args.id integer)--\nselect * from users u\nwhere u.active = 1\n  and r.active = 1\n  and optional(u.user_id = {{$args.id}})\norder by u.user_id\n",
-    "nulls": [
-      "$args.id"
-    ],
+    "sql": "--(id)--\nselect * from users u\nwhere u.active = 1\n  and r.active = 1\n  and optional(u.user_id = {{id}})\norder by u.user_id\n",
+    "params": {},
     "expect_sql": "select * from users u where u.active = 1 and r.active = 1 order by u.user_id",
     "expect_param_names": []
   },
   {
     "name": "optional_subquery_sole_filter_drops_where",
-    "sql": "--($args.id integer)--\nselect * from (\nselect 1 as id\n) u where optional(id = {{$args.id}})\n",
-    "nulls": [
-      "$args.id"
-    ],
+    "sql": "--(id)--\nselect * from (\nselect 1 as id\n) u where optional(id = {{id}})\n",
+    "params": {},
     "expect_sql": "select * from ( select 1 as id ) u",
     "expect_param_names": []
   },
   {
     "name": "optional_nested_subquery_where_before_close_paren",
-    "sql": "--($args.id integer)--\nselect * from (\nselect * from (\nselect 1 as id\n) u where optional(id = {{$args.id}})\n) x\n",
-    "nulls": [
-      "$args.id"
-    ],
+    "sql": "--(id)--\nselect * from (\nselect * from (\nselect 1 as id\n) u where optional(id = {{id}})\n) x\n",
+    "params": {},
     "expect_sql": "select * from ( select * from ( select 1 as id ) u) x",
     "expect_param_names": []
   },
   {
     "name": "optional_sugar_requires_one_param",
-    "sql": "--(a integer)--\nselect * from a where optional(col = 1)\n",
+    "sql": "--(a)--\nselect * from a where optional(col = 1)\n",
+    "params": {
+      "a": 1
+    },
     "expect_error_contains": "at least one"
   },
   {
     "name": "array_in_three_elements",
-    "sql": "--(cv integer[])--\nselect * from t where col in ({{cv}})\n",
-    "nulls": [],
-    "array_lengths": {
-      "cv": 3
+    "sql": "--(cv)--\nselect * from t where col in ({{cv}}...)\n",
+    "params": {
+      "cv": [
+        1,
+        1,
+        1
+      ]
     },
     "expect_sql": "select * from t where col in (?, ?, ?)",
     "expect_param_names": [
@@ -151,10 +140,11 @@
   },
   {
     "name": "array_in_one_element",
-    "sql": "--(cv integer[])--\nselect * from t where col in ({{cv}})\n",
-    "nulls": [],
-    "array_lengths": {
-      "cv": 1
+    "sql": "--(cv)--\nselect * from t where col in ({{cv}}...)\n",
+    "params": {
+      "cv": [
+        1
+      ]
     },
     "expect_sql": "select * from t where col in (?)",
     "expect_param_names": [
@@ -163,28 +153,27 @@
   },
   {
     "name": "array_in_empty_errors",
-    "sql": "--(cv integer[])--\nselect * from t where col in ({{cv}})\n",
-    "nulls": [],
-    "array_lengths": {
-      "cv": 0
+    "sql": "--(cv)--\nselect * from t where col in ({{cv}}...)\n",
+    "params": {
+      "cv": []
     },
-    "expect_compile_error_contains": "empty array"
+    "expect_error_contains": "empty array"
   },
   {
     "name": "optional_array_elide_null",
-    "sql": "--(cv integer[])--\nselect * from t where optional(col in ({{cv}}))\n",
-    "nulls": [
-      "cv"
-    ],
+    "sql": "--(cv)--\nselect * from t where optional(col in ({{cv}}...))\n",
+    "params": {},
     "expect_sql": "select * from t",
     "expect_param_names": []
   },
   {
     "name": "optional_array_expand_two",
-    "sql": "--(cv integer[])--\nselect * from t where optional(col in ({{cv}}))\n",
-    "nulls": [],
-    "array_lengths": {
-      "cv": 2
+    "sql": "--(cv)--\nselect * from t where optional(col in ({{cv}}...))\n",
+    "params": {
+      "cv": [
+        1,
+        1
+      ]
     },
     "expect_sql": "select * from t where (col in (?, ?))",
     "expect_param_names": [
@@ -194,10 +183,14 @@
   },
   {
     "name": "optional_multi_with_array",
-    "sql": "--(a integer, cv integer[], b integer)--\nselect * from t where optional(col1 = {{a}} and col2 in ({{cv}}) and col3 = {{b}})\n",
-    "nulls": [],
-    "array_lengths": {
-      "cv": 2
+    "sql": "--(a, cv, b)--\nselect * from t where optional(col1 = {{a}} and col2 in ({{cv}}...) and col3 = {{b}})\n",
+    "params": {
+      "a": 1,
+      "cv": [
+        1,
+        1
+      ],
+      "b": 1
     },
     "expect_sql": "select * from t where (col1 = ? and col2 in (?, ?) and col3 = ?)",
     "expect_param_names": [
@@ -205,66 +198,57 @@
       "cv",
       "cv",
       "b"
-    ],
-    "expect_nullable_contains": [
-      "a",
-      "cv",
-      "b"
     ]
   },
   {
     "name": "optional_multi_both_bound",
-    "sql": "--(a integer, b integer)--\nselect * from t where optional(col1 = {{a}} and col2 in ('x','y') and col3 = {{b}})\n",
-    "nulls": [],
+    "sql": "--(a, b)--\nselect * from t where optional(col1 = {{a}} and col2 in ('x','y') and col3 = {{b}})\n",
+    "params": {
+      "a": 1,
+      "b": 1
+    },
     "expect_sql": "select * from t where (col1 = ? and col2 in ('x','y') and col3 = ?)",
     "expect_param_names": [
-      "a",
-      "b"
-    ],
-    "expect_nullable_contains": [
       "a",
       "b"
     ]
   },
   {
     "name": "optional_multi_all_null_elides",
-    "sql": "--(a integer, b integer)--\nselect * from t where optional(col1 = {{a}} and col3 = {{b}})\n",
-    "nulls": [
-      "a",
-      "b"
-    ],
+    "sql": "--(a, b)--\nselect * from t where optional(col1 = {{a}} and col3 = {{b}})\n",
+    "params": {},
     "expect_sql": "select * from t",
     "expect_param_names": []
   },
   {
     "name": "optional_multi_partial_null_errors",
-    "sql": "--(a integer, b integer)--\nselect * from t where optional(col1 = {{a}} and col3 = {{b}})\n",
-    "nulls": [
-      "a"
-    ],
-    "expect_compile_error_contains": "partial parameters"
+    "sql": "--(a, b)--\nselect * from t where optional(col1 = {{a}} and col3 = {{b}})\n",
+    "params": {
+      "b": 1
+    },
+    "expect_error_contains": "partial parameters"
   },
   {
     "name": "optional_multi_partial_null_errors_other_predicate",
-    "sql": "--(a integer, b integer)--\nselect * from t where x = 1 and optional(col1 = {{a}} and col3 = {{b}})\n",
-    "nulls": [
-      "b"
-    ],
-    "expect_compile_error_contains": "partial parameters"
+    "sql": "--(a, b)--\nselect * from t where x = 1 and optional(col1 = {{a}} and col3 = {{b}})\n",
+    "params": {
+      "a": 1
+    },
+    "expect_error_contains": "partial parameters"
   },
   {
     "name": "prewhere_optional_sole_null",
-    "sql": "--(p integer)--\nselect * from a prewhere optional(col = {{p}})\n",
-    "nulls": [
-      "p"
-    ],
+    "sql": "--(p)--\nselect * from a prewhere optional(col = {{p}})\n",
+    "params": {},
     "expect_sql": "select * from a",
     "expect_param_names": []
   },
   {
     "name": "prewhere_optional_sole_non_null",
-    "sql": "--(p integer)--\nselect * from a prewhere optional(col = {{p}})\n",
-    "nulls": [],
+    "sql": "--(p)--\nselect * from a prewhere optional(col = {{p}})\n",
+    "params": {
+      "p": 1
+    },
     "expect_sql": "select * from a prewhere (col = ?)",
     "expect_param_names": [
       "p"
@@ -272,56 +256,45 @@
   },
   {
     "name": "prewhere_one_equals_one_and_optional_null",
-    "sql": "--(p integer)--\nselect * from a prewhere 1 = 1 and optional(col = {{p}})\n",
-    "nulls": [
-      "p"
-    ],
+    "sql": "--(p)--\nselect * from a prewhere 1 = 1 and optional(col = {{p}})\n",
+    "params": {},
     "expect_sql": "select * from a",
     "expect_param_names": []
   },
   {
     "name": "prewhere_optional_before_order",
-    "sql": "--(p integer)--\nselect * from a prewhere optional(col = {{p}}) order by id\n",
-    "nulls": [
-      "p"
-    ],
+    "sql": "--(p)--\nselect * from a prewhere optional(col = {{p}}) order by id\n",
+    "params": {},
     "expect_sql": "select * from a order by id",
     "expect_param_names": []
   },
   {
     "name": "prewhere_optional_null_keeps_where",
-    "sql": "--(p integer)--\nselect * from a prewhere optional(a = {{p}}) where active = 1\n",
-    "nulls": [
-      "p"
-    ],
+    "sql": "--(p)--\nselect * from a prewhere optional(a = {{p}}) where active = 1\n",
+    "params": {},
     "expect_sql": "select * from a where active = 1",
     "expect_param_names": []
   },
   {
     "name": "prewhere_keeps_where_optional_null",
-    "sql": "--(p integer)--\nselect * from a prewhere a = 1 where optional(b = {{p}})\n",
-    "nulls": [
-      "p"
-    ],
+    "sql": "--(p)--\nselect * from a prewhere a = 1 where optional(b = {{p}})\n",
+    "params": {},
     "expect_sql": "select * from a prewhere a = 1",
     "expect_param_names": []
   },
   {
     "name": "prewhere_and_where_both_optional_null",
-    "sql": "--(a integer, b integer)--\nselect * from t prewhere optional(x = {{a}}) where optional(y = {{b}})\n",
-    "nulls": [
-      "a",
-      "b"
-    ],
+    "sql": "--(a, b)--\nselect * from t prewhere optional(x = {{a}}) where optional(y = {{b}})\n",
+    "params": {},
     "expect_sql": "select * from t",
     "expect_param_names": []
   },
   {
     "name": "prewhere_and_where_both_optional_mixed",
-    "sql": "--(a integer, b integer)--\nselect * from t prewhere optional(x = {{a}}) where optional(y = {{b}})\n",
-    "nulls": [
-      "a"
-    ],
+    "sql": "--(a, b)--\nselect * from t prewhere optional(x = {{a}}) where optional(y = {{b}})\n",
+    "params": {
+      "b": 1
+    },
     "expect_sql": "select * from t where (y = ?)",
     "expect_param_names": [
       "b"
@@ -329,8 +302,11 @@
   },
   {
     "name": "prewhere_and_where_both_optional_both_bound",
-    "sql": "--(a integer, b integer)--\nselect * from t prewhere optional(x = {{a}}) where optional(y = {{b}})\n",
-    "nulls": [],
+    "sql": "--(a, b)--\nselect * from t prewhere optional(x = {{a}}) where optional(y = {{b}})\n",
+    "params": {
+      "a": 1,
+      "b": 1
+    },
     "expect_sql": "select * from t prewhere (x = ?) where (y = ?)",
     "expect_param_names": [
       "a",
@@ -339,53 +315,45 @@
   },
   {
     "name": "prewhere_1eq1_or_optional_null_with_where",
-    "sql": "--(p integer)--\nselect * from a prewhere 1 = 1 or optional(a = {{p}}) where b = 1\n",
-    "nulls": [
-      "p"
-    ],
+    "sql": "--(p)--\nselect * from a prewhere 1 = 1 or optional(a = {{p}}) where b = 1\n",
+    "params": {},
     "expect_sql": "select * from a where b = 1",
     "expect_param_names": []
   },
   {
     "name": "prewhere_optional_nested_before_close_paren",
-    "sql": "--(p integer)--\nselect * from (\nselect * from (\nselect 1 as id\n) u prewhere optional(id = {{p}})\n) x\n",
-    "nulls": [
-      "p"
-    ],
+    "sql": "--(p)--\nselect * from (\nselect * from (\nselect 1 as id\n) u prewhere optional(id = {{p}})\n) x\n",
+    "params": {},
     "expect_sql": "select * from ( select * from ( select 1 as id ) u) x",
     "expect_param_names": []
   },
   {
     "name": "where_after_prewhere_optional_before_close_paren",
-    "sql": "--(p integer)--\nselect * from (\nselect * from (\nselect 1 as id\n) u prewhere x = 1 where optional(id = {{p}})\n) x\n",
-    "nulls": [
-      "p"
-    ],
+    "sql": "--(p)--\nselect * from (\nselect * from (\nselect 1 as id\n) u prewhere x = 1 where optional(id = {{p}})\n) x\n",
+    "params": {},
     "expect_sql": "select * from ( select * from ( select 1 as id ) u prewhere x = 1) x",
     "expect_param_names": []
   },
   {
     "name": "prewhere_optional_with_remaining_and",
-    "sql": "--(p integer)--\nselect * from a prewhere a = 1 and optional(b = {{p}})\n",
-    "nulls": [
-      "p"
-    ],
+    "sql": "--(p)--\nselect * from a prewhere a = 1 and optional(b = {{p}})\n",
+    "params": {},
     "expect_sql": "select * from a prewhere a = 1",
     "expect_param_names": []
   },
   {
     "name": "having_optional_sole_null",
-    "sql": "--(p integer)--\nselect id from a group by id having optional(count() > {{p}})\n",
-    "nulls": [
-      "p"
-    ],
+    "sql": "--(p)--\nselect id from a group by id having optional(count() > {{p}})\n",
+    "params": {},
     "expect_sql": "select id from a group by id",
     "expect_param_names": []
   },
   {
     "name": "having_optional_sole_non_null",
-    "sql": "--(p integer)--\nselect id from a group by id having optional(count() > {{p}})\n",
-    "nulls": [],
+    "sql": "--(p)--\nselect id from a group by id having optional(count() > {{p}})\n",
+    "params": {
+      "p": 1
+    },
     "expect_sql": "select id from a group by id having (count() > ?)",
     "expect_param_names": [
       "p"
@@ -393,62 +361,52 @@
   },
   {
     "name": "having_one_equals_one_and_optional_null",
-    "sql": "--(p integer)--\nselect id from a group by id having 1 = 1 and optional(count() > {{p}})\n",
-    "nulls": [
-      "p"
-    ],
+    "sql": "--(p)--\nselect id from a group by id having 1 = 1 and optional(count() > {{p}})\n",
+    "params": {},
     "expect_sql": "select id from a group by id",
     "expect_param_names": []
   },
   {
     "name": "having_optional_before_order",
-    "sql": "--(p integer)--\nselect id from a group by id having optional(count() > {{p}}) order by id\n",
-    "nulls": [
-      "p"
-    ],
+    "sql": "--(p)--\nselect id from a group by id having optional(count() > {{p}}) order by id\n",
+    "params": {},
     "expect_sql": "select id from a group by id order by id",
     "expect_param_names": []
   },
   {
     "name": "having_optional_with_remaining_and",
-    "sql": "--(p integer)--\nselect id from a group by id having count() > 0 and optional(sum(x) > {{p}})\n",
-    "nulls": [
-      "p"
-    ],
+    "sql": "--(p)--\nselect id from a group by id having count() > 0 and optional(sum(x) > {{p}})\n",
+    "params": {},
     "expect_sql": "select id from a group by id having count() > 0",
     "expect_param_names": []
   },
   {
     "name": "where_keeps_having_optional_null",
-    "sql": "--(p integer)--\nselect id from a where active = 1 group by id having optional(count() > {{p}})\n",
-    "nulls": [
-      "p"
-    ],
+    "sql": "--(p)--\nselect id from a where active = 1 group by id having optional(count() > {{p}})\n",
+    "params": {},
     "expect_sql": "select id from a where active = 1 group by id",
     "expect_param_names": []
   },
   {
     "name": "having_keeps_where_optional_null",
-    "sql": "--(p integer)--\nselect id from a where optional(active = {{p}}) group by id having count() > 0\n",
-    "nulls": [
-      "p"
-    ],
+    "sql": "--(p)--\nselect id from a where optional(active = {{p}}) group by id having count() > 0\n",
+    "params": {},
     "expect_sql": "select id from a group by id having count() > 0",
     "expect_param_names": []
   },
   {
     "name": "having_optional_nested_before_close_paren",
-    "sql": "--(p integer)--\nselect * from (\nselect id from a group by id having optional(count() > {{p}})\n) x\n",
-    "nulls": [
-      "p"
-    ],
+    "sql": "--(p)--\nselect * from (\nselect id from a group by id having optional(count() > {{p}})\n) x\n",
+    "params": {},
     "expect_sql": "select * from ( select id from a group by id) x",
     "expect_param_names": []
   },
   {
     "name": "is_null_uppercase_non_null_strips_prefix",
-    "sql": "--(a integer)--\nselect * from t where ({{a}} IS NULL or col = {{a}})\n",
-    "nulls": [],
+    "sql": "--(a)--\nselect * from t where ({{a}} IS NULL or col = {{a}})\n",
+    "params": {
+      "a": 1
+    },
     "expect_sql": "select * from t where (col = ?)",
     "expect_param_names": [
       "a"
@@ -456,17 +414,17 @@
   },
   {
     "name": "is_null_uppercase_null_elides",
-    "sql": "--(a integer)--\nselect * from t where ({{a}} IS NULL or col = {{a}})\n",
-    "nulls": [
-      "a"
-    ],
+    "sql": "--(a)--\nselect * from t where ({{a}} IS NULL or col = {{a}})\n",
+    "params": {},
     "expect_sql": "select * from t",
     "expect_param_names": []
   },
   {
     "name": "is_null_newline_between_param_and_is",
-    "sql": "--(a integer)--\nselect * from t where ({{a}}\nis null or col = {{a}})\n",
-    "nulls": [],
+    "sql": "--(a)--\nselect * from t where ({{a}}\nis null or col = {{a}})\n",
+    "params": {
+      "a": 1
+    },
     "expect_sql": "select * from t where (col = ?)",
     "expect_param_names": [
       "a"
@@ -474,17 +432,17 @@
   },
   {
     "name": "optional_newline_before_paren",
-    "sql": "--(p integer)--\nselect * from a where a = 1 and optional\n(col = {{p}})\n",
-    "nulls": [
-      "p"
-    ],
+    "sql": "--(p)--\nselect * from a where a = 1 and optional\n(col = {{p}})\n",
+    "params": {},
     "expect_sql": "select * from a where a = 1",
     "expect_param_names": []
   },
   {
     "name": "optional_tab_before_paren",
-    "sql": "--(p integer)--\nselect * from a where optional\t(col = {{p}})\n",
-    "nulls": [],
+    "sql": "--(p)--\nselect * from a where optional\t(col = {{p}})\n",
+    "params": {
+      "p": 1
+    },
     "expect_sql": "select * from a where (col = ?)",
     "expect_param_names": [
       "p"
@@ -492,17 +450,17 @@
   },
   {
     "name": "leading_whitespace_before_param_header",
-    "sql": "\n  --(p integer)--\nselect * from a where optional(col = {{p}})\n",
-    "nulls": [
-      "p"
-    ],
+    "sql": "\n  --(p)--\nselect * from a where optional(col = {{p}})\n",
+    "params": {},
     "expect_sql": "select * from a",
     "expect_param_names": []
   },
   {
     "name": "sql_line_comment_mid_query",
-    "sql": "--(a integer)--\nselect 1 -- ignore me\n, {{a}} as x\n",
-    "nulls": [],
+    "sql": "--(a)--\nselect 1 -- ignore me\n, {{a}} as x\n",
+    "params": {
+      "a": 1
+    },
     "expect_sql": "select 1 , ? as x",
     "expect_param_names": [
       "a"
@@ -510,22 +468,24 @@
   },
   {
     "name": "paren_less_is_null_or_errors",
-    "sql": "--(a integer)--\nselect * from t where {{a}} is null or a = 1\n",
+    "sql": "--(a)--\nselect * from t where {{a}} is null or a = 1\n",
+    "params": {
+      "a": 1
+    },
     "expect_error_contains": "wrapped in parentheses"
   },
   {
     "name": "header_unknown_type_errors",
     "sql": "--(a foobar)--\nselect {{a}}\n",
-    "expect_error_contains": "unknown parameter type"
+    "params": {
+      "a": 1
+    },
+    "expect_error_contains": "invalid parameter declaration"
   },
   {
     "name": "optional_groups_two_scalar_rows",
-    "sql": "--(pairs blob)--\nselect * from t where optional_groups_or({{pairs}}, col2 = {{cv}} and col1 = {{cv1}})\n",
-    "nulls": [],
-    "group_counts": {
-      "pairs": 2
-    },
-    "group_field_lengths": {
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups_or({{pairs}}, col2 = {{self.cv}} and col1 = {{self.cv1}})\n",
+    "params": {
       "pairs": [
         {
           "cv": 1,
@@ -539,23 +499,16 @@
     },
     "expect_sql": "select * from t where ((col2 = ? and col1 = ?) or (col2 = ? and col1 = ?))",
     "expect_param_names": [
-      "cv",
-      "cv1",
-      "cv",
-      "cv1"
-    ],
-    "expect_nullable_contains": [
-      "pairs"
+      "self.cv",
+      "self.cv1",
+      "self.cv",
+      "self.cv1"
     ]
   },
   {
     "name": "optional_groups_one_row_no_or",
-    "sql": "--(pairs blob)--\nselect * from t where optional_groups_or({{pairs}}, col1 = {{cv1}})\n",
-    "nulls": [],
-    "group_counts": {
-      "pairs": 1
-    },
-    "group_field_lengths": {
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups_or({{pairs}}, col1 = {{self.cv1}})\n",
+    "params": {
       "pairs": [
         {
           "cv1": 1
@@ -564,56 +517,53 @@
     },
     "expect_sql": "select * from t where (col1 = ?)",
     "expect_param_names": [
-      "cv1"
+      "self.cv1"
     ]
   },
   {
     "name": "optional_groups_elide_null",
-    "sql": "--(pairs blob)--\nselect * from t where optional_groups_or({{pairs}}, col1 = {{cv1}})\n",
-    "nulls": [
-      "pairs"
-    ],
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups_or({{pairs}}, col1 = {{self.cv1}})\n",
+    "params": {
+      "pairs": null
+    },
     "expect_sql": "select * from t",
     "expect_param_names": []
   },
   {
     "name": "optional_groups_mixed_in_per_row",
-    "sql": "--(pairs blob)--\nselect * from t where optional_groups_or({{pairs}}, col2 in ({{cv}}) and col1 = {{cv1}})\n",
-    "nulls": [],
-    "group_counts": {
-      "pairs": 2
-    },
-    "group_field_lengths": {
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups_or({{pairs}}, col2 in ({{self.cv}}...) and col1 = {{self.cv1}})\n",
+    "params": {
       "pairs": [
         {
-          "cv": 3,
+          "cv": [
+            1,
+            1,
+            1
+          ],
           "cv1": 1
         },
         {
-          "cv": 1,
+          "cv": [
+            1
+          ],
           "cv1": 1
         }
       ]
     },
     "expect_sql": "select * from t where ((col2 in (?, ?, ?) and col1 = ?) or (col2 in (?) and col1 = ?))",
     "expect_param_names": [
-      "cv",
-      "cv",
-      "cv",
-      "cv1",
-      "cv",
-      "cv1"
+      "self.cv",
+      "self.cv",
+      "self.cv",
+      "self.cv1",
+      "self.cv",
+      "self.cv1"
     ]
   },
   {
     "name": "two_optional_groups_or_sibling_and",
-    "sql": "--(pairs blob, pairs1 blob)--\nselect * from t where optional_groups_or({{pairs}}, id = {{id}}) and optional_groups_or({{pairs1}}, id = {{id}})\n",
-    "nulls": [],
-    "group_counts": {
-      "pairs": 2,
-      "pairs1": 1
-    },
-    "group_field_lengths": {
+    "sql": "--(pairs blob, pairs1 blob)--\nselect * from t where optional_groups_or({{pairs}}, id = {{self.id}}) and optional_groups_or({{pairs1}}, id = {{self.id}})\n",
+    "params": {
       "pairs": [
         {
           "id": 1
@@ -630,19 +580,15 @@
     },
     "expect_sql": "select * from t where ((id = ?) or (id = ?)) and (id = ?)",
     "expect_param_names": [
-      "id",
-      "id",
-      "id"
+      "self.id",
+      "self.id",
+      "self.id"
     ]
   },
   {
     "name": "optional_groups_multi_row_with_optional_scalar",
-    "sql": "--(pairs blob, flag integer)--\nselect * from t where optional_groups_or({{pairs}}, col1 = {{cv1}}) and optional(col2 = {{flag}})\n",
-    "nulls": [],
-    "group_counts": {
-      "pairs": 2
-    },
-    "group_field_lengths": {
+    "sql": "--(pairs blob, flag)--\nselect * from t where optional_groups_or({{pairs}}, col1 = {{self.cv1}}) and optional(col2 = {{flag}})\n",
+    "params": {
       "pairs": [
         {
           "cv1": 1
@@ -650,250 +596,254 @@
         {
           "cv1": 1
         }
-      ]
+      ],
+      "flag": 1
     },
     "expect_sql": "select * from t where ((col1 = ?) or (col1 = ?)) and (col2 = ?)",
     "expect_param_names": [
-      "cv1",
-      "cv1",
+      "self.cv1",
+      "self.cv1",
       "flag"
     ]
   },
   {
     "name": "optional_groups_body_row_template",
-    "sql": "--($args.pairs blob)--\nselect * from t where optional_groups_or({{$args.pairs}}, col2 in ({{cv}}) and col1 = {{cv1}})\n",
-    "nulls": [],
-    "group_counts": {
-      "$args.pairs": 2
-    },
-    "group_field_lengths": {
-      "$args.pairs": [
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups_or({{pairs}}, col2 in ({{self.cv}}...) and col1 = {{self.cv1}})\n",
+    "params": {
+      "pairs": [
         {
-          "cv": 3,
+          "cv": [
+            1,
+            1,
+            1
+          ],
           "cv1": 1
         },
         {
-          "cv": 1,
+          "cv": [
+            1
+          ],
           "cv1": 1
         }
       ]
     },
     "expect_sql": "select * from t where ((col2 in (?, ?, ?) and col1 = ?) or (col2 in (?) and col1 = ?))",
     "expect_param_names": [
-      "cv",
-      "cv",
-      "cv",
-      "cv1",
-      "cv",
-      "cv1"
+      "self.cv",
+      "self.cv",
+      "self.cv",
+      "self.cv1",
+      "self.cv",
+      "self.cv1"
     ]
   },
   {
     "name": "optional_groups_body_header_param_per_branch",
-    "sql": "--($args.pairs blob, $args.flag integer)--\nselect * from t where optional_groups_or({{$args.pairs}}, col1 = {{cv1}} and col2 = {{$args.flag}})\n",
-    "nulls": [],
-    "group_counts": {
-      "$args.pairs": 2
-    },
-    "group_field_lengths": {
-      "$args.pairs": [
+    "sql": "--(pairs blob, flag)--\nselect * from t where optional_groups_or({{pairs}}, col1 = {{self.cv1}} and col2 = {{flag}})\n",
+    "params": {
+      "pairs": [
         {
           "cv1": 1
         },
         {
           "cv1": 1
         }
-      ]
+      ],
+      "flag": 1
     },
     "expect_sql": "select * from t where ((col1 = ? and col2 = ?) or (col1 = ? and col2 = ?))",
     "expect_param_names": [
-      "cv1",
-      "$args.flag",
-      "cv1",
-      "$args.flag"
+      "self.cv1",
+      "flag",
+      "self.cv1",
+      "flag"
     ]
   },
   {
     "name": "optional_groups_body_blob_source_errors",
-    "sql": "--($args.pairs blob)--\nselect * from t where optional_groups_or({{$args.pairs}}, col1 = {{$args.pairs}})\n",
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups_or({{pairs}}, col1 = {{pairs}})\n",
+    "params": {},
     "expect_error_contains": "must not be used in its body"
   },
   {
     "name": "optional_groups_body_array_header_param_errors",
-    "sql": "--($args.pairs blob, $args.ids integer[])--\nselect * from t where optional_groups_or({{$args.pairs}}, col1 in ({{$args.ids}}))\n",
-    "expect_error_contains": "cannot use array parameter"
+    "sql": "--(pairs blob, ids)--\nselect * from t where optional_groups_or({{pairs}}, col1 in ({{ids}}...))\n",
+    "params": {
+      "ids": [
+        1
+      ]
+    },
+    "expect_error_contains": "at least one"
   },
   {
     "name": "optional_groups_body_bare_field_beside_args_header",
-    "sql": "--($args.pairs blob, $args.cv1 integer)--\nselect * from t where optional_groups_or({{$args.pairs}}, col1 = {{cv1}})\n",
-    "nulls": [],
-    "group_counts": {
-      "$args.pairs": 2
-    },
-    "group_field_lengths": {
-      "$args.pairs": [
+    "sql": "--(pairs blob, cv1)--\nselect * from t where optional_groups_or({{pairs}}, col1 = {{self.cv1}})\n",
+    "params": {
+      "pairs": [
         {
           "cv1": 1
         },
         {
           "cv1": 1
         }
-      ]
+      ],
+      "cv1": 1
     },
     "expect_sql": "select * from t where ((col1 = ?) or (col1 = ?))",
     "expect_param_names": [
-      "cv1",
-      "cv1"
+      "self.cv1",
+      "self.cv1"
     ]
   },
   {
     "name": "optional_groups_body_undeclared_args_field_errors",
-    "sql": "--($args.pairs blob)--\nselect * from t where optional_groups_or({{$args.pairs}}, col1 = {{cv1}} and col2 = {{$args.cv2}})\n",
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups_or({{pairs}}, col1 = {{self.cv1}} and col2 = {{cv2}})\n",
+    "params": {},
     "expect_error_contains": "type missing"
   },
   {
     "name": "optional_groups_body_only_args_fields_errors",
-    "sql": "--($args.pairs blob)--\nselect * from t where optional_groups_or({{$args.pairs}}, col1 = {{$args.cv1}})\n",
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups_or({{pairs}}, col1 = {{cv1}})\n",
+    "params": {},
     "expect_error_contains": "at least one"
   },
   {
     "name": "optional_groups_empty_in_errors",
-    "sql": "--(pairs blob)--\nselect * from t where optional_groups_or({{pairs}}, col2 in ({{cv}}))\n",
-    "nulls": [],
-    "group_counts": {
-      "pairs": 1
-    },
-    "group_field_lengths": {
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups_or({{pairs}}, col2 in ({{self.cv}}...))\n",
+    "params": {
       "pairs": [
         {
-          "cv": 0
+          "cv": []
         }
       ]
     },
-    "expect_compile_error_contains": "empty array"
+    "expect_error_contains": "empty array"
   },
   {
     "name": "optional_groups_missing_lengths_errors",
-    "sql": "--(pairs blob)--\nselect * from t where optional_groups_or({{pairs}}, col1 = {{cv1}})\n",
-    "nulls": [],
-    "group_counts": {
-      "pairs": 1
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups_or({{pairs}}, col1 = {{self.cv1}})\n",
+    "params": {
+      "pairs": [
+        {}
+      ]
     },
-    "expect_compile_error_contains": "missing optional_groups field lengths"
+    "expect_error_contains": "missing optional_groups field"
   },
   {
     "name": "optional_groups_no_body_field_errors",
     "sql": "--(pairs blob)--\nselect * from t where optional_groups_or({{pairs}}, col1 = 1)\n",
+    "params": {},
     "expect_error_contains": "at least one"
   },
   {
     "name": "optional_groups_source_not_blob_errors",
-    "sql": "--(pairs integer)--\nselect * from t where optional_groups_or({{pairs}}, col1 = {{cv1}})\n",
+    "sql": "--(pairs)--\nselect * from t where optional_groups_or({{pairs}}, col1 = {{self.cv1}})\n",
+    "params": {
+      "pairs": 1
+    },
     "expect_error_contains": "must be declared blob"
   },
   {
     "name": "optional_groups_field_in_header_errors",
-    "sql": "--(pairs blob, cv1 integer)--\nselect * from t where optional_groups_or({{pairs}}, col1 = {{cv1}})\n",
-    "expect_error_contains": "must not be declared"
+    "sql": "--(pairs blob, cv1)--\nselect * from t where optional_groups_or({{pairs}}, col1 = {{self.cv1}})\n",
+    "params": {
+      "pairs": [
+        {
+          "cv1": 1
+        }
+      ],
+      "cv1": 1
+    },
+    "expect_sql": "select * from t where (col1 = ?)",
+    "expect_param_names": [
+      "self.cv1"
+    ]
   },
   {
     "name": "optional_with_groups_multi_row",
-    "sql": "--($args.pairs blob, $args.x integer)--\nselect * from t where z = 1 and optional(a = {{$args.x}} and optional_groups_or({{$args.pairs}}, id = {{id}}))\n",
-    "nulls": [],
-    "group_counts": {
-      "$args.pairs": 2
-    },
-    "group_field_lengths": {
-      "$args.pairs": [
+    "sql": "--(pairs blob, x)--\nselect * from t where z = 1 and optional(a = {{x}} and optional_groups_or({{pairs}}, id = {{self.id}}))\n",
+    "params": {
+      "pairs": [
         {
           "id": 1
         },
         {
           "id": 1
         }
-      ]
+      ],
+      "x": 1
     },
     "expect_sql": "select * from t where z = 1 and (a = ? and ((id = ?) or (id = ?)))",
     "expect_param_names": [
-      "$args.x",
-      "id",
-      "id"
+      "x",
+      "self.id",
+      "self.id"
     ]
   },
   {
     "name": "optional_with_groups_single_row",
-    "sql": "--($args.pairs blob, $args.x integer)--\nselect * from t where z = 1 and optional(a = {{$args.x}} and optional_groups_or({{$args.pairs}}, id = {{id}}))\n",
-    "nulls": [],
-    "group_counts": {
-      "$args.pairs": 1
-    },
-    "group_field_lengths": {
-      "$args.pairs": [
+    "sql": "--(pairs blob, x)--\nselect * from t where z = 1 and optional(a = {{x}} and optional_groups_or({{pairs}}, id = {{self.id}}))\n",
+    "params": {
+      "pairs": [
         {
           "id": 1
         }
-      ]
+      ],
+      "x": 1
     },
     "expect_sql": "select * from t where z = 1 and (a = ? and (id = ?))",
     "expect_param_names": [
-      "$args.x",
-      "id"
+      "x",
+      "self.id"
     ]
   },
   {
     "name": "optional_with_groups_group_leading",
-    "sql": "--($args.pairs blob, $args.x integer)--\nselect * from t where optional(optional_groups_or({{$args.pairs}}, id = {{id}}) and a = {{$args.x}})\n",
-    "nulls": [],
-    "group_counts": {
-      "$args.pairs": 2
-    },
-    "group_field_lengths": {
-      "$args.pairs": [
+    "sql": "--(pairs blob, x)--\nselect * from t where optional(optional_groups_or({{pairs}}, id = {{self.id}}) and a = {{x}})\n",
+    "params": {
+      "pairs": [
         {
           "id": 1
         },
         {
           "id": 1
         }
-      ]
+      ],
+      "x": 1
     },
     "expect_sql": "select * from t where (((id = ?) or (id = ?)) and a = ?)",
     "expect_param_names": [
-      "id",
-      "id",
-      "$args.x"
+      "self.id",
+      "self.id",
+      "x"
     ]
   },
   {
     "name": "optional_with_groups_all_absent_elides",
-    "sql": "--($args.pairs blob, $args.x integer)--\nselect * from t where z = 1 and optional(a = {{$args.x}} and optional_groups_or({{$args.pairs}}, id = {{id}}))\n",
-    "nulls": [
-      "$args.pairs",
-      "$args.x"
-    ],
+    "sql": "--(pairs blob, x)--\nselect * from t where z = 1 and optional(a = {{x}} and optional_groups_or({{pairs}}, id = {{self.id}}))\n",
+    "params": {
+      "pairs": null
+    },
     "expect_sql": "select * from t where z = 1",
     "expect_param_names": []
   },
   {
     "name": "optional_with_groups_id_only_keeps_scalar",
-    "sql": "--($args.pairs blob, $args.x integer)--\nselect * from t where z = 1 and optional(a = {{$args.x}} and optional_groups_or({{$args.pairs}}, id = {{id}}))\n",
-    "nulls": [
-      "$args.pairs"
-    ],
+    "sql": "--(pairs blob, x)--\nselect * from t where z = 1 and optional(a = {{x}} and optional_groups_or({{pairs}}, id = {{self.id}}))\n",
+    "params": {
+      "pairs": null,
+      "x": 1
+    },
     "expect_sql": "select * from t where z = 1 and (a = ?)",
     "expect_param_names": [
-      "$args.x"
+      "x"
     ]
   },
   {
     "name": "optional_wrapping_groups_only",
-    "sql": "--($args.pairs blob)--\nselect * from t where optional(optional_groups_or({{$args.pairs}}, id = {{id}}))\n",
-    "nulls": [],
-    "group_counts": {
-      "$args.pairs": 2
-    },
-    "group_field_lengths": {
-      "$args.pairs": [
+    "sql": "--(pairs blob)--\nselect * from t where optional(optional_groups_or({{pairs}}, id = {{self.id}}))\n",
+    "params": {
+      "pairs": [
         {
           "id": 1
         },
@@ -904,64 +854,55 @@
     },
     "expect_sql": "select * from t where (((id = ?) or (id = ?)))",
     "expect_param_names": [
-      "id",
-      "id"
+      "self.id",
+      "self.id"
     ]
   },
   {
     "name": "optional_wrapping_groups_only_elided",
-    "sql": "--($args.pairs blob)--\nselect * from t where optional(optional_groups_or({{$args.pairs}}, id = {{id}}))\n",
-    "nulls": [
-      "$args.pairs"
-    ],
+    "sql": "--(pairs blob)--\nselect * from t where optional(optional_groups_or({{pairs}}, id = {{self.id}}))\n",
+    "params": {
+      "pairs": null
+    },
     "expect_sql": "select * from t",
     "expect_param_names": []
   },
   {
     "name": "optional_wrapping_groups_only_elided_beside_predicate",
-    "sql": "--($args.pairs blob)--\nselect * from t where z = 1 and optional(optional_groups_or({{$args.pairs}}, id = {{id}}))\n",
-    "nulls": [
-      "$args.pairs"
-    ],
+    "sql": "--(pairs blob)--\nselect * from t where z = 1 and optional(optional_groups_or({{pairs}}, id = {{self.id}}))\n",
+    "params": {
+      "pairs": null
+    },
     "expect_sql": "select * from t where z = 1",
     "expect_param_names": []
   },
   {
     "name": "optional_inside_groups_body_args_header",
-    "sql": "--($args.pairs blob, $args.flag integer)--\nselect * from t where optional_groups_or({{$args.pairs}}, col1 = {{cv1}} and optional(col2 = {{$args.flag}}))\n",
-    "nulls": [],
-    "group_counts": {
-      "$args.pairs": 2
-    },
-    "group_field_lengths": {
-      "$args.pairs": [
+    "sql": "--(pairs blob, flag)--\nselect * from t where optional_groups_or({{pairs}}, col1 = {{self.cv1}} and optional(col2 = {{flag}}))\n",
+    "params": {
+      "pairs": [
         {
           "cv1": 1
         },
         {
           "cv1": 1
         }
-      ]
+      ],
+      "flag": 1
     },
     "expect_sql": "select * from t where ((col1 = ? and (col2 = ?)) or (col1 = ? and (col2 = ?)))",
     "expect_param_names": [
-      "cv1",
-      "$args.flag",
-      "cv1",
-      "$args.flag"
+      "self.cv1",
+      "flag",
+      "self.cv1",
+      "flag"
     ]
   },
   {
     "name": "optional_inside_groups_body_args_header_omitted",
-    "sql": "--($args.pairs blob, $args.flag integer)--\nselect * from t where optional_groups_or({{$args.pairs}}, col1 = {{cv1}} and optional(col2 = {{$args.flag}}))\n",
-    "nulls": [
-      "$args.flag"
-    ],
-    "group_counts": {
-      "$args.pairs": 2
-    },
-    "group_field_lengths": {
-      "$args.pairs": [
+    "sql": "--(pairs blob, flag)--\nselect * from t where optional_groups_or({{pairs}}, col1 = {{self.cv1}} and optional(col2 = {{flag}}))\n",
+    "params": {
+      "pairs": [
         {
           "cv1": 1
         },
@@ -972,117 +913,128 @@
     },
     "expect_sql": "select * from t where ((col1 = ?) or (col1 = ?))",
     "expect_param_names": [
-      "cv1",
-      "cv1"
+      "self.cv1",
+      "self.cv1"
     ]
   },
   {
     "name": "optional_inside_groups_body_row_field_only_errors",
-    "sql": "--(pairs blob)--\nselect * from t where optional_groups_or({{pairs}}, optional(col1 = {{cv1}}))\n",
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups_or({{pairs}}, optional(col1 = {{self.cv1}}))\n",
+    "params": {},
     "expect_error_contains": "inside optional_groups"
   },
   {
     "name": "header_duplicate_param_errors",
-    "sql": "--(a integer, a string)--\nselect {{a}}\n",
+    "sql": "--(a, a)--\nselect {{a}}\n",
+    "params": {
+      "a": "x"
+    },
     "expect_error_contains": "duplicate parameter"
   },
   {
     "name": "header_missing_type_errors",
     "sql": "--(a)--\nselect {{a}}\n",
-    "expect_error_contains": "invalid parameter declaration"
+    "params": {},
+    "expect_sql": "select ?",
+    "expect_param_names": ["a"]
   },
   {
     "name": "header_junk_errors",
     "sql": "--(a integer junk)--\nselect {{a}}\n",
+    "params": {
+      "a": 1
+    },
     "expect_error_contains": "invalid parameter declaration"
   },
   {
     "name": "header_space_after_dashes_errors",
     "sql": "-- (a integer)--\nselect {{a}}\n",
+    "params": {},
     "expect_error_contains": "without space after --"
   },
   {
     "name": "empty_header_errors",
     "sql": "--()--\nselect 1\n",
+    "params": {},
     "expect_error_contains": "empty parameter header"
   },
   {
     "name": "unclosed_parameter_errors",
-    "sql": "--(a integer)--\nselect {{a\n",
+    "sql": "--(a)--\nselect {{a\n",
+    "params": {
+      "a": 1
+    },
     "expect_error_contains": "unclosed {{"
   },
   {
     "name": "unclosed_header_errors",
     "sql": "--(a integer\nselect 1\n",
+    "params": {},
     "expect_error_contains": "unclosed parameter header"
   },
   {
     "name": "optional_when_cond_absent_elides",
-    "sql": "--($args.apply bool, $args.id integer)--\nselect * from t where z = 1 and optional_when({{$args.apply}}, u.user_id = {{$args.id}})\n",
-    "expect_nullable_contains": [
-      "$args.apply",
-      "$args.id"
-    ],
-    "nulls": [
-      "$args.apply"
-    ],
+    "sql": "--(apply, id)--\nselect * from t where z = 1 and optional_when({{apply}}, u.user_id = {{id}})\n",
+    "params": {
+      "id": 1
+    },
     "expect_sql": "select * from t where z = 1",
     "expect_param_names": []
   },
   {
     "name": "optional_when_cond_present_body_absent_elides",
-    "sql": "--($args.apply bool, $args.id integer)--\nselect * from t where z = 1 and optional_when({{$args.apply}}, u.user_id = {{$args.id}})\n",
-    "nulls": [
-      "$args.id"
-    ],
+    "sql": "--(apply, id)--\nselect * from t where z = 1 and optional_when({{apply}}, u.user_id = {{id}})\n",
+    "params": {
+      "apply": true
+    },
     "expect_sql": "select * from t where z = 1",
     "expect_param_names": []
   },
   {
     "name": "optional_when_cond_and_body_present_keeps",
-    "sql": "--($args.apply bool, $args.id integer)--\nselect * from t where z = 1 and optional_when({{$args.apply}}, u.user_id = {{$args.id}})\n",
-    "nulls": [],
+    "sql": "--(apply, id)--\nselect * from t where z = 1 and optional_when({{apply}}, u.user_id = {{id}})\n",
+    "params": {
+      "apply": true,
+      "id": 1
+    },
     "expect_sql": "select * from t where z = 1 and (u.user_id = ?)",
     "expect_param_names": [
-      "$args.id"
+      "id"
     ]
   },
   {
     "name": "optional_when_sole_predicate_drops_where",
-    "sql": "--($args.apply bool, $args.id integer)--\nselect * from t where optional_when({{$args.apply}}, u.user_id = {{$args.id}})\n",
-    "nulls": [
-      "$args.apply"
-    ],
+    "sql": "--(apply, id)--\nselect * from t where optional_when({{apply}}, u.user_id = {{id}})\n",
+    "params": {
+      "id": 1
+    },
     "expect_sql": "select * from t",
     "expect_param_names": []
   },
   {
     "name": "optional_when_body_partial_errors",
-    "sql": "--($args.apply bool, $args.a integer, $args.b integer)--\nselect * from t where optional_when({{$args.apply}}, a = {{$args.a}} and b = {{$args.b}})\n",
-    "nulls": [
-      "$args.b"
-    ],
-    "expect_compile_error_contains": "partial parameters"
+    "sql": "--(apply, a, b)--\nselect * from t where optional_when({{apply}}, a = {{a}} and b = {{b}})\n",
+    "params": {
+      "apply": true,
+      "a": 1
+    },
+    "expect_error_contains": "partial parameters"
   },
   {
     "name": "optional_when_cond_absent_skips_body_partial_check",
-    "sql": "--($args.apply bool, $args.a integer, $args.b integer)--\nselect * from t where optional_when({{$args.apply}}, a = {{$args.a}} and b = {{$args.b}})\n",
-    "nulls": [
-      "$args.apply",
-      "$args.b"
-    ],
+    "sql": "--(apply, a, b)--\nselect * from t where optional_when({{apply}}, a = {{a}} and b = {{b}})\n",
+    "params": {
+      "a": 1
+    },
     "expect_sql": "select * from t",
     "expect_param_names": []
   },
   {
     "name": "optional_when_wrapping_groups_only_keeps",
-    "sql": "--($args.apply bool, $args.pairs blob)--\nselect * from t where z = 1 and optional_when({{$args.apply}}, optional_groups_or({{$args.pairs}}, id = {{id}}))\n",
-    "nulls": [],
-    "group_counts": {
-      "$args.pairs": 2
-    },
-    "group_field_lengths": {
-      "$args.pairs": [
+    "sql": "--(apply, pairs blob)--\nselect * from t where z = 1 and optional_when({{apply}}, optional_groups_or({{pairs}}, id = {{self.id}}))\n",
+    "params": {
+      "apply": true,
+      "pairs": [
         {
           "id": 1
         },
@@ -1093,21 +1045,15 @@
     },
     "expect_sql": "select * from t where z = 1 and (((id = ?) or (id = ?)))",
     "expect_param_names": [
-      "id",
-      "id"
+      "self.id",
+      "self.id"
     ]
   },
   {
     "name": "optional_when_wrapping_groups_only_cond_absent_elides",
-    "sql": "--($args.apply bool, $args.pairs blob)--\nselect * from t where z = 1 and optional_when({{$args.apply}}, optional_groups_or({{$args.pairs}}, id = {{id}}))\n",
-    "nulls": [
-      "$args.apply"
-    ],
-    "group_counts": {
-      "$args.pairs": 2
-    },
-    "group_field_lengths": {
-      "$args.pairs": [
+    "sql": "--(apply, pairs blob)--\nselect * from t where z = 1 and optional_when({{apply}}, optional_groups_or({{pairs}}, id = {{self.id}}))\n",
+    "params": {
+      "pairs": [
         {
           "id": 1
         },
@@ -1121,13 +1067,9 @@
   },
   {
     "name": "optional_when_inside_groups_body_row_fields_only",
-    "sql": "--($args.pairs blob, $args.flag bool)--\nselect * from t where optional_groups_or({{$args.pairs}}, c1 = {{cv}} and optional_when({{$args.flag}}, c2 = {{cv2}}))\n",
-    "nulls": [],
-    "group_counts": {
-      "$args.pairs": 2
-    },
-    "group_field_lengths": {
-      "$args.pairs": [
+    "sql": "--(pairs blob, flag)--\nselect * from t where optional_groups_or({{pairs}}, c1 = {{self.cv}} and optional_when({{flag}}, c2 = {{self.cv2}}))\n",
+    "params": {
+      "pairs": [
         {
           "cv": 1,
           "cv2": 1
@@ -1136,27 +1078,22 @@
           "cv": 1,
           "cv2": 1
         }
-      ]
+      ],
+      "flag": true
     },
     "expect_sql": "select * from t where ((c1 = ? and (c2 = ?)) or (c1 = ? and (c2 = ?)))",
     "expect_param_names": [
-      "cv",
-      "cv2",
-      "cv",
-      "cv2"
+      "self.cv",
+      "self.cv2",
+      "self.cv",
+      "self.cv2"
     ]
   },
   {
     "name": "optional_when_inside_groups_body_cond_absent_elides_per_branch",
-    "sql": "--($args.pairs blob, $args.flag bool)--\nselect * from t where optional_groups_or({{$args.pairs}}, c1 = {{cv}} and optional_when({{$args.flag}}, c2 = {{cv2}}))\n",
-    "nulls": [
-      "$args.flag"
-    ],
-    "group_counts": {
-      "$args.pairs": 2
-    },
-    "group_field_lengths": {
-      "$args.pairs": [
+    "sql": "--(pairs blob, flag)--\nselect * from t where optional_groups_or({{pairs}}, c1 = {{self.cv}} and optional_when({{flag}}, c2 = {{self.cv2}}))\n",
+    "params": {
+      "pairs": [
         {
           "cv": 1,
           "cv2": 1
@@ -1169,48 +1106,65 @@
     },
     "expect_sql": "select * from t where ((c1 = ?) or (c1 = ?))",
     "expect_param_names": [
-      "cv",
-      "cv"
+      "self.cv",
+      "self.cv"
     ]
   },
   {
     "name": "optional_when_inside_groups_bare_condition_errors",
-    "sql": "--($args.pairs blob, flag bool)--\nselect * from t where optional_groups_or({{$args.pairs}}, c1 = {{cv}} and optional_when({{flag}}, c2 = {{cv2}}))\n",
-    "expect_error_contains": "must use a {{$args.param}} condition"
+    "sql": "--(pairs blob, flag)--\nselect * from t where optional_groups_or({{pairs}}, c1 = {{self.cv}} and optional_when({{self.flag}}, c2 = {{self.cv2}}))\n",
+    "params": {
+      "flag": true
+    },
+    "expect_error_contains": "must use a {{param}} condition"
   },
   {
     "name": "optional_when_undeclared_condition_errors",
-    "sql": "--($args.id integer)--\nselect * from t where optional_when({{$args.apply}}, a = {{$args.id}})\n",
-    "expect_error_contains": "type missing for {{$args.apply}}"
+    "sql": "--(id)--\nselect * from t where optional_when({{apply}}, a = {{id}})\n",
+    "params": {
+      "id": 1
+    },
+    "expect_error_contains": "type missing for {{apply}}"
   },
   {
     "name": "optional_when_empty_body_errors",
-    "sql": "--($args.apply bool)--\nselect * from t where optional_when({{$args.apply}}, a = 1)\n",
+    "sql": "--(apply)--\nselect * from t where optional_when({{apply}}, a = 1)\n",
+    "params": {
+      "apply": true
+    },
     "expect_error_contains": "requires at least one {{param}} in its body"
   },
   {
     "name": "optional_when_missing_comma_errors",
-    "sql": "--($args.apply bool, $args.id integer)--\nselect * from t where optional_when({{$args.apply}} u.user_id = {{$args.id}})\n",
+    "sql": "--(apply, id)--\nselect * from t where optional_when({{apply}} u.user_id = {{id}})\n",
+    "params": {
+      "apply": true,
+      "id": 1
+    },
     "expect_error_contains": "requires a comma after the condition parameter"
   },
   {
     "name": "optional_when_condition_not_a_param_errors",
-    "sql": "--($args.id integer)--\nselect * from t where optional_when(apply, a = {{$args.id}})\n",
+    "sql": "--(id)--\nselect * from t where optional_when(apply, a = {{id}})\n",
+    "params": {
+      "id": 1
+    },
     "expect_error_contains": "requires {{param}} as the first argument"
   },
   {
     "name": "optional_when_nested_errors",
-    "sql": "--($args.a bool, $args.b bool, $args.x integer)--\nselect * from t where optional_when({{$args.a}}, optional_when({{$args.b}}, c = {{$args.x}}))\n",
+    "sql": "--(a, b, x)--\nselect * from t where optional_when({{a}}, optional_when({{b}}, c = {{x}}))\n",
+    "params": {
+      "a": true,
+      "b": true,
+      "x": 1
+    },
     "expect_error_contains": "nested optional_when(...) is not supported"
   },
   {
     "name": "optional_groups_and_two_rows",
-    "sql": "--(pairs blob)--\nselect * from t where optional_groups_and({{pairs}}, id = {{id}})\n",
-    "nulls": [],
-    "group_counts": {
-      "pairs": 2
-    },
-    "group_field_lengths": {
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups_and({{pairs}}, id = {{self.id}})\n",
+    "params": {
       "pairs": [
         {
           "id": 1
@@ -1222,18 +1176,14 @@
     },
     "expect_sql": "select * from t where ((id = ?) and (id = ?))",
     "expect_param_names": [
-      "id",
-      "id"
+      "self.id",
+      "self.id"
     ]
   },
   {
     "name": "optional_groups_and_single_row",
-    "sql": "--(pairs blob)--\nselect * from t where optional_groups_and({{pairs}}, id = {{id}})\n",
-    "nulls": [],
-    "group_counts": {
-      "pairs": 1
-    },
-    "group_field_lengths": {
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups_and({{pairs}}, id = {{self.id}})\n",
+    "params": {
       "pairs": [
         {
           "id": 1
@@ -1242,56 +1192,53 @@
     },
     "expect_sql": "select * from t where (id = ?)",
     "expect_param_names": [
-      "id"
+      "self.id"
     ]
   },
   {
     "name": "optional_groups_and_elided_blob",
-    "sql": "--(pairs blob)--\nselect * from t where z = 1 and optional_groups_and({{pairs}}, id = {{id}})\n",
-    "nulls": [
-      "pairs"
-    ],
+    "sql": "--(pairs blob)--\nselect * from t where z = 1 and optional_groups_and({{pairs}}, id = {{self.id}})\n",
+    "params": {
+      "pairs": null
+    },
     "expect_sql": "select * from t where z = 1",
     "expect_param_names": []
   },
   {
     "name": "optional_groups_and_multi_field_rows",
-    "sql": "--(pairs blob)--\nselect * from t where optional_groups_and({{pairs}}, col2 in ({{cv}}) and col1 = {{cv1}})\n",
-    "nulls": [],
-    "group_counts": {
-      "pairs": 2
-    },
-    "group_field_lengths": {
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups_and({{pairs}}, col2 in ({{self.cv}}...) and col1 = {{self.cv1}})\n",
+    "params": {
       "pairs": [
         {
-          "cv": 3,
+          "cv": [
+            1,
+            1,
+            1
+          ],
           "cv1": 1
         },
         {
-          "cv": 1,
+          "cv": [
+            1
+          ],
           "cv1": 1
         }
       ]
     },
     "expect_sql": "select * from t where ((col2 in (?, ?, ?) and col1 = ?) and (col2 in (?) and col1 = ?))",
     "expect_param_names": [
-      "cv",
-      "cv",
-      "cv",
-      "cv1",
-      "cv",
-      "cv1"
+      "self.cv",
+      "self.cv",
+      "self.cv",
+      "self.cv1",
+      "self.cv",
+      "self.cv1"
     ]
   },
   {
     "name": "optional_groups_and_beside_or_group",
-    "sql": "--(pairs blob, pairs1 blob)--\nselect * from t where optional_groups_and({{pairs}}, id = {{id}}) or optional_groups_or({{pairs1}}, id = {{id}})\n",
-    "nulls": [],
-    "group_counts": {
-      "pairs": 2,
-      "pairs1": 2
-    },
-    "group_field_lengths": {
+    "sql": "--(pairs blob, pairs1 blob)--\nselect * from t where optional_groups_and({{pairs}}, id = {{self.id}}) or optional_groups_or({{pairs1}}, id = {{self.id}})\n",
+    "params": {
       "pairs": [
         {
           "id": 1
@@ -1311,35 +1258,232 @@
     },
     "expect_sql": "select * from t where ((id = ?) and (id = ?)) or ((id = ?) or (id = ?))",
     "expect_param_names": [
-      "id",
-      "id",
-      "id",
-      "id"
+      "self.id",
+      "self.id",
+      "self.id",
+      "self.id"
     ]
   },
   {
     "name": "optional_groups_and_nested_errors",
-    "sql": "--(pairs blob, pairs1 blob)--\nselect * from t where optional_groups_and({{pairs}}, optional_groups_and({{pairs1}}, id = {{id}}))\n",
+    "sql": "--(pairs blob, pairs1 blob)--\nselect * from t where optional_groups_and({{pairs}}, optional_groups_and({{self.pairs1}}, id = {{self.id}}))\n",
+    "params": {},
     "expect_error_contains": "nested optional_groups_or(...)/optional_groups_and(...) is not supported"
   },
   {
     "name": "optional_groups_mixed_nested_errors",
-    "sql": "--(pairs blob, pairs1 blob)--\nselect * from t where optional_groups_or({{pairs}}, optional_groups_and({{pairs1}}, id = {{id}}))\n",
+    "sql": "--(pairs blob, pairs1 blob)--\nselect * from t where optional_groups_or({{pairs}}, optional_groups_and({{self.pairs1}}, id = {{self.id}}))\n",
+    "params": {},
     "expect_error_contains": "nested optional_groups_or(...)/optional_groups_and(...) is not supported"
   },
   {
     "name": "optional_groups_and_blob_in_own_body_errors",
-    "sql": "--(pairs blob)--\nselect * from t where optional_groups_and({{pairs}}, id = {{pairs}})\n",
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups_and({{pairs}}, id = {{self.pairs}})\n",
+    "params": {},
     "expect_error_contains": "must not be used in its body"
   },
   {
     "name": "optional_groups_legacy_spelling_errors",
     "sql": "--(pairs blob)--\nselect * from t where optional_groups({{pairs}}, id = {{id}})\n",
+    "params": {},
     "expect_error_contains": "optional_groups(...) was renamed"
   },
   {
     "name": "optional_groups_legacy_spelling_inside_optional_errors",
-    "sql": "--($args.pairs blob, $args.x integer)--\nselect * from t where optional(a = {{$args.x}} and optional_groups({{$args.pairs}}, id = {{id}}))\n",
+    "sql": "--(pairs blob, x)--\nselect * from t where optional(a = {{x}} and optional_groups({{pairs}}, id = {{id}}))\n",
+    "params": {
+      "x": 1
+    },
     "expect_error_contains": "optional_groups(...) was renamed"
+  },
+  {
+    "name": "experimental_groups_missing_comma_after_blob",
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups_or({{pairs}} col1 = {{cv1}})\n",
+    "params": {},
+    "expect_error_contains": "comma after the blob"
+  },
+  {
+    "name": "experimental_groups_nested_in_body",
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups_or({{pairs}}, optional_groups_or({{self.pairs}}, col1 = {{self.cv1}}))\n",
+    "params": {},
+    "expect_error_contains": "nested optional_groups"
+  },
+  {
+    "name": "experimental_groups_field_order_metadata",
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups_or({{pairs}}, col2 in ({{self.cv}}...) and col1 = {{self.cv1}})\n",
+    "params": {
+      "pairs": [
+        {
+          "cv": [
+            1,
+            1
+          ],
+          "cv1": 1
+        }
+      ]
+    },
+    "expect_sql": "select * from t where (col2 in (?, ?) and col1 = ?)",
+    "expect_param_names": [
+      "self.cv",
+      "self.cv",
+      "self.cv1"
+    ]
+  },
+  {
+    "name": "experimental_groups_bare_fields_with_args_header_param",
+    "sql": "--(pairs blob, flag)--\nselect * from t where optional_groups_or({{pairs}}, col2 in ({{self.cv}}...) and col1 = {{self.cv1}} and col3 = {{flag}})\n",
+    "params": {
+      "pairs": [
+        {
+          "cv": [
+            1,
+            1
+          ],
+          "cv1": 1
+        }
+      ],
+      "flag": 1
+    },
+    "expect_sql": "select * from t where (col2 in (?, ?) and col1 = ? and col3 = ?)",
+    "expect_param_names": [
+      "self.cv",
+      "self.cv",
+      "self.cv1",
+      "flag"
+    ]
+  },
+  {
+    "name": "experimental_groups_elide_sole_where",
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups_or({{pairs}}, col1 = {{self.cv1}})\n",
+    "params": {
+      "pairs": null
+    },
+    "expect_sql": "select * from t",
+    "expect_param_names": []
+  },
+  {
+    "name": "experimental_groups_elide_keeps_trailing_predicate",
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups_or({{pairs}}, col1 = {{self.cv1}}) and x = 1\n",
+    "params": {
+      "pairs": null
+    },
+    "expect_sql": "select * from t where x = 1",
+    "expect_param_names": []
+  },
+  {
+    "name": "experimental_groups_elide_inside_subquery",
+    "sql": "--(pairs blob)--\nselect * from (select 1 as id) u where optional_groups_or({{pairs}}, col1 = {{self.cv1}})\n",
+    "params": {
+      "pairs": null
+    },
+    "expect_sql": "select * from (select 1 as id) u",
+    "expect_param_names": []
+  },
+  {
+    "name": "experimental_groups_scalar_vs_array_same_field_counts",
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups_or({{pairs}}, col in ({{self.cv}}...))\n",
+    "params": {
+      "pairs": [
+        {
+          "cv": [
+            1
+          ]
+        },
+        {
+          "cv": [
+            1,
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    "expect_sql": "select * from t where ((col in (?)) or (col in (?, ?, ?)))",
+    "expect_param_names": [
+      "self.cv",
+      "self.cv",
+      "self.cv",
+      "self.cv"
+    ]
+  },
+  {
+    "name": "experimental_groups_with_optional_scalar_elided",
+    "sql": "--(pairs blob, flag)--\nselect * from t where optional_groups_or({{pairs}}, col1 = {{self.cv1}}) and optional(col2 = {{flag}})\n",
+    "params": {
+      "pairs": [
+        {
+          "cv1": 1
+        }
+      ]
+    },
+    "expect_sql": "select * from t where (col1 = ?)",
+    "expect_param_names": [
+      "self.cv1"
+    ]
+  },
+  {
+    "name": "experimental_groups_with_optional_scalar_kept",
+    "sql": "--(pairs blob, flag)--\nselect * from t where optional_groups_or({{pairs}}, col1 = {{self.cv1}}) and optional(col2 = {{flag}})\n",
+    "params": {
+      "pairs": null,
+      "flag": 1
+    },
+    "expect_sql": "select * from t where (col2 = ?)",
+    "expect_param_names": [
+      "flag"
+    ]
+  },
+  {
+    "name": "experimental_groups_prewhere",
+    "sql": "--(pairs blob)--\nselect * from t prewhere optional_groups_or({{pairs}}, col1 = {{self.cv1}})\n",
+    "params": {
+      "pairs": null
+    },
+    "expect_sql": "select * from t",
+    "expect_param_names": []
+  },
+  {
+    "name": "experimental_groups_having",
+    "sql": "--(pairs blob)--\nselect col from t group by col having optional_groups_or({{pairs}}, sum(col) > {{self.cv1}})\n",
+    "params": {
+      "pairs": null
+    },
+    "expect_sql": "select col from t group by col",
+    "expect_param_names": []
+  },
+  {
+    "name": "experimental_groups_with_order_by_sort",
+    "sql": "--(pairs blob, sort)--\nselect * from t where optional_groups_or({{pairs}}, col1 = {{self.cv1}}) order by sort({{sort}}, id = id)\n",
+    "params": {
+      "pairs": [
+        {
+          "cv1": 1
+        }
+      ],
+      "sort": "id"
+    },
+    "expect_sql": "select * from t where (col1 = ?) order by id ASC",
+    "expect_param_names": [
+      "self.cv1"
+    ]
+  },
+  {
+    "name": "experimental_groups_shape_distinct_sql",
+    "sql": "--(pairs blob)--\nselect * from t where optional_groups_or({{pairs}}, col in ({{self.cv}}...))\n",
+    "params": {
+      "pairs": [
+        {
+          "cv": [
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    "expect_sql": "select * from t where (col in (?, ?))",
+    "expect_param_names": [
+      "self.cv",
+      "self.cv"
+    ]
   }
 ]

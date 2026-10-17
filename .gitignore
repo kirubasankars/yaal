@@ -11,6 +11,8 @@ __pycache__/
 *.py[cod]
 csharp/**/bin/
 csharp/**/obj/
+bindings/csharp/**/bin/
+bindings/csharp/**/obj/
 *.user
 *.suo
 .vs/
@@ -20,3 +22,4 @@ dist/
 build/
 artifacts/
 site/
+/target/
