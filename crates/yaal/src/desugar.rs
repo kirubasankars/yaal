@@ -20,7 +20,10 @@ pub struct Program {
     pub expand_names: BTreeSet<String>,
 }
 
+const MAX_OPTIONAL_DEPTH: usize = 32;
+
 pub fn parse_program(mut tokens: Vec<Token>) -> Result<Program> {
+    check_optional_depth(&tokens)?;
     tokens = desugar_optional_when(tokens, false)?;
     tokens = desugar_optional(tokens, false)?;
     let decls_early = scan_header(&tokens)?;
@@ -29,9 +32,41 @@ pub fn parse_program(mut tokens: Vec<Token>) -> Result<Program> {
     split_statements(tokens)
 }
 
-fn scan_header(tokens: &[Token]) -> Result<BTreeMap<String, Decl>> {
+fn check_optional_depth(tokens: &[Token]) -> Result<()> {
+    let mut open: Vec<i32> = Vec::new();
+    let mut pending = false;
     for token in tokens {
         if token.is_ws() {
+            continue;
+        }
+        if token.kind == TokenKind::Brace {
+            if token.value == "(" {
+                if pending {
+                    open.push(token.group);
+                    if open.len() > MAX_OPTIONAL_DEPTH {
+                        return Err(err(format!(
+                            "optional(...) is nested more than {MAX_OPTIONAL_DEPTH} levels deep"
+                        )));
+                    }
+                }
+            } else if open.last() == Some(&token.group) {
+                open.pop();
+            }
+            pending = false;
+            continue;
+        }
+        pending = token.kind == TokenKind::Word
+            && matches!(
+                token.value.to_ascii_lowercase().as_str(),
+                "optional" | "optional_when" | "optional_groups_or" | "optional_groups_and"
+            );
+    }
+    Ok(())
+}
+
+fn scan_header(tokens: &[Token]) -> Result<BTreeMap<String, Decl>> {
+    for token in tokens {
+        if token.is_ws() || token.kind == TokenKind::Comment {
             continue;
         }
         if token.kind != TokenKind::Dash {
@@ -603,6 +638,11 @@ fn split_statements(tokens: Vec<Token>) -> Result<Program> {
             i += 1;
             continue;
         }
+        if token.kind == TokenKind::Comment && !significant {
+            content.push(token.clone());
+            i += 1;
+            continue;
+        }
         if token.kind == TokenKind::Dash {
             if !significant {
                 if let Some(parsed) = crate::header::parse_header(&token.value)? {
@@ -611,6 +651,10 @@ fn split_statements(tokens: Vec<Token>) -> Result<Program> {
                     i += 1;
                     continue;
                 }
+            } else if token.value.starts_with("--(") {
+                return Err(err(format!(
+                    "the parameter header must come first in {METHOD}.sql"
+                )));
             }
             if has_significant(&content) {
                 stmts.push(std::mem::take(&mut content));

@@ -11,7 +11,7 @@ pub fn lex(content: &str) -> Result<Vec<Token>> {
     }
     let chars: Vec<char> = content.chars().collect();
     let n = chars.len();
-    let mut tokens = Vec::new();
+    let mut tokens: Vec<Token> = Vec::new();
     let mut current = 0;
     let mut brace_group = 0i32;
 
@@ -28,15 +28,24 @@ pub fn lex(content: &str) -> Result<Vec<Token>> {
             current = next;
             tokens.push(tok);
         } else if p == '-' && p1 == '-' {
-            let (next, tok) = lex_dash(&chars, current)?;
+            let at_header = tokens
+                .iter()
+                .all(|t| t.is_ws() || t.kind == TokenKind::Comment);
+            let (next, tok) = lex_dash(&chars, current, at_header)?;
             current = next;
             if let Some(tok) = tok {
                 tokens.push(tok);
             }
+        } else if p == '/' && p1 == '*' {
+            let (next, tok) = lex_block_comment(&chars, current)?;
+            current = next;
+            tokens.push(tok);
         } else if p == '{' && p1 == '{' {
             let (next, tok) = lex_param(&chars, current)?;
             current = next;
             tokens.push(tok);
+        } else if p == '}' && p1 == '}' {
+            return Err(err("unexpected }} without a matching {{"));
         } else if p == ' ' || p == '\t' || p == '\r' {
             let (next, tok) = lex_spaces(&chars, current);
             current = next;
@@ -47,6 +56,9 @@ pub fn lex(content: &str) -> Result<Vec<Token>> {
                 brace_group += 1;
                 tok.group = brace_group;
             } else {
+                if brace_group == 0 {
+                    return Err(err("unbalanced ) in SQL"));
+                }
                 tok.group = brace_group;
                 brace_group -= 1;
             }
@@ -61,10 +73,13 @@ pub fn lex(content: &str) -> Result<Vec<Token>> {
             tokens.push(tok);
         }
     }
+    if brace_group != 0 {
+        return Err(err("unclosed ( in SQL"));
+    }
     Ok(tokens)
 }
 
-fn lex_dash(chars: &[char], mut current: usize) -> Result<(usize, Option<Token>)> {
+fn lex_dash(chars: &[char], mut current: usize, at_header: bool) -> Result<(usize, Option<Token>)> {
     let n = chars.len();
     current += 2;
     if current >= n {
@@ -75,7 +90,7 @@ fn lex_dash(chars: &[char], mut current: usize) -> Result<(usize, Option<Token>)
     while j < n && matches!(chars[j], ' ' | '\t' | '\r') {
         j += 1;
     }
-    if j > current && j < n && chars[j] == '(' {
+    if at_header && j > current && j < n && chars[j] == '(' {
         return Err(err(
             "invalid parameter header: use --(name type)-- without space after --",
         ));
@@ -100,30 +115,31 @@ fn lex_dash(chars: &[char], mut current: usize) -> Result<(usize, Option<Token>)
         return Err(err("unclosed parameter header --(...)--"));
     }
 
-    if starts_with(chars, current, "sql") {
-        let mut raw = String::from("--");
-        while current < n {
-            let p = chars[current];
-            let p1 = if current + 1 < n {
-                chars[current + 1]
-            } else {
-                '\0'
-            };
-            if p == '-' && p1 == '-' {
-                raw.push_str("--");
-                current += 2;
-                return Ok((current, Some(Token::new(TokenKind::Dash, raw))));
-            }
-            raw.push(p);
-            current += 1;
-        }
-        return Err(err("unclosed --sql-- directive"));
+    if starts_with(chars, current, "sql--") {
+        return Ok((
+            current + "sql--".len(),
+            Some(Token::new(TokenKind::Dash, "--sql--")),
+        ));
     }
 
     while current < n && chars[current] != '\n' {
         current += 1;
     }
     Ok((current, None))
+}
+
+fn lex_block_comment(chars: &[char], start: usize) -> Result<(usize, Token)> {
+    let n = chars.len();
+    let mut current = start + 2;
+    while current + 1 < n {
+        if chars[current] == '*' && chars[current + 1] == '/' {
+            current += 2;
+            let value: String = chars[start..current].iter().collect();
+            return Ok((current, Token::new(TokenKind::Comment, value)));
+        }
+        current += 1;
+    }
+    Err(err("unclosed /* comment"))
 }
 
 fn lex_param(chars: &[char], mut current: usize) -> Result<(usize, Token)> {
@@ -219,9 +235,13 @@ fn lex_word(chars: &[char], start: usize) -> (usize, Token) {
         };
         let single = matches!(p, '(' | ')' | '\'' | '"' | '\n' | ' ' | '\t' | '\r');
         let double = matches!(p, '{' | '}' | '-') && p == p1;
-        if single || double {
+        let comment = p == '/' && p1 == '*';
+        if single || double || comment {
             break;
         }
+        current += 1;
+    }
+    if current == start {
         current += 1;
     }
     let value: String = chars[start..current].iter().collect();

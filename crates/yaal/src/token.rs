@@ -8,6 +8,7 @@ use std::collections::BTreeMap;
 pub enum TokenKind {
     Word,
     String,
+    Comment,
     Space,
     Newline,
     Brace,

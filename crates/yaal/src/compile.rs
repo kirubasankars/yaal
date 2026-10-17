@@ -73,6 +73,7 @@ pub fn compile_program(
     check_required(&program.decls, &values, &program.expand_names)?;
     let mut out = Vec::new();
     for stmt in &program.stmts {
+        reject_literal_placeholders(&stmt.content, placeholder)?;
         let nulls = nulls_for(stmt, &program.decls, &values, &program.expand_names);
         let blobs = blobs_for(stmt, &values, &nulls)?;
         let sort_map = resolve_sort(stmt, &values)?;
@@ -95,13 +96,69 @@ pub fn compile_program(
     Ok(out)
 }
 
+fn reject_literal_placeholders(content: &[Token], placeholder: Placeholder) -> Result<()> {
+    for token in content {
+        let texts: Vec<&str> = match token.kind {
+            TokenKind::Word => vec![token.value.as_str()],
+            TokenKind::Sort => token.sort_choices.values().map(String::as_str).collect(),
+            _ => continue,
+        };
+        for text in texts {
+            match placeholder {
+                Placeholder::Question if text.contains('?') => {
+                    return Err(err(
+                        "the SQL contains a literal ?, which would shift the ? binds; use numbered placeholders",
+                    ));
+                }
+                Placeholder::Numbered if has_numbered_placeholder(text) => {
+                    return Err(err(format!(
+                        "the SQL contains a literal {}, which would shift the numbered binds",
+                        numbered_placeholder(text)
+                    )));
+                }
+                _ => {}
+            }
+        }
+    }
+    Ok(())
+}
+
+fn numbered_positions(text: &str) -> impl Iterator<Item = usize> + '_ {
+    let bytes = text.as_bytes();
+    (0..bytes.len()).filter(move |&i| {
+        bytes[i] == b'$'
+            && bytes.get(i + 1).is_some_and(u8::is_ascii_digit)
+            && (i == 0 || !(bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'_'))
+    })
+}
+
+fn has_numbered_placeholder(text: &str) -> bool {
+    numbered_positions(text).next().is_some()
+}
+
+fn numbered_placeholder(text: &str) -> String {
+    let start = numbered_positions(text).next().unwrap_or(0);
+    text[start..]
+        .chars()
+        .enumerate()
+        .take_while(|(i, c)| *i == 0 || c.is_ascii_digit())
+        .map(|(_, c)| c)
+        .collect()
+}
+
 fn effective_values(
     decls: &BTreeMap<String, Decl>,
     params: &Map<String, Value>,
 ) -> Result<BTreeMap<String, Value>> {
     let mut lowered = BTreeMap::new();
     for (k, v) in params {
-        lowered.insert(k.to_ascii_lowercase(), v.clone());
+        let key = k.to_ascii_lowercase();
+        if lowered.insert(key.clone(), v.clone()).is_some() {
+            return Err(err(format!(
+                "parameter {} is given more than once",
+                braced(&key)
+            )));
+        }
     }
     let mut values = BTreeMap::new();
     for name in decls.keys() {
@@ -552,7 +609,7 @@ fn emit_group_field(
             braced(&format!("self.{}", token.name))
         ))
     })?;
-    let raw = row_get(row, &token.name).ok_or_else(|| {
+    let raw = row_get(row, &token.name, source)?.ok_or_else(|| {
         err(format!(
             "missing optional_groups field {} in {}",
             braced(&token.name),
@@ -604,13 +661,25 @@ fn emit_group_field(
     Ok(())
 }
 
-fn row_get<'a>(row: &'a Map<String, Value>, field: &str) -> Option<&'a Value> {
-    if let Some(v) = row.get(field) {
-        return Some(v);
+fn row_get<'a>(
+    row: &'a Map<String, Value>,
+    field: &str,
+    source: &str,
+) -> Result<Option<&'a Value>> {
+    let mut found = None;
+    for (key, value) in row {
+        if !key.eq_ignore_ascii_case(field) {
+            continue;
+        }
+        if found.is_some() {
+            return Err(err(format!(
+                "optional_groups field {} is given more than once in a {source} row",
+                braced(field)
+            )));
+        }
+        found = Some(value);
     }
-    row.iter()
-        .find(|(k, _)| k.eq_ignore_ascii_case(field))
-        .map(|(_, v)| v)
+    Ok(found)
 }
 
 fn assert_scalar(value: &Value, source: &str, field: &str) -> Result<()> {
