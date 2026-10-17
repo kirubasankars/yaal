@@ -110,7 +110,9 @@ make pypi
 
 `make nuget` packs the C# binding for this machine into `artifacts/`. `make pypi` builds a Python wheel for this machine into the same directory. It needs the `build` and `wheel` packages (`python3 -m pip install build wheel`).
 
-Publishing happens from a published GitHub release. The tag, such as `v0.13.0`, must match `<Version>` in the C# project and `version` in `pyproject.toml`. The NuGet workflow runs the C# tests, packs the native compiler for Linux x86_64, macOS Apple silicon, and Windows x64, validates the package, and pushes it to NuGet with trusted publishing. The PyPI workflow runs the Python tests, builds wheels for Linux x86_64, macOS Apple silicon, and Windows x64, and pushes them to PyPI with trusted publishing. PyPI has to list this repository's `pypi-publish.yml` workflow and the `pypi` environment as a trusted publisher.
+Publishing happens from a published GitHub release. The tag, such as `v0.13.0`, must match `version` in the Rust crates, `<Version>` in the C# project, and `version` in `pyproject.toml`. The crates.io workflow publishes `yaal` and `yaal-cli`. The NuGet workflow runs the C# tests, packs the native compiler for Linux x86_64, macOS Apple silicon, and Windows x64, validates the package, and pushes it to NuGet with trusted publishing. The PyPI workflow runs the Python tests, builds wheels for Linux x86_64, macOS Apple silicon, and Windows x64, and pushes them to PyPI with trusted publishing. PyPI has to list this repository's `pypi-publish.yml` workflow and the `pypi` environment as a trusted publisher.
+
+crates.io can attach a trusted publisher only after the crate exists. For the first release, add the crates.io token as the `CARGO_REGISTRY_TOKEN` repository secret, then delete that secret once the publisher is in place. On each crate's settings page, add a GitHub trusted publisher for owner `kirubasankars`, repository `yaal`, workflow `crates-publish.yml`, and environment `crates-io`.
 
 `make ci` is what GitHub Actions runs: the Rust tests, the language bindings, and `cargo fmt --check`.
 

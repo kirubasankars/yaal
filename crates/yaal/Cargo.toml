@@ -4,6 +4,9 @@ version = "0.13.0"
 edition = "2021"
 description = "Yaal SQL compiler"
 license = "MIT"
+repository = "https://github.com/kirubasankars/yaal"
+homepage = "https://kirubasankars.github.io/yaal/"
+readme = "../../README.md"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

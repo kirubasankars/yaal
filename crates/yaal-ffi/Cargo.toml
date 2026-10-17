@@ -4,6 +4,7 @@ version = "0.13.0"
 edition = "2021"
 description = "C ABI for the Yaal SQL compiler"
 license = "MIT"
+publish = false
 
 [lib]
 crate-type = ["cdylib"]

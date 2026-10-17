@@ -4,6 +4,9 @@ version = "0.13.0"
 edition = "2021"
 description = "Yaal SQL compiler CLI"
 license = "MIT"
+repository = "https://github.com/kirubasankars/yaal"
+homepage = "https://kirubasankars.github.io/yaal/"
+readme = "../../README.md"
 
 [[bin]]
 name = "yaal"
@@ -11,4 +14,4 @@ path = "src/main.rs"
 
 [dependencies]
 serde_json = "1"
-yaal = { path = "../yaal" }
+yaal = { path = "../yaal", version = "0.13.0" }

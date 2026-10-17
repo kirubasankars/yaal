@@ -1,0 +1,63 @@
+# Copyright 2018 Kiruba Sankar Swaminathan. All rights reserved.
+# Use of this source code is governed by a MIT style
+# license that can be found in the LICENSE file.
+
+name: crates.io
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: crates-io
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Validate version matches project
+        if: github.event_name == 'release'
+        run: |
+          for manifest in crates/yaal/Cargo.toml crates/yaal-cli/Cargo.toml; do
+            PROJECT_VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' "$manifest")
+            if [ "$PROJECT_VERSION" != "${{ steps.version.outputs.VERSION }}" ]; then
+              echo "::error::Tag version (${{ steps.version.outputs.VERSION }}) does not match $manifest ($PROJECT_VERSION)"
+              exit 1
+            fi
+          done
+
+      - name: Test
+        run: cargo test -p yaal --locked
+
+      - name: Authenticate to crates.io
+        id: auth
+        uses: rust-lang/crates-io-auth-action@v1
+        continue-on-error: true
+
+      - name: Publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token || secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          if [ -z "$CARGO_REGISTRY_TOKEN" ]; then
+            echo "::error::Trusted publishing is not configured, and the CARGO_REGISTRY_TOKEN secret is empty."
+            exit 1
+          fi
+          cargo publish -p yaal --locked
+          for _ in 1 2 3 4 5 6 7 8 9 10; do
+            if cargo publish -p yaal-cli --locked; then
+              exit 0
+            fi
+            sleep 15
+          done
+          exit 1
