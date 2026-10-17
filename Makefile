@@ -2,163 +2,35 @@
 # Use of this source code is governed by a MIT style
 # license that can be found in the LICENSE file.
 
-PYTHON ?= python3
-VENV ?= venv
-PIP := $(VENV)/bin/pip
-PY := $(VENV)/bin/python
-COMPOSE ?= docker compose
-EXP_DIR ?= experiment
-EXP_API := $(EXP_DIR)/api
-EXP_DB := $(EXP_DIR)/yaal.db
-EXP_DB_URL = sqlite3:///$(abspath $(EXP_DB))
-EXP_SCHEMA := docker/sqlite/schema.sql
-EXP_FIXTURE_API := tests/fixtures/api
-EXP_CH_URL ?= clickhouse://yaal:yaal@127.0.0.1:9000/yaal
-EXP_CH_SEED := docker/clickhouse/experiment_seed.sql
+.PHONY: test compile bindings docs ci nuget
 
-.PHONY: help venv install test test-unit test-integration test-all example yaal \
-	experiment experiment-init experiment-reset experiment-clean \
-	experiment-clickhouse experiment-clickhouse-init experiment-clickhouse-reset \
-	integration-up integration-down integration-ps clean \
-	test-csharp test-csharp-integration example-csharp benchmark-csharp \
-	docs-install docs-serve docs-build
+test:
+	cargo test --workspace
+	$(MAKE) bindings
 
-help:
-	@echo "Targets:"
-	@echo "  make install            Create venv and pip install -e . (editable)"
-	@echo "  make test               Run unit tests"
-	@echo "  make test-integration   Start Docker DBs (Postgres/MySQL/ClickHouse) and run integration tests"
-	@echo "  make test-all           Unit + integration tests"
-	@echo "  make example            Run python/examples/demo.py (all fixture ops + explain)"
-	@echo "  make example-csharp     Run csharp example (same ops in sdk container)"
-	@echo "  make yaal ARGS='...'    Run yaal CLI (query / explain / list)"
-	@echo "  make experiment         FS+SQLite sandbox (init if needed); ARGS defaults to query user/get"
-	@echo "  make experiment-init    Create $(EXP_DIR)/api + seed $(EXP_DB)"
-	@echo "  make experiment-reset   Reseed $(EXP_DB) only (keep API edits)"
-	@echo "  make experiment-clickhouse  Same API sandbox against Compose ClickHouse"
-	@echo "  make experiment-clickhouse-init   Ensure API copy + start/seed ClickHouse"
-	@echo "  make experiment-clickhouse-reset  Truncate+reseed ClickHouse (keep API edits)"
-	@echo "  make experiment-clean   Remove $(EXP_DIR)/ (does not stop Compose DBs)"
-	@echo "  make test-csharp        Run .NET tests in sdk container (SQLite / unit)"
-	@echo "  make test-csharp-integration  Compose DBs + .NET tests in sdk container"
-	@echo "  make benchmark-csharp   Descriptor load benchmarks (JSON vs CS vs live SQL)"
-	@echo "  make integration-up     Start Postgres/MySQL/ClickHouse (docker compose)"
-	@echo "  make integration-down   Stop and remove compose containers/volumes"
-	@echo "  make docs-install       Install MkDocs into the venv"
-	@echo "  make docs-serve        Preview the docs site locally"
-	@echo "  make docs-build        Build the docs site (strict)"
-	@echo "  make clean              Remove venv, caches, site/, and experiment sandbox"
+ci: test
+	cargo fmt --all -- --check
 
-venv:
-	$(PYTHON) -m venv $(VENV)
-	$(PIP) install --upgrade pip
+TARGET_DIR := $(if $(CARGO_TARGET_DIR),$(CARGO_TARGET_DIR),$(CURDIR)/target)
+LIB := $(TARGET_DIR)/debug/libyaal_ffi.so
+JAVA ?= java
+JAVAC ?= $(shell if [ -n "$$JAVA_HOME" ] && [ -x "$$JAVA_HOME/bin/javac" ]; then echo "$$JAVA_HOME/bin/javac"; else command -v javac 2>/dev/null || ls /usr/lib/jvm/*/bin/javac 2>/dev/null | head -1; fi)
 
-install: venv
-	$(PIP) install -e .
+bindings:
+	cargo build -p yaal-ffi
+	YAAL_LIB="$(LIB)" python3 bindings/python/test_yaal.py
+	cd bindings/go && YAAL_LIB="$(LIB)" go test .
+	YAAL_LIB="$(LIB)" dotnet run --project bindings/csharp/Yaal.Tests/Yaal.Tests.csproj --nologo
+	@test -n "$(JAVAC)" && test -x "$(JAVAC)" || { echo "javac not found. Install a JDK, for example java-25-openjdk-devel, or set JAVA_HOME."; exit 1; }
+	mkdir -p bindings/java/build
+	"$(JAVAC)" --release 22 -d bindings/java/build bindings/java/src/yaal/*.java bindings/java/test/yaal/*.java
+	YAAL_LIB="$(LIB)" $(JAVA) --enable-native-access=ALL-UNNAMED -cp bindings/java/build yaal.YaalTest
 
-test: test-unit
+compile:
+	cargo run -p yaal-cli -- compile $(ARGS)
 
-test-unit:
-	$(PY) -m unittest discover -s python/tests/unit -v
+docs:
+	python3 docs/serve.py
 
-integration-up:
-	$(COMPOSE) up -d --wait postgres mysql clickhouse
-
-integration-down:
-	$(COMPOSE) --profile csharp down -v
-
-integration-ps:
-	$(COMPOSE) ps
-
-test-integration: integration-up
-	$(PIP) install -e ".[engines]"
-	YAAL_INTEGRATION=1 $(PY) -m unittest discover -s python/tests/integration -v
-
-test-all: test-unit test-integration
-
-example:
-	$(PY) python/examples/demo.py
-
-yaal:
-	$(PY) -m yaal_cli $(ARGS)
-
-# Local FS descriptor tree + persistent SQLite for editing/experiments.
-define seed_experiment_db
-	$(PY) -c "import sqlite3; from pathlib import Path; \
-p = Path('$(EXP_DB)'); p.parent.mkdir(parents=True, exist_ok=True); \
-p.unlink(missing_ok=True); \
-sqlite3.connect(p).executescript(Path('$(EXP_SCHEMA)').read_text())"
-endef
-
-experiment-init:
-	mkdir -p $(EXP_DIR)
-	rm -rf $(EXP_API)
-	cp -R $(EXP_FIXTURE_API) $(EXP_API)
-	$(seed_experiment_db)
-
-experiment-reset:
-	@test -d $(EXP_API) || (echo "missing $(EXP_API); run make experiment-init first" && exit 1)
-	$(seed_experiment_db)
-
-experiment-clean:
-	rm -rf $(EXP_DIR)
-
-experiment:
-	@if [ ! -d "$(EXP_API)" ] || [ ! -f "$(EXP_DB)" ]; then $(MAKE) experiment-init; fi
-	$(PY) -m yaal_cli --api $(EXP_API) --db '$(EXP_DB_URL)' --debug $(if $(ARGS),$(ARGS),query user/get --arg id=1)
-
-# Same editable $(EXP_API) tree against Docker Compose ClickHouse (native port 9000).
-define seed_experiment_clickhouse
-	$(COMPOSE) up -d --wait clickhouse
-	$(COMPOSE) exec -T clickhouse clickhouse-client --user yaal --password yaal --multiquery < $(EXP_CH_SEED)
-endef
-
-define ensure_experiment_api
-	@if [ ! -d "$(EXP_API)" ]; then \
-		mkdir -p $(EXP_DIR); \
-		rm -rf $(EXP_API); \
-		cp -R $(EXP_FIXTURE_API) $(EXP_API); \
-	fi
-endef
-
-experiment-clickhouse-init:
-	$(ensure_experiment_api)
-	$(seed_experiment_clickhouse)
-
-experiment-clickhouse-reset:
-	@test -d "$(EXP_API)" || (echo "missing $(EXP_API); run make experiment-clickhouse-init first" && exit 1)
-	$(seed_experiment_clickhouse)
-
-experiment-clickhouse:
-	@if [ ! -d "$(EXP_API)" ]; then $(MAKE) experiment-clickhouse-init; else $(COMPOSE) up -d --wait clickhouse; fi
-	$(PY) -m yaal_cli --api $(EXP_API) --db '$(EXP_CH_URL)' --debug $(if $(ARGS),$(ARGS),query user/get --arg id=1)
-
-# .NET tests always run in mcr.microsoft.com/dotnet/sdk:8.0 (no local SDK needed).
-test-csharp:
-	$(COMPOSE) --profile csharp run --rm --no-deps dotnet-test
-
-test-csharp-integration:
-	$(COMPOSE) --profile csharp run --rm -e YAAL_INTEGRATION=1 dotnet-test
-
-example-csharp:
-	$(COMPOSE) --profile csharp run --rm --no-deps dotnet-test \
-		dotnet run --project csharp/examples/Yaal.Example/Yaal.Example.csproj
-
-benchmark-csharp:
-	$(COMPOSE) --profile csharp run --rm --no-deps dotnet-test \
-		sh -c 'dotnet build csharp/src/Yaal/Yaal.csproj -c Release && dotnet run --project csharp/benchmarks/Yaal.Benchmarks.Generator/Yaal.Benchmarks.Generator.csproj && dotnet run -c Release --project csharp/benchmarks/Yaal.Benchmarks/Yaal.Benchmarks.csproj'
-
-docs-install: venv
-	$(PIP) install -e ".[docs]"
-
-docs-serve:
-	$(VENV)/bin/mkdocs serve
-
-docs-build:
-	$(VENV)/bin/mkdocs build --strict
-
-clean: experiment-clean
-	rm -rf $(VENV) __pycache__ .pytest_cache site
-	find . -type d -name '__pycache__' -prune -exec rm -rf {} +
-	find . -type f -name '*.py[co]' -delete
-	find csharp -type d \( -name bin -o -name obj \) -prune -exec rm -rf {} +
+nuget:
+	dotnet pack bindings/csharp/Yaal/Yaal.csproj -c Release -o artifacts -p:ContinuousIntegrationBuild=true

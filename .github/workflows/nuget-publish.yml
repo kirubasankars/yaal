@@ -21,9 +21,11 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: dtolnay/rust-toolchain@stable
+
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: "8.0.x"
+          dotnet-version: "10.0.x"
 
       - name: Extract version from tag
         id: version
@@ -31,25 +33,23 @@ jobs:
 
       - name: Validate version matches project
         run: |
-          PROJECT_VERSION=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' csharp/src/Yaal/Yaal.csproj)
+          PROJECT_VERSION=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' bindings/csharp/Yaal/Yaal.csproj)
           if [ "$PROJECT_VERSION" != "${{ steps.version.outputs.VERSION }}" ]; then
             echo "::error::Tag version (${{ steps.version.outputs.VERSION }}) does not match project version ($PROJECT_VERSION)"
             exit 1
           fi
 
       - name: Restore
-        working-directory: csharp
-        run: dotnet restore Yaal.sln
+        run: dotnet restore bindings/csharp/Yaal.Tests/Yaal.Tests.csproj
 
       - name: Unit tests
-        working-directory: csharp
-        # IntegrationTests Skip when YAAL_INTEGRATION is unset (Xunit.SkippableFact).
-        run: dotnet test Yaal.sln --no-restore
+        run: |
+          cargo build -p yaal-ffi --release
+          YAAL_LIB="$PWD/target/release/libyaal_ffi.so" dotnet run --project bindings/csharp/Yaal.Tests/Yaal.Tests.csproj --no-restore --nologo
 
       - name: Pack
-        working-directory: csharp
         run: >
-          dotnet pack src/Yaal/Yaal.csproj -c Release -o ../artifacts
+          dotnet pack bindings/csharp/Yaal/Yaal.csproj -c Release -o artifacts
           -p:ContinuousIntegrationBuild=true
 
       - name: Validate package

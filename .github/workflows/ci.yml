@@ -10,55 +10,20 @@ on:
   pull_request:
 
 jobs:
-  python:
+  rust:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-go@v5
         with:
-          python-version: "3.12"
-      - name: Install
-        run: make install
-      - name: Unit tests
-        run: make test-unit
-
-  docs:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+          go-version: stable
+      - uses: actions/setup-java@v4
         with:
-          python-version: "3.12"
-      - name: Install docs extras
-        run: pip install -e ".[docs]"
-      - name: Build docs
-        run: mkdocs build --strict
-
-  csharp:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+          distribution: temurin
+          java-version: "25"
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: "8.0.x"
-      - name: Restore
-        working-directory: csharp
-        run: dotnet restore Yaal.sln
-      - name: Unit tests
-        working-directory: csharp
-        # IntegrationTests Skip when YAAL_INTEGRATION is unset (Xunit.SkippableFact).
-        run: dotnet test Yaal.sln --no-restore
-      - name: Pack
-        working-directory: csharp
-        run: >
-          dotnet pack src/Yaal/Yaal.csproj -c Release --no-restore -o ../artifacts
-          -p:ContinuousIntegrationBuild=true
-      - name: Validate package
-        run: |
-          dotnet tool install --global dotnet-validate --version 0.0.1-preview.582
-          shopt -s nullglob
-          for pkg in ./artifacts/*.nupkg; do
-            dotnet-validate package local "$pkg"
-          done
+          dotnet-version: "10.0.x"
+      - name: Test
+        run: make ci

@@ -6,301 +6,105 @@ license that can be found in the LICENSE file.
 
 # Yaal
 
-**Yaal is a subtractive SQL ORM.**
-
-You author full SQL (plus JSON shapes). At bind time Yaal **subtracts** unused `optional(...)` / null-filter fragments, runs the remaining statements on the provider you pass to `query`, and shapes flat rows into **nested JSON**. Aggregations, `WITH` / CTEs, and window functions stay ordinary SQL—not a query-builder escape hatch.
-
-That is the opposite of additive ORMs that build SQL up from models. Yaal is not ActiveRecord: no entity tracking, migrations, or query-builder DSL. SQL files remain the source of truth.
-
-Pipeline: *write SQL → subtract optionals → run (any named DB) → shape → JSON*.
-
-License: [MIT](LICENSE). Version: `0.10.0` (Python package + NuGet metadata). Python and .NET share the same descriptor files. The C# library targets .NET Standard 2.0.
-
-## Features
-
-Learning path: [`docs/tutorial/index.md`](docs/tutorial/index.md). Task guides: [`docs/guides/index.md`](docs/guides/index.md). Preview the site with `make docs-serve`.
-
-### Subtractive filters
-
-`optional(...)` / null groups are **removed** when params are null, omitted, or (for list params) `[]`. Empty `WHERE`, `PREWHERE`, and `HAVING` clauses are dropped after elision—no bare `HAVING` or leftover `1 = 1`. [Full example →](docs/guides/optional-filters.md)
+Yaal compiles a SQL string into dialect SQL and ordered bind values. You write the full statement, mark the parts that depend on arguments, and pass a JSON object. Yaal removes the unused parts and returns the SQL plus the binds. It does not open a database, shape rows, or track entities.
 
 ```sql
---($args.active integer)--
-select ... from users u
-where 1 = 1
-  and optional(u.active = {{$args.active}})
+--(id, active)--
+select *
+from users u
+where optional(u.id = {{id}})
+  and optional(u.active = {{active}})
 ```
 
-| Args | Compiled predicate | Binds |
-|---|---|---|
-| *(omitted)* | predicate removed; `where 1 = 1` | `[]` |
-| `active=1` | `and (u.active = ?)` | `[1]` |
-
-**Header array types** (`integer[]`, …): one `{{param}}` expands to `?, ?, ?` for `IN` lists. Inside `optional(...)`, use `optional(id in ({{$args.id}}))` with `--arg 'id=[1,2]'`. Multi-param `optional(...)` requires all listed params or none—partial args are a compile error. See [optional semantics](docs/concepts/optional-semantics.md).
-
-**Optional groups** repeat an AND-shaped filter per row of a `blob` arg (JSON array of objects), OR-joined; omit/`[]` elides the whole block. [Example →](docs/guides/optional-groups.md)
-
-```bash
-yaal explain user/list
-yaal explain user/list --arg active=1
-yaal explain user/groups --arg 'pairs=[{"id":1}]'
-```
-
-### Dynamic ORDER BY
-
-Allowlisted `sort()` / `dir()` splice author expressions only — never client SQL. Null `sort` elides `ORDER BY` unless the header sets a default (`string = id`). Supports multi-column sort (`sort=name,id` + `dir=desc,asc`), `NULLS FIRST/LAST` (`dir=desc_nulls_last`), and mixing with a static tiebreaker column. [Details →](docs/reference/sort-and-dir.md)
+`{"id": 1}` compiles to `select * from users u where (u.id = ?)` with one bind. An omitted or null argument drops its `optional(...)` block. A list expands only where the placeholder is written with `...`:
 
 ```sql
---($args.sort string = id, $args.dir string = asc)--
-order by
-  sort({{$args.sort}}, name = u.user_name, id = u.user_id)
-  dir({{$args.dir}}),
-  u.user_id asc
+--(id)--
+where optional(u.user_id in ({{id}}...))
 ```
 
-```bash
-yaal query user/list --arg sort=name --arg dir=desc
-yaal query user/list --arg sort=name,id --arg dir=desc,asc
+`{"id": [1, 2]}` becomes `in (?, ?)` and binds `[1, 2]`.
+
+License: [MIT](LICENSE).
+
+## Library
+
+```rust
+let params = serde_json::json!({"id": [1, 2]}).as_object().unwrap().clone();
+let compiled = yaal::compile(sql, &params, &yaal::CompileOptions::default())?;
 ```
 
-### JSON out
+`CompileOptions.placeholder` is `?` or `$1`, `$2`, …. `--sql--` splits the input into separate statements that share the same parameters. Each statement numbers its own `$1`.
 
-Every `query` returns nested JSON. [Full example →](docs/tutorial/03-nested-get.md)
-
-```bash
-yaal query user/get --arg id=1
-# {"id":1,"name":"admin","roles":[{"id":1,"name":"Administrator"},...]}
-```
-
-### Output shaping
-
-`mapped`, `partition_by`, `parent_rows`, or child SQL (`$.roles.sql`). [get](docs/tutorial/03-nested-get.md) · [nested](docs/guides/child-sql-and-siblings.md)
+The result is JSON:
 
 ```json
 {
-  "roles": {
-    "type": "array",
-    "partition_by": "role_id",
-    "parent_rows": true,
-    "properties": {
-      "id": { "mapped": "role_id" },
-      "name": { "mapped": "role_name" }
+  "statements": [
+    {
+      "sql": "select * from users u where (u.user_id in (?, ?))",
+      "parameters": [
+        {"name": "id", "type": "integer", "value": 1},
+        {"name": "id", "type": "integer", "value": 2}
+      ]
     }
-  }
+  ]
 }
 ```
 
-### Multi-query + data passing
-
-`--sql--` twigs share binds; `$mode=params` copies columns onto `$params` for later twigs. [Full example →](docs/guides/pagination-and-mode-params.md)
-
-```sql
-SELECT 'params' AS "$mode", COUNT(*) AS total_count FROM users WHERE active = 1
---sql--
-SELECT {{$args.page}} AS page, {{$args.page_size}} AS page_size,
-       {{$params.total_count}} AS total_count
-```
-
-### API pagination
-
-Sibling `$.paging.sql` + `$.data.sql` → `{ paging, data }` via `$mode=params`. [Full example →](docs/guides/pagination-and-mode-params.md)
+## CLI
 
 ```bash
-yaal query user/page --arg page=1 --arg page_size=10
-# {"paging":{"page":1,"page_size":10,"total_count":2},"data":[...]}
+cargo run -p yaal-cli -- compile --sql query.sql --params params.json
+cargo run -p yaal-cli -- compile --sql query.sql --param id=1 --placeholder numbered
 ```
 
-### Real SQL (`WITH` / aggregations)
+SQL is read from stdin when `--sql` is omitted and stdin is not a terminal. `yaal compile` with no SQL exits instead of waiting.
 
-CTEs and aggregates stay ordinary SQL. [Full example →](docs/tutorial/08-real-sql.md)
+## Bindings
 
-```sql
-WITH role_counts AS (
-  SELECT user_id, COUNT(*) AS role_count FROM user_roles GROUP BY user_id
-)
-SELECT COUNT(*) AS user_count, ... FROM users u LEFT JOIN role_counts rc ...
-```
-
-```bash
-yaal query report/summary
-# {"user_count":2,"active_count":2,"assignment_count":3}
-```
-
-### Dual runtime
-
-Python and .NET share [`tests/fixtures/api/`](tests/fixtures/api/). [Full example →](docs/appendix/python.md)
+`cargo build -p yaal-ffi` produces the shared library. Set `YAAL_LIB` to that file (`libyaal_ffi.so`, `libyaal_ffi.dylib`, or `yaal_ffi.dll`). The C functions are `yaal_compile` and `yaal_free` (`bindings/yaal.h`). Each binding returns the same JSON: `statements` of `sql` plus `parameters` (`name`, `type`, `value`). A compiler failure raises the language's compile error.
 
 ```python
-y.query(provider, "user/get", args={"id": 1})
+import yaal
+compiled = yaal.compile(sql, {"id": 1}, placeholder="question")
 ```
 
 ```csharp
-y.Query(provider, "user/get", args: new { id = 1 });
+var compiled = Yaal.Compiler.Compile(sql, new { id = 1 }, "question");
 ```
 
-### Ahead-of-time compile
+```go
+compiled, err := yaal.Compile(sql, map[string]any{"id": 1}, "question")
+```
 
-`yaal compile` / `precompiled=...`; elision still runs per request. [Full example →](docs/guides/precompile.md)
+```java
+Yaal.Compiled compiled = Yaal.compile(sql, Map.of("id", 1), "question");
+```
 
-**Python CLI** — JSON artifacts:
+Java calls the library with the foreign function API, so the program needs `--enable-native-access=ALL-UNNAMED`.
+
+## Syntax
+
+- [Parameter header](docs/header.md)
+- [optional and optional_when](docs/optional.md)
+- [optional groups](docs/groups.md)
+- [sort and dir](docs/sort.md)
+- [examples](docs/examples.md)
+
+## Build
 
 ```bash
-yaal --api tests/fixtures/api compile --out /tmp/yaal-precompiled
-yaal --api tests/fixtures/api --precompiled /tmp/yaal-precompiled \
-  query user/get --arg id=1
+make test
+make ci
+make docs
+make nuget
 ```
 
-**C# JSON load** — pass `precompiled:` to the constructor (same artifact layout).
+`make nuget` packs the C# binding into `artifacts/`. Publishing happens from a published GitHub release: the tag, such as `v2.0.0`, must match `<Version>` in the C# project. The workflow runs the C# tests, packs, validates the package, and pushes it to NuGet with trusted publishing.
 
-**C# source precompile** — zero-parse startup via generated `Branch` types and `RegisterDescriptor`:
+`make ci` is what GitHub Actions runs: the Rust tests, the language bindings, and `cargo fmt --check`.
 
-```bash
-dotnet run --project csharp/src/Yaal.Cli -- \
-  compile --api tests/fixtures/api --format cs --out Generated/YaalDescriptors
-```
+`make docs` serves this README and the syntax pages at http://127.0.0.1:8080. Set `DOCS_PORT` to use another port.
 
-```csharp
-var y = new Yaal.Yaal("tests/fixtures/api");
-foreach (var (path, branch) in Yaal.Generated.YaalDescriptorRegistry.All)
-    y.RegisterDescriptor(path, branch);
-```
-
-Load order when `debug=false`: registered → cache → precompiled JSON → live SQL/JSON. See [precompiled artifacts](docs/reference/precompiled-artifacts.md).
-
-## Install
-
-```bash
-make install          # venv + pip install -e .
-# or: pip install yaal
-pip install 'yaal[postgres]'   # or [mysql] / [clickhouse] — SQLite is stdlib
-```
-
-CLI entry point after install: `yaal` (same as `python -m yaal_cli`).
-
-C#: `dotnet add package Yaal` (`0.10.0`). The library targets .NET Standard 2.0. The CLI and the example need the .NET 8 runtime. Or add a project reference to [`csharp/src/Yaal/Yaal.csproj`](csharp/src/Yaal/Yaal.csproj).
-
-## Quick start
-
-```bash
-make install
-make example                          # python/examples/demo.py — all fixtures + explain
-make example-csharp                   # same tour in .NET (Docker SDK)
-make yaal ARGS='list'
-make yaal ARGS='query user/get --arg id=1'
-
-# editable FS tree + persistent SQLite under experiment/
-make experiment-init
-make experiment
-make experiment ARGS='query user/page --arg page=1 --arg page_size=10'
-make experiment-reset                 # reseed DB only
-
-# same API sandbox against Compose ClickHouse
-make experiment-clickhouse-init
-make experiment-clickhouse
-make experiment-clickhouse-reset      # truncate+reseed CH (keep API edits)
-```
-
-`make example` runs [`python/examples/demo.py`](python/examples/demo.py): temp SQLite from `docker/sqlite/schema.sql`, then get / nested / list / page / `report/summary` plus `explain` elision (read-only). CLI commands with `--db` omitted also seed a temp SQLite DB.
-
-`make experiment` uses a local sandbox at `experiment/` (gitignored): a copy of `tests/fixtures/api` plus `yaal.db`. Edit `experiment/api/` and re-run; `make experiment-reset` reseeds the DB without wiping API edits.
-
-`make experiment-clickhouse` shares `experiment/api/` and points `--db` at Compose ClickHouse (`clickhouse://yaal:yaal@127.0.0.1:9000/yaal`). It starts the `clickhouse` service if needed; `experiment-clickhouse-reset` reloads rows via [`docker/clickhouse/experiment_seed.sql`](docker/clickhouse/experiment_seed.sql).
-
-### CLI
-
-```bash
-# zero-config demo (temp SQLite + tests/fixtures/api)
-yaal query user/get --arg id=1
-yaal explain user/get --arg id=1
-yaal list
-
-# your own descriptors / database
-yaal query orders/list --api ./my-api --db 'sqlite3:////tmp/app.db' --args '{"status":"open"}'
-```
-
-### Programmatic usage
-
-```python
-from yaal import Yaal
-
-y = Yaal("tests/fixtures/api", debug=True)
-result = y.query(provider, "user/get", args={"id": 1})
-# {'id': 1, 'name': 'admin', 'roles': [{'id': 1, 'name': 'Administrator'}, ...]}
-```
-
-```csharp
-var y = new Yaal.Yaal("tests/fixtures/api", debug: true);
-var user = y.Query(provider, "user/get", args: new { id = 1 });
-```
-
-Preview compiled SQL (after null-filter elision):
-
-```python
-for twig in y.explain_sql(provider, "user/get", args={"id": 1}):
-    print(twig["sql"], twig["parameters"])
-```
-
-## Documentation
-
-Operations are folders of `*.sql` (+ `$.output.json`), discovered filesystem-first and called by path (`y.query(provider, "user/get", ...)`). The docs site splits that material into a tutorial, task guides, concept notes, and a reference.
-
-```bash
-make docs-install
-make docs-serve
-```
-
-- [`docs/index.md`](docs/index.md) — site home
-- [`docs/tutorial/index.md`](docs/tutorial/index.md) — step-by-step learning path
-- [`docs/guides/index.md`](docs/guides/index.md) — task guides (filters, paging, precompile, explain)
-- [`docs/concepts/index.md`](docs/concepts/index.md) — elision, optional semantics, shaping
-- [`docs/reference/index.md`](docs/reference/index.md) — header, DSL, CLI, URLs
-- [`docs/essays/why-sql-first.md`](docs/essays/why-sql-first.md) — why SQL-first fits reporting and ClickHouse-like engines
-- [`docs/README.md`](docs/README.md) — short index for readers browsing the repo
-
-## Make targets
-
-| Target | Purpose |
-|---|---|
-| `make install` | Create `venv` and `pip install -e .` |
-| `make test` | Unit tests |
-| `make test-integration` | Start Docker Postgres/MySQL/ClickHouse and run integration tests |
-| `make test-all` | Unit + integration |
-| `make example` | Run `python/examples/demo.py` (all fixture ops + explain) |
-| `make example-csharp` | Same tour in .NET SDK container |
-| `make yaal ARGS='...'` | Pass-through to CLI (`query` / `explain` / `list` / `compile`) |
-| `make experiment` | FS+SQLite sandbox under `experiment/` (init if needed) |
-| `make experiment-clickhouse` | Same API sandbox against Compose ClickHouse |
-| `make experiment-init` / `experiment-reset` / `experiment-clean` | Create, reseed SQLite, or remove sandbox |
-| `make experiment-clickhouse-init` / `experiment-clickhouse-reset` | Start/seed or reseed ClickHouse (keep API edits) |
-| `make test-csharp` | .NET unit tests (SDK container) |
-| `make test-csharp-integration` | Compose DBs + .NET integration tests |
-| `make benchmark-csharp` | Descriptor load benchmarks (live SQL vs JSON vs `RegisterDescriptor`) |
-| `make docs-install` / `docs-serve` / `docs-build` | MkDocs site (preview or strict build) |
-| `make integration-up` / `integration-down` | Manage compose DBs |
-
-SQLite-only usage does **not** need Docker. Compose is only for Postgres/MySQL/ClickHouse integration tests.
-
-## Tests
-
-```bash
-make test                 # python/tests/unit
-YAAL_INTEGRATION=1 make test-integration
-make test-csharp          # .NET unit tests (sdk container)
-```
-
-CI (GitHub Actions) runs Python unit tests and .NET tests on every PR. Shared SQL compile goldens live under [`tests/fixtures/sql_compile/`](tests/fixtures/sql_compile/) (optional filters, `integer[]` expansion, `optional_groups_or` / `optional_groups_and`, `HAVING` cleanup). Descriptor fixtures live under [`tests/fixtures/api/`](tests/fixtures/api/) (including [`user/groups`](tests/fixtures/api/user/groups/) for blob + optional groups).
-
-## Python
-
-Library, tests, and demo live under [`python/`](python/). See [`python/README.md`](python/README.md).
-
-## C#
-
-A full-parity .NET port lives under [`csharp/`](csharp/). The [`Yaal`](https://www.nuget.org/packages/Yaal) package targets .NET Standard 2.0 — see [`csharp/README.md`](csharp/README.md). Includes JSON or C# source precompile, `RegisterDescriptor`, and the `yaal` CLI (`compile --format json|cs`). The CLI needs the .NET 8 runtime. Tests run in a .NET SDK container (no local `dotnet` required):
-
-```bash
-make test-csharp
-make test-csharp-integration
-make example-csharp
-make benchmark-csharp
-```
+`make test` runs the Rust tests, then the Python, Go, C#, and Java bindings against `libyaal_ffi`. The Java step needs a JDK.
