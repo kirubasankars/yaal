@@ -33,6 +33,8 @@ docs:
 	python3 docs/serve.py
 
 nuget:
+	cargo build -p yaal-ffi --release
+	python3 bindings/csharp/stage.py
 	dotnet pack bindings/csharp/Yaal/Yaal.csproj -c Release -o artifacts -p:ContinuousIntegrationBuild=true
 
 pypi:

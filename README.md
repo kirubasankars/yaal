@@ -76,6 +76,8 @@ compiled = yaal.compile(sql, {"id": 1}, placeholder="question")
 var compiled = Yaal.Compiler.Compile(sql, new { id = 1 }, "question");
 ```
 
+The NuGet package targets .NET Standard 2.0, so .NET Framework 4.6.1, .NET Core 2.0, and later can reference it. The package includes the native compiler for Linux x86_64, macOS Apple silicon, and Windows x64.
+
 ```go
 compiled, err := yaal.Compile(sql, map[string]any{"id": 1}, "question")
 ```
@@ -106,9 +108,9 @@ make nuget
 make pypi
 ```
 
-`make nuget` packs the C# binding into `artifacts/`. `make pypi` builds a Python wheel for this machine into the same directory. It needs the `build` and `wheel` packages (`python3 -m pip install build wheel`).
+`make nuget` packs the C# binding for this machine into `artifacts/`. `make pypi` builds a Python wheel for this machine into the same directory. It needs the `build` and `wheel` packages (`python3 -m pip install build wheel`).
 
-Publishing happens from a published GitHub release. The tag, such as `v0.12.0`, must match `<Version>` in the C# project and `version` in `pyproject.toml`. The NuGet workflow runs the C# tests, packs, validates the package, and pushes it to NuGet with trusted publishing. The PyPI workflow runs the Python tests, builds wheels for Linux x86_64, macOS Apple silicon, and Windows x64, and pushes them to PyPI with trusted publishing. PyPI has to list this repository's `pypi-publish.yml` workflow and the `pypi` environment as a trusted publisher.
+Publishing happens from a published GitHub release. The tag, such as `v0.12.0`, must match `<Version>` in the C# project and `version` in `pyproject.toml`. The NuGet workflow runs the C# tests, packs the native compiler for Linux x86_64, macOS Apple silicon, and Windows x64, validates the package, and pushes it to NuGet with trusted publishing. The PyPI workflow runs the Python tests, builds wheels for Linux x86_64, macOS Apple silicon, and Windows x64, and pushes them to PyPI with trusted publishing. PyPI has to list this repository's `pypi-publish.yml` workflow and the `pypi` environment as a trusted publisher.
 
 `make ci` is what GitHub Actions runs: the Rust tests, the language bindings, and `cargo fmt --check`.
 

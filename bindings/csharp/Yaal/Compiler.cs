@@ -2,7 +2,9 @@
 // Use of this source code is governed by a MIT style
 // license that can be found in the LICENSE file.
 
+using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -29,19 +31,22 @@ public static class Compiler
 {
     public static Compiled Compile(string sql, object? parameters = null, string placeholder = "question")
     {
-        ArgumentNullException.ThrowIfNull(sql);
+        if (sql is null)
+            throw new ArgumentNullException(nameof(sql));
         placeholder = string.IsNullOrEmpty(placeholder) ? "question" : placeholder;
-        if (sql.Contains('\0') || placeholder.Contains('\0'))
+        if (sql.IndexOf('\0') >= 0 || placeholder.IndexOf('\0') >= 0)
             throw new CompileException("sql and placeholder must not contain a NUL character");
         var paramsJson = parameters is null ? "{}" : JsonSerializer.Serialize(parameters);
         var raw = Invoke(sql, paramsJson, placeholder);
-        using var document = JsonDocument.Parse(raw);
-        if (!document.RootElement.TryGetProperty("statements", out _))
+        using (var document = JsonDocument.Parse(raw))
         {
-            var message = document.RootElement.TryGetProperty("error", out var error)
-                ? error.GetString() ?? raw
-                : raw;
-            throw new CompileException(message);
+            if (!document.RootElement.TryGetProperty("statements", out _))
+            {
+                var message = document.RootElement.TryGetProperty("error", out var error)
+                    ? error.GetString() ?? raw
+                    : raw;
+                throw new CompileException(message);
+            }
         }
         return JsonSerializer.Deserialize<Compiled>(raw)
             ?? throw new CompileException("compiler returned no result");
@@ -49,9 +54,9 @@ public static class Compiler
 
     static string Invoke(string sql, string paramsJson, string placeholder)
     {
-        var sqlPtr = Marshal.StringToCoTaskMemUTF8(sql);
-        var paramsPtr = Marshal.StringToCoTaskMemUTF8(paramsJson);
-        var placeholderPtr = Marshal.StringToCoTaskMemUTF8(placeholder);
+        var sqlPtr = AllocUtf8(sql);
+        var paramsPtr = AllocUtf8(paramsJson);
+        var placeholderPtr = AllocUtf8(placeholder);
         try
         {
             var result = Native.compile(sqlPtr, paramsPtr, placeholderPtr);
@@ -59,8 +64,7 @@ public static class Compiler
                 throw new CompileException("yaal_compile returned null");
             try
             {
-                return Marshal.PtrToStringUTF8(result)
-                    ?? throw new CompileException("compiler returned an empty result");
+                return ReadUtf8(result);
             }
             finally
             {
@@ -75,8 +79,31 @@ public static class Compiler
         }
     }
 
+    static IntPtr AllocUtf8(string value)
+    {
+        var bytes = Encoding.UTF8.GetBytes(value);
+        var ptr = Marshal.AllocCoTaskMem(bytes.Length + 1);
+        Marshal.Copy(bytes, 0, ptr, bytes.Length);
+        Marshal.WriteByte(ptr, bytes.Length, 0);
+        return ptr;
+    }
+
+    static string ReadUtf8(IntPtr ptr)
+    {
+        var length = 0;
+        while (Marshal.ReadByte(ptr, length) != 0)
+            length++;
+        if (length == 0)
+            return "";
+        var bytes = new byte[length];
+        Marshal.Copy(ptr, bytes, 0, length);
+        return Encoding.UTF8.GetString(bytes);
+    }
+
     static class Native
     {
+        const int RtldNow = 2;
+
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         internal delegate IntPtr CompileFn(IntPtr sql, IntPtr paramsJson, IntPtr placeholder);
 
@@ -96,26 +123,64 @@ public static class Compiler
             {
                 if (compileFn is not null && freeFn is not null)
                     return (compileFn, freeFn);
-                var library = Load();
-                compileFn = Marshal.GetDelegateForFunctionPointer<CompileFn>(
-                    NativeLibrary.GetExport(library, "yaal_compile"));
-                freeFn = Marshal.GetDelegateForFunctionPointer<FreeFn>(
-                    NativeLibrary.GetExport(library, "yaal_free"));
+                var library = Load(LibraryPath());
+                compileFn = (CompileFn)Marshal.GetDelegateForFunctionPointer(
+                    Export(library, "yaal_compile"), typeof(CompileFn));
+                freeFn = (FreeFn)Marshal.GetDelegateForFunctionPointer(
+                    Export(library, "yaal_free"), typeof(FreeFn));
                 return (compileFn, freeFn);
             }
         }
 
-        static IntPtr Load()
+        static IntPtr Load(string path)
         {
-            var path = LibraryPath();
-            try
-            {
-                return NativeLibrary.Load(path);
-            }
-            catch (Exception ex)
-            {
-                throw new CompileException($"failed to load {path}: {ex.Message}");
-            }
+            var handle = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                ? LoadLibrary(path)
+                : OpenUnix(path);
+            if (handle == IntPtr.Zero)
+                throw new CompileException($"failed to load {path}: {LoadError()}");
+            return handle;
+        }
+
+        static IntPtr Export(IntPtr library, string name)
+        {
+            var symbol = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                ? GetProcAddress(library, name)
+                : SymbolUnix(library, name);
+            if (symbol == IntPtr.Zero)
+                throw new CompileException($"yaal shared library is missing {name}");
+            return symbol;
+        }
+
+        static IntPtr OpenUnix(string path)
+        {
+            ClearUnixError();
+            return RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
+                ? MacDlopen(path, RtldNow)
+                : Dlopen(path, RtldNow);
+        }
+
+        static IntPtr SymbolUnix(IntPtr library, string name)
+        {
+            return RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
+                ? MacDlsym(library, name)
+                : Dlsym(library, name);
+        }
+
+        static void ClearUnixError()
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+                MacDlerror();
+            else
+                Dlerror();
+        }
+
+        static string LoadError()
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                return new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error()).Message;
+            var ptr = RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? MacDlerror() : Dlerror();
+            return ptr == IntPtr.Zero ? "dlopen failed" : ReadUtf8(ptr);
         }
 
         static string LibraryPath()
@@ -123,14 +188,22 @@ public static class Compiler
             var env = Environment.GetEnvironmentVariable("YAAL_LIB");
             if (!string.IsNullOrEmpty(env))
                 return env;
-            var name = OperatingSystem.IsWindows() ? "yaal_ffi.dll"
-                : OperatingSystem.IsMacOS() ? "libyaal_ffi.dylib"
-                : "libyaal_ffi.so";
-            foreach (var start in new[] { Directory.GetCurrentDirectory(), AppContext.BaseDirectory })
+            var name = LibraryFileName();
+            var rid = RuntimeId();
+            foreach (var start in Starts())
             {
+                var beside = Path.Combine(start, name);
+                if (File.Exists(beside))
+                    return beside;
+                var packaged = Path.Combine(start, "runtimes", rid, "native", name);
+                if (File.Exists(packaged))
+                    return packaged;
                 var dir = new DirectoryInfo(start);
                 while (dir is not null)
                 {
+                    var runtime = Path.Combine(dir.FullName, "runtimes", rid, "native", name);
+                    if (File.Exists(runtime))
+                        return runtime;
                     foreach (var profile in new[] { "debug", "release" })
                     {
                         var candidate = Path.Combine(dir.FullName, "target", profile, name);
@@ -142,5 +215,60 @@ public static class Compiler
             }
             throw new CompileException("yaal shared library not found; set YAAL_LIB");
         }
+
+        static IEnumerable<string> Starts()
+        {
+            yield return AppContext.BaseDirectory;
+            var location = typeof(Compiler).GetTypeInfo().Assembly.Location;
+            if (!string.IsNullOrEmpty(location))
+            {
+                var directory = Path.GetDirectoryName(location);
+                if (!string.IsNullOrEmpty(directory))
+                    yield return directory;
+            }
+            yield return Directory.GetCurrentDirectory();
+        }
+
+        static string LibraryFileName()
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                return "yaal_ffi.dll";
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+                return "libyaal_ffi.dylib";
+            return "libyaal_ffi.so";
+        }
+
+        static string RuntimeId()
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                return "win-x64";
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+                return "osx-arm64";
+            return "linux-x64";
+        }
+
+        [DllImport("kernel32", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern IntPtr LoadLibrary(string path);
+
+        [DllImport("kernel32", CharSet = CharSet.Ansi, SetLastError = true)]
+        static extern IntPtr GetProcAddress(IntPtr module, string name);
+
+        [DllImport("libc.so.6", EntryPoint = "dlopen")]
+        static extern IntPtr Dlopen(string file, int mode);
+
+        [DllImport("libc.so.6", EntryPoint = "dlsym")]
+        static extern IntPtr Dlsym(IntPtr handle, string name);
+
+        [DllImport("libc.so.6", EntryPoint = "dlerror")]
+        static extern IntPtr Dlerror();
+
+        [DllImport("libSystem.B.dylib", EntryPoint = "dlopen")]
+        static extern IntPtr MacDlopen(string file, int mode);
+
+        [DllImport("libSystem.B.dylib", EntryPoint = "dlsym")]
+        static extern IntPtr MacDlsym(IntPtr handle, string name);
+
+        [DllImport("libSystem.B.dylib", EntryPoint = "dlerror")]
+        static extern IntPtr MacDlerror();
     }
 }

@@ -1,0 +1,19 @@
+<Project>
+  <PropertyGroup>
+    <YaalNativeRid Condition="'$(RuntimeIdentifier)' == 'linux-x64' or '$(RuntimeIdentifier)' == 'osx-arm64' or '$(RuntimeIdentifier)' == 'win-x64'">$(RuntimeIdentifier)</YaalNativeRid>
+    <YaalNativeRid Condition="'$(YaalNativeRid)' == '' and '$(OS)' == 'Windows_NT'">win-x64</YaalNativeRid>
+    <YaalNativeRid Condition="'$(YaalNativeRid)' == '' and $([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::OSX)))">osx-arm64</YaalNativeRid>
+    <YaalNativeRid Condition="'$(YaalNativeRid)' == ''">linux-x64</YaalNativeRid>
+    <YaalNativeName Condition="'$(YaalNativeRid)' == 'win-x64'">yaal_ffi.dll</YaalNativeName>
+    <YaalNativeName Condition="'$(YaalNativeRid)' == 'osx-arm64'">libyaal_ffi.dylib</YaalNativeName>
+    <YaalNativeName Condition="'$(YaalNativeRid)' == 'linux-x64'">libyaal_ffi.so</YaalNativeName>
+    <YaalNativeFile>$(MSBuildThisFileDirectory)../../runtimes/$(YaalNativeRid)/native/$(YaalNativeName)</YaalNativeFile>
+  </PropertyGroup>
+  <ItemGroup Condition="Exists('$(YaalNativeFile)')">
+    <None Include="$(YaalNativeFile)"
+          Link="$(YaalNativeName)"
+          CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="PreserveNewest"
+          Visible="false" />
+  </ItemGroup>
+</Project>

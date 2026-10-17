@@ -5,7 +5,8 @@ license that can be found in the LICENSE file.
 -->
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>Yaal</RootNamespace>
@@ -30,6 +31,12 @@ license that can be found in the LICENSE file.
     <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true' or '$(CI)' == 'true'">true</ContinuousIntegrationBuild>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+  </ItemGroup>
+  <ItemGroup>
     <None Include="../../../README.md" Pack="true" PackagePath="README.md" />
+    <None Include="runtimes/**/*" Pack="true" PackagePath="runtimes/%(RecursiveDir)%(Filename)%(Extension)" />
+    <None Include="Yaal.targets" Pack="true" PackagePath="build/netstandard2.0/Yaal.targets" />
+    <None Include="Yaal.targets" Pack="true" PackagePath="buildTransitive/netstandard2.0/Yaal.targets" />
   </ItemGroup>
 </Project>
