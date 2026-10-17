@@ -141,6 +141,77 @@ where z = 1
 
 `apply` is not bound.
 
+## optional_when around a group
+
+From `optional_when_wrapping_groups_only_keeps` and `optional_when_wrapping_groups_only_cond_absent_elides`.
+
+```sql
+--(apply, pairs blob)--
+select *
+from t
+where z = 1
+  and optional_when(
+    {{apply}},
+    optional_groups_or({{pairs}}, id = {{self.id}})
+  )
+```
+
+```json
+{
+  "apply": true,
+  "pairs": [
+    {"id": 1},
+    {"id": 1}
+  ]
+}
+```
+
+```sql
+select *
+from t
+where z = 1
+  and (
+    (id = ?)
+    or (id = ?)
+  )
+```
+
+`{"pairs": [{"id": 1}, {"id": 1}]}` compiles to `select * from t where z = 1`. The group is not rendered.
+
+`optional_when` inside a group, from `optional_when_inside_groups_body_row_fields_only`. The condition is the header argument `flag`.
+
+```sql
+--(pairs blob, flag)--
+select *
+from t
+where optional_groups_or(
+  {{pairs}},
+  c1 = {{self.cv}}
+  and optional_when({{flag}}, c2 = {{self.cv2}})
+)
+```
+
+```json
+{
+  "flag": true,
+  "pairs": [
+    {"cv": 1, "cv2": 1},
+    {"cv": 1, "cv2": 1}
+  ]
+}
+```
+
+```sql
+select *
+from t
+where (
+  (c1 = ? and (c2 = ?))
+  or (c1 = ? and (c2 = ?))
+)
+```
+
+Omitting `flag` leaves `where ((c1 = ?) or (c1 = ?))`.
+
 ## Group rows
 
 From `tests/fixtures/sql/groups.sql`.

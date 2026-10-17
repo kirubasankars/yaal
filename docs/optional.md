@@ -26,6 +26,32 @@ where 1 = 1
 and optional_when({{apply}}, u.id = {{id}})
 ```
 
+The body may contain `optional(...)`, `optional_groups_or(...)`, and `optional_groups_and(...)`. An absent condition removes that whole body before the inner blocks are checked.
+
+```sql
+--(apply, active, pairs blob)--
+where 1 = 1
+  and optional_when({{apply}},
+    optional(u.active = {{active}})
+    and optional_groups_or({{pairs}}, u.id = {{self.id}})
+  )
+```
+
+`{"apply": true, "active": 1, "pairs": [{"id": 1}, {"id": 2}]}` keeps the comparison and both group rows. `{}` removes the block. `{"apply": true}` removes it too. `{"apply": true, "pairs": [{"id": 1}]}` also removes it: `active` is a body parameter, and omitting it drops the `optional_when` block along with the group.
+
+Header names in that body stay all-or-nothing together. `optional_when({{apply}}, optional(a = {{a}}) and optional(b = {{b}}))` with only `a` is the partial-parameters error. Omitting `apply` removes the block.
+
+A body that is only a group follows the group. `optional_groups_and` joins those rows with `and`.
+
+```sql
+--(apply, pairs blob)--
+and optional_when({{apply}}, optional_groups_and({{pairs}}, u.id = {{self.id}}))
+```
+
+`optional_when` inside `optional_when` fails with `nested optional_when(...) is not supported`. A group inside a group fails with `nested optional_groups_or(...)/optional_groups_and(...) is not supported`.
+
+A group body may contain `optional(...)` and `optional_when(...)`. The `optional_when` condition is a header argument. Each rendered row still supplies `{{self.field}}`.
+
 An empty `where`, `prewhere`, or `having`, including one left as `1 = 1`, is removed.
 
 The long form is the same rule: `({{id}} is null or u.id = {{id}})`.
