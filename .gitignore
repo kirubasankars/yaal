@@ -23,3 +23,6 @@ build/
 artifacts/
 site/
 /target/
+bindings/python/yaal/*.so
+bindings/python/yaal/*.dylib
+bindings/python/yaal/*.dll

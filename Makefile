@@ -2,7 +2,7 @@
 # Use of this source code is governed by a MIT style
 # license that can be found in the LICENSE file.
 
-.PHONY: test compile bindings docs ci nuget
+.PHONY: test compile bindings docs ci nuget pypi
 
 test:
 	cargo test --workspace
@@ -34,3 +34,8 @@ docs:
 
 nuget:
 	dotnet pack bindings/csharp/Yaal/Yaal.csproj -c Release -o artifacts -p:ContinuousIntegrationBuild=true
+
+pypi:
+	cargo build -p yaal-ffi --release
+	@python3 -c "import build, wheel" || { echo "python3 -m pip install build wheel"; exit 1; }
+	python3 bindings/python/pack.py

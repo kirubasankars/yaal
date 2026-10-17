@@ -73,6 +73,9 @@ def _library_path():
         "win32": "yaal_ffi.dll",
         "darwin": "libyaal_ffi.dylib",
     }.get(sys.platform, "libyaal_ffi.so")
+    bundled = Path(__file__).resolve().parent / name
+    if bundled.is_file():
+        return str(bundled)
     starts = [Path(__file__).resolve(), Path.cwd()]
     for start in starts:
         directory = start if start.is_dir() else start.parent
