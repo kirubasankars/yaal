@@ -105,6 +105,6 @@ make nuget
 
 `make ci` is what GitHub Actions runs: the Rust tests, the language bindings, and `cargo fmt --check`.
 
-`make docs` serves this README and the syntax pages at http://127.0.0.1:8080. Set `DOCS_PORT` to use another port.
+`make docs` serves this README and the syntax pages at http://127.0.0.1:8080. Set `DOCS_PORT` to use another port. A push to `main` publishes the same pages to https://kirubasankars.github.io/yaal/.
 
 `make test` runs the Rust tests, then the Python, Go, C#, and Java bindings against `libyaal_ffi`. The Java step needs a JDK.

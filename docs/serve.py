@@ -2,11 +2,12 @@
 # Use of this source code is governed by a MIT style
 # license that can be found in the LICENSE file.
 
-"""Serve the Yaal docs on localhost."""
+"""Serve the Yaal docs on localhost, or write the GitHub Pages site."""
 
 import html
 import os
 import re
+import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -28,6 +29,7 @@ NAV = [
     ("/sort", "Sort"),
     ("/examples", "Examples"),
 ]
+BASE = ""
 
 
 def render_markdown(text):
@@ -113,20 +115,27 @@ def inline(text):
     return "".join(out)
 
 
+def site_href(path):
+    prefix = BASE.rstrip("/")
+    if path == "/":
+        return prefix + "/"
+    return prefix + path + "/"
+
+
 def href(url):
     if url == "LICENSE":
-        return "/license"
+        return site_href("/license")
     if url.startswith("docs/") and url.endswith(".md"):
         name = url[len("docs/") : -3]
-        if name == "header":
-            return "/header"
-        if name in {"optional", "groups", "sort", "examples"}:
-            return "/" + name
+        if name in {"header", "optional", "groups", "sort", "examples"}:
+            return site_href("/" + name)
     return url
 
 
 def page(title, body):
-    links = "".join(f'<a href="{path}">{html.escape(label)}</a>' for path, label in NAV)
+    links = "".join(
+        f'<a href="{html.escape(site_href(path))}">{html.escape(label)}</a>' for path, label in NAV
+    )
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -163,9 +172,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(404)
             return
         title, file = found
-        text = file.read_text()
-        body = f"<pre>{html.escape(text)}</pre>" if file.name == "LICENSE" else render_markdown(text)
-        payload = page(title, body).encode()
+        payload = page(title, rendered(file)).encode()
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(payload)))
@@ -176,6 +183,24 @@ class Handler(BaseHTTPRequestHandler):
         print(f"{self.address_string()} {fmt % args}")
 
 
+def rendered(file):
+    text = file.read_text()
+    if file.name == "LICENSE":
+        return f"<pre>{html.escape(text)}</pre>"
+    return render_markdown(text)
+
+
+def build(out_dir):
+    global BASE
+    BASE = os.environ.get("DOCS_BASE", "/yaal").rstrip("/")
+    out = Path(out_dir)
+    for path, (title, file) in PAGES.items():
+        dest = out / "index.html" if path == "/" else out / path.strip("/") / "index.html"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(page(title, rendered(file)))
+    print(f"docs written to {out}")
+
+
 def main():
     port = int(os.environ.get("DOCS_PORT", "8080"))
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
@@ -184,4 +209,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) == 3 and sys.argv[1] == "--build":
+        build(sys.argv[2])
+    else:
+        main()
