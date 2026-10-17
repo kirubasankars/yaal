@@ -53,6 +53,12 @@ final class Json {
             out.append('"');
         } else if (value instanceof Boolean || value instanceof Integer || value instanceof Long) {
             out.append(value);
+        } else if (value instanceof Double || value instanceof Float) {
+            double number = ((Number) value).doubleValue();
+            if (Double.isNaN(number) || Double.isInfinite(number)) {
+                throw new IllegalArgumentException("NaN and infinity are not valid JSON numbers");
+            }
+            out.append(value);
         } else if (value instanceof Number number) {
             out.append(number);
         } else if (value instanceof Map<?, ?> map) {

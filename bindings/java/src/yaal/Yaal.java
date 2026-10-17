@@ -27,10 +27,16 @@ public final class Yaal {
     public record Compiled(List<Statement> statements) {}
 
     public static Compiled compile(String sql, Map<String, ?> params, String placeholder) throws CompileException {
-        String paramsJson = Json.write(params == null ? Map.of() : params);
+        if (sql == null) {
+            throw new CompileException("sql is null");
+        }
         if (placeholder == null || placeholder.isEmpty()) {
             placeholder = "question";
         }
+        if (sql.indexOf('\0') >= 0 || placeholder.indexOf('\0') >= 0) {
+            throw new CompileException("sql and placeholder must not contain a NUL character");
+        }
+        String paramsJson = Json.write(params == null ? Map.of() : params);
         Object parsed = Json.read(invoke(sql, paramsJson, placeholder));
         if (!(parsed instanceof Map<?, ?> root)) {
             throw new CompileException("compiler returned " + parsed);

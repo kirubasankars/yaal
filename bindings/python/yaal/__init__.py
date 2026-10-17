@@ -23,7 +23,10 @@ def compile(sql, params=None, *, placeholder="question"):
     """
     if params is None:
         params = {}
-    raw = _invoke(sql, json.dumps(params), placeholder or "question")
+    placeholder = placeholder or "question"
+    if "\0" in sql or "\0" in placeholder:
+        raise CompileError("sql and placeholder must not contain a NUL character")
+    raw = _invoke(sql, json.dumps(params, allow_nan=False), placeholder)
     data = json.loads(raw)
     if "statements" not in data:
         raise CompileError(data.get("error", raw))

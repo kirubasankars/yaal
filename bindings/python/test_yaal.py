@@ -72,6 +72,11 @@ class CompileTests(unittest.TestCase):
             compile(PARTIAL, {"id": 1})
         self.assertIn("partial", str(caught.exception).lower())
 
+    def test_nul_in_sql_is_an_error(self):
+        with self.assertRaises(CompileError) as caught:
+            compile("--(id)--\nselect {{id}}\0 or 1 = 1", {"id": 1})
+        self.assertIn("nul", str(caught.exception).lower())
+
 
 if __name__ == "__main__":
     unittest.main()

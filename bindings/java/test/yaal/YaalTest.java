@@ -44,6 +44,13 @@ public final class YaalTest {
         } catch (CompileException ex) {
             expect(ex.getMessage().toLowerCase().contains("partial"), ex.getMessage());
         }
+
+        try {
+            Yaal.compile("--(id)--\nselect {{id}}\0 or 1 = 1", Map.of("id", 1), "question");
+            throw new AssertionError("NUL in sql compiled");
+        } catch (CompileException ex) {
+            expect(ex.getMessage().contains("NUL"), ex.getMessage());
+        }
         fixtureCases();
         System.out.println("ok");
     }

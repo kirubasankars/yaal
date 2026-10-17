@@ -37,6 +37,16 @@ catch (CompileException ex)
     Expect(ex.Message.Contains("partial", StringComparison.OrdinalIgnoreCase), ex.Message);
 }
 
+try
+{
+    Compiler.Compile("--(id)--\nselect {{id}}\0 or 1 = 1", new Dictionary<string, int> { ["id"] = 1 });
+    throw new Exception("NUL in sql compiled");
+}
+catch (CompileException ex)
+{
+    Expect(ex.Message.Contains("NUL", StringComparison.Ordinal), ex.Message);
+}
+
 using var cases = JsonDocument.Parse(File.ReadAllText(CasesPath()));
 foreach (var item in cases.RootElement.EnumerateArray())
 {

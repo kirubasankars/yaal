@@ -29,8 +29,12 @@ public static class Compiler
 {
     public static Compiled Compile(string sql, object? parameters = null, string placeholder = "question")
     {
+        ArgumentNullException.ThrowIfNull(sql);
+        placeholder = string.IsNullOrEmpty(placeholder) ? "question" : placeholder;
+        if (sql.Contains('\0') || placeholder.Contains('\0'))
+            throw new CompileException("sql and placeholder must not contain a NUL character");
         var paramsJson = parameters is null ? "{}" : JsonSerializer.Serialize(parameters);
-        var raw = Invoke(sql, paramsJson, string.IsNullOrEmpty(placeholder) ? "question" : placeholder);
+        var raw = Invoke(sql, paramsJson, placeholder);
         using var document = JsonDocument.Parse(raw);
         if (!document.RootElement.TryGetProperty("statements", out _))
         {

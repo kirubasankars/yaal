@@ -116,6 +116,13 @@ func TestPartialOptional(t *testing.T) {
 	}
 }
 
+func TestNulInSQL(t *testing.T) {
+	_, err := Compile("--(id)--\nselect {{id}}\x00 or 1 = 1", map[string]any{"id": 1}, "")
+	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "nul") {
+		t.Fatalf("got %v", err)
+	}
+}
+
 func errorsAs(err error, target **CompileError) bool {
 	compileErr, ok := err.(*CompileError)
 	if ok {

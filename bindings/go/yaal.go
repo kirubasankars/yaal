@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 )
 
@@ -54,6 +55,9 @@ var (
 func Compile(sql string, params any, placeholder string) (*Compiled, error) {
 	if placeholder == "" {
 		placeholder = "question"
+	}
+	if strings.IndexByte(sql, 0) >= 0 || strings.IndexByte(placeholder, 0) >= 0 {
+		return nil, &CompileError{Message: "sql and placeholder must not contain a NUL character"}
 	}
 	var raw []byte
 	var err error
