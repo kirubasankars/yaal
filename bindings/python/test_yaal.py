@@ -77,6 +77,13 @@ class CompileTests(unittest.TestCase):
             compile("--(id)--\nselect {{id}}\0 or 1 = 1", {"id": 1})
         self.assertIn("nul", str(caught.exception).lower())
 
+    def test_windows_wheel_uses_the_win_amd64_tag(self):
+        from pack import platform_tag
+
+        self.assertEqual(platform_tag("win32", "AMD64"), "win_amd64")
+        self.assertEqual(platform_tag("linux", "x86_64"), "linux_x86_64")
+        self.assertEqual(platform_tag("darwin", "arm64"), "macosx_11_0_arm64")
+
 
 if __name__ == "__main__":
     unittest.main()

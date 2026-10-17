@@ -23,19 +23,28 @@ def library_name():
     }.get(sys.platform, "libyaal_ffi.so")
 
 
-def default_platform_tag():
-    machine = platform.machine().lower()
+def platform_tag(system, machine):
+    machine = machine.lower()
+    if system == "win32":
+        if machine in {"amd64", "x86_64"}:
+            return "win_amd64"
+        if machine == "arm64":
+            return "win_arm64"
+        if machine in {"x86", "i386", "i686"}:
+            return "win32"
     if machine in {"amd64", "x86_64"}:
         machine = "x86_64"
-    elif machine == "arm64":
-        machine = "aarch64" if sys.platform == "linux" else "arm64"
-    if sys.platform == "linux":
+    elif machine == "arm64" and system == "linux":
+        machine = "aarch64"
+    if system == "linux":
         return f"linux_{machine}"
-    if sys.platform == "darwin":
+    if system == "darwin":
         return f"macosx_11_0_{machine}"
-    if sys.platform == "win32":
-        return f"win_{machine}"
-    raise SystemExit(f"unsupported platform {sys.platform}")
+    raise SystemExit(f"unsupported platform {system} {machine}")
+
+
+def default_platform_tag():
+    return platform_tag(sys.platform, platform.machine())
 
 
 def main():
