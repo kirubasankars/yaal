@@ -1,0 +1,3 @@
+Staged shared libraries live in the platform directories next to this file.
+stage.py copies the compiler for this machine. A published module includes
+linux-x64, osx-arm64, and win-x64.

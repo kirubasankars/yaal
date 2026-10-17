@@ -2,7 +2,7 @@
 # Use of this source code is governed by a MIT style
 # license that can be found in the LICENSE file.
 
-.PHONY: test compile bindings docs ci nuget pypi
+.PHONY: test compile bindings docs ci nuget pypi maven go
 
 test:
 	cargo test --workspace
@@ -41,3 +41,11 @@ pypi:
 	cargo build -p yaal-ffi --release
 	@python3 -c "import build, wheel" || { echo "python3 -m pip install build wheel"; exit 1; }
 	python3 bindings/python/pack.py
+
+maven:
+	cargo build -p yaal-ffi --release
+	python3 bindings/java/pack.py
+
+go:
+	cargo build -p yaal-ffi --release
+	python3 bindings/go/pack.py

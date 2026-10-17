@@ -1,0 +1,163 @@
+# Copyright 2018 Kiruba Sankar Swaminathan. All rights reserved.
+# Use of this source code is governed by a MIT style
+# license that can be found in the LICENSE file.
+
+name: Maven
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  native:
+    name: Native (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Extract version from tag
+        id: version
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Validate version matches project
+        shell: bash
+        run: |
+          PROJECT_VERSION=$(sed -n 's/^  <version>\(.*\)<\/version>/\1/p' bindings/java/pom.xml | head -1)
+          if [ "$PROJECT_VERSION" != "${{ steps.version.outputs.VERSION }}" ]; then
+            echo "::error::Tag version (${{ steps.version.outputs.VERSION }}) does not match project version ($PROJECT_VERSION)"
+            exit 1
+          fi
+
+      - name: Build portable Linux library
+        if: runner.os == 'Linux'
+        run: |
+          docker run --rm -v "$PWD":/io -w /io quay.io/pypa/manylinux_2_28_x86_64 bash -lc '
+            curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+            . "$HOME/.cargo/env"
+            cargo build -p yaal-ffi --release
+          '
+
+      - name: Build library
+        if: runner.os != 'Linux'
+        run: cargo build -p yaal-ffi --release
+
+      - name: Unit tests
+        shell: bash
+        run: |
+          case "${{ runner.os }}" in
+            Windows) export YAAL_LIB="$PWD/target/release/yaal_ffi.dll" ;;
+            macOS) export YAAL_LIB="$PWD/target/release/libyaal_ffi.dylib" ;;
+            *) export YAAL_LIB="$PWD/target/release/libyaal_ffi.so" ;;
+          esac
+          mkdir -p bindings/java/build
+          javac --release 22 -d bindings/java/build bindings/java/src/yaal/*.java bindings/java/test/yaal/*.java
+          java --enable-native-access=ALL-UNNAMED -cp bindings/java/build yaal.YaalTest
+
+      - name: Stage runtime
+        shell: bash
+        run: python bindings/java/stage.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.os }}
+          path: bindings/java/target/staged/
+          if-no-files-found: error
+
+  publish:
+    needs: native
+    runs-on: ubuntu-latest
+    environment: central
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Validate version matches project
+        run: |
+          PROJECT_VERSION=$(sed -n 's/^  <version>\(.*\)<\/version>/\1/p' bindings/java/pom.xml | head -1)
+          if [ "$PROJECT_VERSION" != "${{ steps.version.outputs.VERSION }}" ]; then
+            echo "::error::Tag version (${{ steps.version.outputs.VERSION }}) does not match project version ($PROJECT_VERSION)"
+            exit 1
+          fi
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: bindings/java/target/staged
+          pattern: native-*
+          merge-multiple: true
+
+      - name: Pack and test the jar
+        run: python bindings/java/pack.py --no-stage --require linux-x64,osx-arm64,win-x64
+
+      - name: Check publishing secrets
+        env:
+          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          MAVEN_GPG_KEY: ${{ secrets.MAVEN_GPG_KEY }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+        run: |
+          missing=0
+          for name in MAVEN_CENTRAL_USERNAME MAVEN_CENTRAL_PASSWORD MAVEN_GPG_KEY MAVEN_GPG_PASSPHRASE; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is not set on the central environment"
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Publish to Maven Central
+        env:
+          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          MAVEN_GPG_KEY: ${{ secrets.MAVEN_GPG_KEY }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          from xml.sax.saxutils import escape
+          Path("settings.xml").write_text(
+              "<settings>\n"
+              "  <servers>\n"
+              "    <server>\n"
+              "      <id>central</id>\n"
+              f"      <username>{escape(os.environ['MAVEN_CENTRAL_USERNAME'])}</username>\n"
+              f"      <password>{escape(os.environ['MAVEN_CENTRAL_PASSWORD'])}</password>\n"
+              "    </server>\n"
+              "  </servers>\n"
+              "</settings>\n"
+          )
+          PY
+          bindings/java/mvnw -B -f bindings/java/pom.xml -s "$PWD/settings.xml" deploy -P release
+          rm -f settings.xml

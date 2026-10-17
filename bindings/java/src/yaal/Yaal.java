@@ -4,6 +4,8 @@
 
 package yaal;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.lang.foreign.Arena;
 import java.lang.foreign.FunctionDescriptor;
 import java.lang.foreign.Linker;
@@ -11,11 +13,16 @@ import java.lang.foreign.MemorySegment;
 import java.lang.foreign.SymbolLookup;
 import java.lang.foreign.ValueLayout;
 import java.lang.invoke.MethodHandle;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.PosixFilePermission;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public final class Yaal {
     private Yaal() {}
@@ -120,11 +127,70 @@ public final class Yaal {
             if (env != null && !env.isEmpty()) {
                 return Path.of(env);
             }
-            String name = System.getProperty("os.name", "").toLowerCase().contains("win")
-                    ? "yaal_ffi.dll"
-                    : System.getProperty("os.name", "").toLowerCase().contains("mac")
-                            ? "libyaal_ffi.dylib"
-                            : "libyaal_ffi.so";
+            Path packaged = packagedLibrary();
+            if (packaged != null) {
+                return packaged;
+            }
+            Path built = builtLibrary();
+            if (built != null) {
+                return built;
+            }
+            throw new CompileException("yaal shared library not found; set YAAL_LIB");
+        }
+
+        static Path packagedLibrary() throws CompileException {
+            String runtime = runtimeId();
+            String name = libraryFileName(runtime);
+            InputStream in = Yaal.class.getResourceAsStream("/yaal/native/" + runtime + "/" + name);
+            if (in == null) {
+                return null;
+            }
+            try (in) {
+                return extract(in, name);
+            } catch (IOException ex) {
+                throw new CompileException(ex.getMessage() == null ? ex.toString() : ex.getMessage());
+            }
+        }
+
+        static Path extract(InputStream in, String name) throws IOException {
+            String version = Yaal.class.getPackage().getImplementationVersion();
+            if (version == null || version.isEmpty()) {
+                version = "dev";
+            }
+            Path dir = Path.of(System.getProperty("java.io.tmpdir"), "yaal", version);
+            Files.createDirectories(dir);
+            Path dest = dir.resolve(name);
+            if (Files.isRegularFile(dest) && Files.size(dest) > 0) {
+                return dest;
+            }
+            Path partial = Files.createTempFile(dir, "yaal", ".partial");
+            try {
+                Files.copy(in, partial, StandardCopyOption.REPLACE_EXISTING);
+                try {
+                    Files.move(
+                            partial,
+                            dest,
+                            StandardCopyOption.REPLACE_EXISTING,
+                            StandardCopyOption.ATOMIC_MOVE);
+                } catch (AtomicMoveNotSupportedException ex) {
+                    Files.move(partial, dest, StandardCopyOption.REPLACE_EXISTING);
+                }
+            } finally {
+                Files.deleteIfExists(partial);
+            }
+            try {
+                Set<PosixFilePermission> perms = new HashSet<>(Files.getPosixFilePermissions(dest));
+                perms.add(PosixFilePermission.OWNER_READ);
+                perms.add(PosixFilePermission.OWNER_EXECUTE);
+                Files.setPosixFilePermissions(dest, perms);
+            } catch (UnsupportedOperationException ex) {
+                // Windows has no POSIX permissions.
+            }
+            return dest;
+        }
+
+        static Path builtLibrary() {
+            String name = libraryFileName(runtimeId());
             Path dir = Path.of("").toAbsolutePath();
             while (dir != null) {
                 for (String profile : List.of("debug", "release")) {
@@ -135,7 +201,29 @@ public final class Yaal {
                 }
                 dir = dir.getParent();
             }
-            throw new CompileException("yaal shared library not found; set YAAL_LIB");
+            return null;
+        }
+
+        static String runtimeId() {
+            String os = System.getProperty("os.name", "").toLowerCase();
+            String arch = System.getProperty("os.arch", "").toLowerCase();
+            String osId = os.contains("win") ? "win" : os.contains("mac") ? "osx" : "linux";
+            String archId = switch (arch) {
+                case "amd64", "x86_64" -> "x64";
+                case "aarch64", "arm64" -> "arm64";
+                default -> arch;
+            };
+            return osId + "-" + archId;
+        }
+
+        static String libraryFileName(String runtime) {
+            if (runtime.startsWith("win-")) {
+                return "yaal_ffi.dll";
+            }
+            if (runtime.startsWith("osx-")) {
+                return "libyaal_ffi.dylib";
+            }
+            return "libyaal_ffi.so";
         }
     }
 }

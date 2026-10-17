@@ -27,3 +27,5 @@ bindings/csharp/Yaal/runtimes/
 bindings/python/yaal/*.so
 bindings/python/yaal/*.dylib
 bindings/python/yaal/*.dll
+bindings/java/target/
+bindings/go/native/*/**

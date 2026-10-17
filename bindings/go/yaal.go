@@ -6,14 +6,24 @@
 package yaal
 
 import (
+	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
 )
+
+//go:embed version.txt
+var versionText string
+
+//go:embed native
+var nativeFiles embed.FS
 
 // CompileError is returned when the compiler rejects the SQL or the parameters.
 type CompileError struct {
@@ -107,13 +117,14 @@ func libraryPath() (string, error) {
 	if env := os.Getenv("YAAL_LIB"); env != "" {
 		return env, nil
 	}
-	name := "libyaal_ffi.so"
-	switch runtime.GOOS {
-	case "windows":
-		name = "yaal_ffi.dll"
-	case "darwin":
-		name = "libyaal_ffi.dylib"
+	packaged, err := packagedLibrary()
+	if err != nil {
+		return "", err
 	}
+	if packaged != "" {
+		return packaged, nil
+	}
+	name := libraryFileName(runtimeID())
 	wd, err := os.Getwd()
 	if err != nil {
 		return "", err
@@ -134,4 +145,89 @@ func libraryPath() (string, error) {
 		dir = parent
 	}
 	return "", fmt.Errorf("yaal shared library not found; set YAAL_LIB")
+}
+
+func runtimeID() string {
+	osName := runtime.GOOS
+	switch osName {
+	case "windows":
+		osName = "win"
+	case "darwin":
+		osName = "osx"
+	}
+	arch := runtime.GOARCH
+	switch arch {
+	case "amd64":
+		arch = "x64"
+	}
+	return osName + "-" + arch
+}
+
+func libraryFileName(rid string) string {
+	switch {
+	case strings.HasPrefix(rid, "win-"):
+		return "yaal_ffi.dll"
+	case strings.HasPrefix(rid, "osx-"):
+		return "libyaal_ffi.dylib"
+	default:
+		return "libyaal_ffi.so"
+	}
+}
+
+func packagedLibrary() (string, error) {
+	rid := runtimeID()
+	name := libraryFileName(rid)
+	data, err := nativeFiles.ReadFile(path.Join("native", rid, name))
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return "", nil
+		}
+		return "", err
+	}
+	if len(data) == 0 {
+		return "", nil
+	}
+	version := strings.TrimSpace(versionText)
+	if version == "" {
+		version = "dev"
+	}
+	dir := filepath.Join(os.TempDir(), "yaal", version)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	dest := filepath.Join(dir, name)
+	info, statErr := os.Stat(dest)
+	if statErr == nil && info.Mode().IsRegular() && info.Size() == int64(len(data)) {
+		return dest, nil
+	}
+	partial, err := os.CreateTemp(dir, "yaal-*")
+	if err != nil {
+		return "", err
+	}
+	partialName := partial.Name()
+	written := false
+	defer func() {
+		if !written {
+			os.Remove(partialName)
+		}
+	}()
+	if _, err := partial.Write(data); err != nil {
+		partial.Close()
+		return "", err
+	}
+	if err := partial.Chmod(0o755); err != nil {
+		partial.Close()
+		return "", err
+	}
+	if err := partial.Close(); err != nil {
+		return "", err
+	}
+	if err := os.Remove(dest); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return "", err
+	}
+	if err := os.Rename(partialName, dest); err != nil {
+		return "", err
+	}
+	written = true
+	return dest, nil
 }
