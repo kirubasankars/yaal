@@ -30,11 +30,7 @@ PAGES = {
 }
 NAV = [
     ("/", "Home"),
-    ("/plans", "Plans"),
     ("/playground", "Playground"),
-    ("/skill", "Skill"),
-    ("/cli", "CLI"),
-    ("/languages", "Languages"),
     ("/header", "Header"),
     ("/optional", "Optional"),
     ("/groups", "Groups"),
@@ -42,6 +38,10 @@ NAV = [
     ("/sort", "Sort"),
     ("/safety", "Safety"),
     ("/examples", "Examples"),
+    ("/cli", "CLI"),
+    ("/languages", "Languages"),
+    ("/plans", "Plans"),
+    ("/skill", "Skill"),
 ]
 BASE = ""
 PLAYGROUND_ASSETS = ROOT / "docs" / ".playground"
