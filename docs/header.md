@@ -7,9 +7,9 @@ The header is the first significant token. Only comments may precede it, and a s
 select {{id}}, {{name}}, {{page}}
 ```
 
-Names are bare identifiers. There is no `$args` prefix and no scalar type. `blob` is the only marker, and it is required for an `optional_groups_*` source. The bind `type` is taken from the JSON value: bool, integer, float, or string.
+A name is a bare identifier. `blob` marks a JSON array of objects used as an `optional_groups_*` source. The bind `type` is taken from the JSON value: bool, integer, float, or string.
 
-`!` means the caller must supply a value. There is no default. Explicit `null` stays absent.
+`!` means the caller must supply a value. Explicit `null` stays absent.
 
 A name is one shape in the whole string, including after `--sql--`. `{{id}}` is one value. `{{id}}...` is a list. The same name cannot be both.
 

@@ -1,10 +1,8 @@
 # Examples
 
-These are the fixture queries. Each block is the SQL, the parameter object, and the compiled statement.
+Each block is the SQL, the parameter object, and the compiled statement.
 
 ## Optional filter and sort
-
-From `tests/fixtures/sql/list.sql`.
 
 ```sql
 --(active, sort, dir)--
@@ -37,8 +35,6 @@ The bind is `active` integer `1`. Omitting `active` drops the `where`. Omitting 
 
 ## One optional predicate
 
-From `optional_sugar_non_null_keeps_binds` and `optional_sugar_null_strips_and`.
-
 ```sql
 --(param1)--
 select *
@@ -63,8 +59,6 @@ from a
 ```
 
 ## Several parameters in one optional
-
-From `optional_multi_both_bound`, `optional_multi_all_null_elides`, and `optional_multi_partial_null_errors`.
 
 ```sql
 --(a, b)--
@@ -91,8 +85,6 @@ where (
 
 ## List expansion
 
-From `array_in_three_elements` and `optional_array_elide_null`.
-
 ```sql
 --(cv)--
 select *
@@ -111,8 +103,6 @@ where (col in (?, ?, ?))
 `{}` compiles to `select * from t`. An empty list outside `optional(...)` is an error.
 
 ## optional_when
-
-From `optional_when_cond_and_body_present_keeps` and `optional_when_cond_absent_elides`.
 
 ```sql
 --(apply, id)--
@@ -143,7 +133,7 @@ where z = 1
 
 ## Nested
 
-From `optional_when_wrapping_groups_only_keeps` and `optional_when_wrapping_groups_only_cond_absent_elides`. `optional_when` wraps `optional_groups_or`.
+`optional_when` wraps `optional_groups_or`.
 
 ```sql
 --(apply, pairs blob)--
@@ -178,7 +168,7 @@ where z = 1
 
 `{"pairs": [{"id": 1}, {"id": 1}]}` compiles to `select * from t where z = 1`. The group is not rendered.
 
-`optional_when` inside a group, from `optional_when_inside_groups_body_row_fields_only`. The condition is the header argument `flag`.
+`optional_when` inside a group. The condition is the header argument `flag`.
 
 ```sql
 --(pairs blob, flag)--
@@ -212,7 +202,7 @@ where (
 
 Omitting `flag` leaves `where ((c1 = ?) or (c1 = ?))`.
 
-`optional` wrapping a group and a header argument, from `optional_with_groups_multi_row` and `optional_with_groups_id_only_keeps_scalar`.
+`optional` wrapping a group and a header argument.
 
 ```sql
 --(pairs blob, x)--
@@ -250,7 +240,7 @@ where z = 1
 
 `{"x": 1, "pairs": null}` compiles to `select * from t where z = 1 and (a = ?)`.
 
-`optional` inside a group, from `optional_inside_groups_body_args_header` and `optional_inside_groups_body_args_header_omitted`.
+`optional` inside a group.
 
 ```sql
 --(pairs blob, flag)--
@@ -286,8 +276,6 @@ Omitting `flag` leaves `where ((col1 = ?) or (col1 = ?))`.
 
 ## Group rows
 
-From `tests/fixtures/sql/groups.sql`.
-
 ```sql
 --(pairs blob)--
 select u.user_id
@@ -318,7 +306,7 @@ where (
 
 Binds are `self.id` `1`, then `self.ids` `8` and `9`.
 
-`optional_groups_or` with two rows, from `optional_groups_two_scalar_rows`:
+`optional_groups_or` with two rows:
 
 ```sql
 --(pairs blob)--
@@ -349,7 +337,7 @@ where (
 )
 ```
 
-`optional_groups_and` with two rows, from `optional_groups_and_two_rows`:
+`optional_groups_and` with two rows:
 
 ```sql
 --(pairs blob)--
@@ -383,8 +371,6 @@ where (
 
 ## Group and sort
 
-From `experimental_groups_with_order_by_sort`.
-
 ```sql
 --(pairs blob, sort)--
 select *
@@ -414,11 +400,11 @@ order by id ASC
 
 ## Errors
 
-These fixture inputs do not compile.
+These inputs do not compile.
 
 ### Partial optional
 
-From `optional_multi_partial_null_errors`. `a` is omitted and `b` is present.
+`a` is omitted and `b` is present.
 
 ```sql
 --(a, b)--
@@ -440,8 +426,6 @@ optional(...) requires every parameter to be provided or all omitted; partial pa
 
 ### Empty list
 
-From `array_in_empty_errors`.
-
 ```sql
 --(cv)--
 select *
@@ -458,8 +442,6 @@ empty array for {{cv}}; IN list cannot be empty
 ```
 
 ### Empty list on a group row
-
-From `optional_groups_empty_in_errors`.
 
 ```sql
 --(pairs blob)--
@@ -485,8 +467,6 @@ empty array for optional_groups field {{cv}} in pairs; IN list cannot be empty
 
 ### Group source is not blob
 
-From `optional_groups_source_not_blob_errors`.
-
 ```sql
 --(pairs)--
 select *
@@ -507,8 +487,6 @@ optional_groups_*(...) source {{pairs}} must be declared blob in query.sql
 
 ### Bad header
 
-From `header_junk_errors`.
-
 ```sql
 --(a integer junk)--
 select {{a}}
@@ -523,8 +501,6 @@ invalid parameter declaration 'a integer junk' in query.sql
 ```
 
 ### Nested optional_when
-
-From `optional_when_nested_errors`.
 
 ```sql
 --(a, b, x)--
@@ -542,8 +518,6 @@ nested optional_when(...) is not supported
 ```
 
 ### Nested groups
-
-From `optional_groups_mixed_nested_errors`.
 
 ```sql
 --(pairs blob, pairs1 blob)--
@@ -564,8 +538,6 @@ nested optional_groups_or(...)/optional_groups_and(...) is not supported
 ```
 
 ### is null or without parentheses
-
-From `paren_less_is_null_or_errors`.
 
 ```sql
 --(a)--
