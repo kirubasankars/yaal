@@ -11,12 +11,12 @@ fn yaal(args: &[&str], stdin: Option<&str>) -> Output {
     }
     let mut child = cmd.spawn().unwrap();
     if let Some(text) = stdin {
-        child
-            .stdin
-            .take()
-            .unwrap()
-            .write_all(text.as_bytes())
-            .unwrap();
+        let mut pipe = child.stdin.take().unwrap();
+        match pipe.write_all(text.as_bytes()) {
+            Ok(()) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => {}
+            Err(err) => panic!("write stdin: {err}"),
+        }
     }
     child.wait_with_output().unwrap()
 }
