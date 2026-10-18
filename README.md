@@ -84,7 +84,7 @@ import "github.com/kirubasankars/yaal/bindings/go"
 compiled, err := yaal.Compile(sql, map[string]any{"id": 1}, "question")
 ```
 
-`go get github.com/kirubasankars/yaal/bindings/go@v0.13.0` installs that module. The module tag is `bindings/go/v0.13.0`, and the module contains the native compiler for Linux x86_64, macOS Apple silicon, and Windows x64. `Compile` loads `YAAL_LIB` when that variable is set, then the embedded library, then the shared library built under `target/debug` or `target/release`.
+`go get github.com/kirubasankars/yaal/bindings/go@v1.0.0` installs that module. The module tag is `bindings/go/v1.0.0`, and the module contains the native compiler for Linux x86_64, macOS Apple silicon, and Windows x64. `Compile` loads `YAAL_LIB` when that variable is set, then the embedded library, then the shared library built under `target/debug` or `target/release`.
 
 ```java
 Yaal.Compiled compiled = Yaal.compile(sql, Map.of("id", 1), "question");
@@ -96,7 +96,7 @@ Java calls the library with the foreign function API, so the program needs `--en
 <dependency>
   <groupId>io.github.kirubasankars</groupId>
   <artifactId>yaal</artifactId>
-  <version>0.13.0</version>
+  <version>1.0.0</version>
 </dependency>
 ```
 
@@ -125,7 +125,7 @@ make go
 
 `make nuget` packs the C# binding for this machine into `artifacts/`. `make pypi` builds a Python wheel for this machine into the same directory. It needs the `build` and `wheel` packages (`python3 -m pip install build wheel`). `make maven` packs the Java binding for this machine into the same directory. The first run downloads Maven. `make go` builds the release library for this machine, stages it into the Go package, and tests that package with the embedded library.
 
-Publishing happens from a published GitHub release. The tag, such as `v0.13.0`, must match `version` in the Rust crates, `<Version>` in the C# project, `version` in `pyproject.toml`, `<version>` in `bindings/java/pom.xml`, and `bindings/go/version.txt`. The crates.io workflow publishes `yaal` and `yaal-cli`. The NuGet workflow runs the C# tests, packs the native compiler for Linux x86_64, macOS Apple silicon, and Windows x64, validates the package, and pushes it to NuGet with trusted publishing. The PyPI workflow runs the Python tests, builds wheels for Linux x86_64, macOS Apple silicon, and Windows x64, and pushes them to PyPI with trusted publishing. PyPI has to list this repository's `pypi-publish.yml` workflow and the `pypi` environment as a trusted publisher. The Maven workflow runs the Java tests, packs those same three native compilers into one jar, and pushes it to Maven Central. The `central` environment needs `MAVEN_CENTRAL_USERNAME`, `MAVEN_CENTRAL_PASSWORD`, `MAVEN_GPG_KEY`, and `MAVEN_GPG_PASSPHRASE`. Central Portal has to verify the `io.github.kirubasankars` namespace before the first publish. The Go workflow, `.github/workflows/go-publish.yml`, runs the Go tests on Linux x86_64, macOS Apple silicon, and Windows x64, embeds those three native compilers into the module, and pushes the tag `bindings/go/v0.13.0`. `go get` resolves that tag. The release tag `v0.13.0` publishes the Rust, NuGet, PyPI, and Maven packages. `bindings/go/version.txt` has to match both tags.
+Publishing happens from a published GitHub release. The tag, such as `v1.0.0`, must match `version` in the Rust crates, `<Version>` in the C# project, `version` in `pyproject.toml`, `<version>` in `bindings/java/pom.xml`, and `bindings/go/version.txt`. The crates.io workflow publishes `yaal` and `yaal-cli`. The NuGet workflow runs the C# tests, packs the native compiler for Linux x86_64, macOS Apple silicon, and Windows x64, validates the package, and pushes it to NuGet with trusted publishing. The PyPI workflow runs the Python tests, builds wheels for Linux x86_64, macOS Apple silicon, and Windows x64, and pushes them to PyPI with trusted publishing. PyPI has to list this repository's `pypi-publish.yml` workflow and the `pypi` environment as a trusted publisher. The Maven workflow runs the Java tests, packs those same three native compilers into one jar, and pushes it to Maven Central. The `central` environment needs `MAVEN_CENTRAL_USERNAME`, `MAVEN_CENTRAL_PASSWORD`, `MAVEN_GPG_KEY`, and `MAVEN_GPG_PASSPHRASE`. Central Portal has to verify the `io.github.kirubasankars` namespace before the first publish. The Go workflow, `.github/workflows/go-publish.yml`, runs the Go tests on Linux x86_64, macOS Apple silicon, and Windows x64, embeds those three native compilers into the module, and pushes the tag `bindings/go/v1.0.0`. `go get` resolves that tag. The release tag `v1.0.0` publishes the Rust, NuGet, PyPI, and Maven packages. `bindings/go/version.txt` has to match both tags.
 
 crates.io can attach a trusted publisher only after the crate exists. For the first release, add the crates.io token as the `CARGO_REGISTRY_TOKEN` repository secret, then delete that secret once the publisher is in place. On each crate's settings page, add a GitHub trusted publisher for owner `kirubasankars`, repository `yaal`, workflow `crates-publish.yml`, and environment `crates-io`.
 

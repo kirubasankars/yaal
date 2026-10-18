@@ -76,10 +76,10 @@ Console.WriteLine(compiled.Statements[0].Sql);
 ## Go
 
 ```bash
-go get github.com/kirubasankars/yaal/bindings/go@v0.13.0
+go get github.com/kirubasankars/yaal/bindings/go@v1.0.0
 ```
 
-The module tag is `bindings/go/v0.13.0`.
+The module tag is `bindings/go/v1.0.0`.
 
 ```go
 package main
@@ -111,7 +111,7 @@ where optional(u.id = {{id}})
 <dependency>
   <groupId>io.github.kirubasankars</groupId>
   <artifactId>yaal</artifactId>
-  <version>0.13.0</version>
+  <version>1.0.0</version>
 </dependency>
 ```
 
