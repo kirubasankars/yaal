@@ -102,6 +102,7 @@ Java calls the library with the foreign function API, so the program needs `--en
 
 ## Syntax
 
+- [Languages](docs/languages.md)
 - [Parameter header](docs/header.md)
 - [optional and optional_when](docs/optional.md)
 - [optional groups](docs/groups.md)
