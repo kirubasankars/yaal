@@ -22,10 +22,22 @@ fn main() -> ExitCode {
 
 fn run() -> Result<(), String> {
     let mut args = env::args().skip(1);
-    let command = args.next().unwrap_or_default();
-    if command != "compile" {
-        return Err(usage());
+    match args.next().as_deref() {
+        Some("--version" | "-V") => {
+            println!("yaal {}", env!("CARGO_PKG_VERSION"));
+            Ok(())
+        }
+        Some("--help" | "-h" | "help") => {
+            println!("{}", usage());
+            Ok(())
+        }
+        Some("compile") => compile_args(args),
+        Some(other) => Err(format!("unknown command {other}\n{}", usage())),
+        None => Err(usage()),
     }
+}
+
+fn compile_args(mut args: impl Iterator<Item = String>) -> Result<(), String> {
     let mut sql_path = None;
     let mut params_path = None;
     let mut pairs = Vec::new();
@@ -128,6 +140,8 @@ fn need(args: &mut impl Iterator<Item = String>, flag: &str) -> Result<String, S
 fn usage() -> String {
     "\
 yaal compile [--sql file.sql] [--params file.json] [--param name=value]... [--placeholder question|numbered]
+yaal --help
+yaal --version
 
 Reads SQL from --sql, or from stdin when --sql is omitted and stdin is not a terminal.
 Prints JSON: {\"statements\":[{\"sql\",\"parameters\":[{\"name\",\"type\",\"value\"}]}]}.
