@@ -7,6 +7,7 @@
 import html
 import os
 import re
+import shutil
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -14,6 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PAGES = {
     "/": ("Yaal", ROOT / "README.md"),
+    "/plans": ("Plans", ROOT / "docs" / "plans.md"),
     "/cli": ("CLI", ROOT / "docs" / "cli.md"),
     "/header": ("Parameter header", ROOT / "docs" / "header.md"),
     "/optional": ("optional", ROOT / "docs" / "optional.md"),
@@ -27,6 +29,8 @@ PAGES = {
 }
 NAV = [
     ("/", "Home"),
+    ("/plans", "Plans"),
+    ("/playground", "Playground"),
     ("/cli", "CLI"),
     ("/languages", "Languages"),
     ("/header", "Header"),
@@ -38,6 +42,11 @@ NAV = [
     ("/examples", "Examples"),
 ]
 BASE = ""
+PLAYGROUND_ASSETS = ROOT / "docs" / ".playground"
+ASSET_TYPES = {
+    ".js": "text/javascript; charset=utf-8",
+    ".wasm": "application/wasm",
+}
 
 
 def render_markdown(text):
@@ -102,6 +111,12 @@ def inline(text):
     out = []
     index = 0
     while index < len(text):
+        if text.startswith("**", index):
+            end = text.find("**", index + 2)
+            if end != -1:
+                out.append("<strong>" + inline(text[index + 2 : end]) + "</strong>")
+                index = end + 2
+                continue
         if text[index] == "`":
             end = text.find("`", index + 1)
             if end != -1:
@@ -114,7 +129,7 @@ def inline(text):
             index += link.end()
             continue
         nxt = len(text)
-        for mark in ("`", "["):
+        for mark in ("**", "`", "["):
             found = text.find(mark, index + 1)
             if found != -1:
                 nxt = min(nxt, found)
@@ -138,7 +153,7 @@ def href(url):
         name = url[len("docs/") : -3]
     elif url.endswith(".md") and "/" not in url:
         name = url[:-3]
-    if name in {"header", "optional", "groups", "nested", "sort", "safety", "examples", "languages", "cli"}:
+    if name in {"header", "optional", "groups", "nested", "sort", "safety", "examples", "languages", "cli", "plans"}:
         return site_href("/" + name)
     return url
 
@@ -155,15 +170,30 @@ def page(title, body):
 <title>{html.escape(title)}</title>
 <style>
 :root {{ color-scheme: light dark; }}
-body {{ margin: 0; font: 18px/1.5 Georgia, serif; }}
+body {{ margin: 0; font: 18px/1.5 Georgia, serif; background: #fff; color: #111; }}
 nav {{ display: flex; gap: 1rem; padding: 1rem 2rem; border-bottom: 1px solid #ccc; }}
 nav a {{ color: inherit; }}
 main {{ max-width: 42rem; margin: 0 auto; padding: 2rem 1.5rem 4rem; }}
-pre {{ overflow: auto; padding: 1rem; background: #111; color: #f5f5f5; border-radius: 6px; }}
+h1 {{ font-size: 2.15rem; line-height: 1.15; margin: 0 0 1.25rem; }}
+h2 {{ font-size: 1.4rem; line-height: 1.25; margin: 2.5rem 0 0.75rem; }}
+p {{ margin: 0.8rem 0; }}
+pre {{ overflow: auto; margin: 0.6rem 0 1rem; padding: 1rem; background: #111; color: #f5f5f5; border-radius: 6px; }}
 code {{ font-family: ui-monospace, monospace; font-size: 0.9em; }}
 p code, li code {{ padding: 0.1em 0.3em; background: #eee; color: inherit; }}
+main p:has(> strong:only-child) {{
+  margin: 1.15rem 0 0.35rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #5c5c5c;
+}}
+main p:has(> strong:only-child) + pre {{ margin-top: 0; }}
 @media (prefers-color-scheme: dark) {{
+  body {{ background: #161616; color: #f5f5f5; }}
+  nav {{ border-bottom-color: #333; }}
   p code, li code {{ background: #222; }}
+  main p:has(> strong:only-child) {{ color: #bdbdbd; }}
 }}
 </style>
 </head>
@@ -177,7 +207,25 @@ p code, li code {{ padding: 0.1em 0.3em; background: #eee; color: inherit; }}
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        path = self.path.split("?", 1)[0].rstrip("/") or "/"
+        raw = self.path.split("?", 1)[0]
+        if raw == "/playground":
+            self.send_response(302)
+            self.send_header("Location", "/playground/")
+            self.end_headers()
+            return
+        path = raw.rstrip("/") or "/"
+        asset = playground_file(raw)
+        if asset is not None:
+            send_file(self, asset, ASSET_TYPES.get(asset.suffix, "application/octet-stream"))
+            return
+        if path == "/playground":
+            payload = page("Playground", playground_body()).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+            return
         found = PAGES.get(path)
         if found is None:
             self.send_error(404)
@@ -192,6 +240,34 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
         print(f"{self.address_string()} {fmt % args}")
+
+
+def playground_body():
+    return (ROOT / "docs" / "playground.html").read_text()
+
+
+def playground_file(path):
+    prefix = "/playground/"
+    if not path.startswith(prefix):
+        return None
+    name = path[len(prefix) :]
+    if not name or "/" in name or name.startswith("."):
+        return None
+    if name == "playground.js":
+        return ROOT / "docs" / "playground.js"
+    candidate = PLAYGROUND_ASSETS / name
+    if candidate.is_file():
+        return candidate
+    return None
+
+
+def send_file(handler, file, content_type):
+    payload = file.read_bytes()
+    handler.send_response(200)
+    handler.send_header("Content-Type", content_type)
+    handler.send_header("Content-Length", str(len(payload)))
+    handler.end_headers()
+    handler.wfile.write(payload)
 
 
 def rendered(file):
@@ -209,6 +285,15 @@ def build(out_dir):
         dest = out / "index.html" if path == "/" else out / path.strip("/") / "index.html"
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(page(title, rendered(file)))
+    playground = out / "playground"
+    playground.mkdir(parents=True, exist_ok=True)
+    (playground / "index.html").write_text(page("Playground", playground_body()))
+    shutil.copy(ROOT / "docs" / "playground.js", playground / "playground.js")
+    if not (PLAYGROUND_ASSETS / "yaal_wasm.js").is_file():
+        raise SystemExit("missing playground wasm; run make playground")
+    for asset in PLAYGROUND_ASSETS.iterdir():
+        if asset.is_file():
+            shutil.copy(asset, playground / asset.name)
     print(f"docs written to {out}")
 
 

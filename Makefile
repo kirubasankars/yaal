@@ -2,7 +2,10 @@
 # Use of this source code is governed by a MIT style
 # license that can be found in the LICENSE file.
 
-.PHONY: test compile bindings docs ci nuget pypi maven go
+.PHONY: test compile bindings docs ci nuget pypi maven go playground
+
+WASM_BINDGEN_VERSION := 0.2.129
+PLAYGROUND_DIR := docs/.playground
 
 test:
 	cargo test --workspace
@@ -13,6 +16,7 @@ ci: test
 
 TARGET_DIR := $(if $(CARGO_TARGET_DIR),$(CARGO_TARGET_DIR),$(CURDIR)/target)
 LIB := $(TARGET_DIR)/debug/libyaal_ffi.so
+WASM_LIB := $(TARGET_DIR)/wasm32-unknown-unknown/release/yaal_wasm.wasm
 JAVA ?= java
 JAVAC ?= $(shell if [ -n "$$JAVA_HOME" ] && [ -x "$$JAVA_HOME/bin/javac" ]; then echo "$$JAVA_HOME/bin/javac"; else command -v javac 2>/dev/null || ls /usr/lib/jvm/*/bin/javac 2>/dev/null | head -1; fi)
 
@@ -29,8 +33,15 @@ bindings:
 compile:
 	cargo run -p yaal-cli -- compile $(ARGS)
 
-docs:
+docs: playground
 	python3 docs/serve.py
+
+playground:
+	rustup target add wasm32-unknown-unknown
+	cargo build -p yaal-wasm --release --target wasm32-unknown-unknown
+	@wasm-bindgen --version 2>/dev/null | grep -q '$(WASM_BINDGEN_VERSION)' || cargo install wasm-bindgen-cli --version $(WASM_BINDGEN_VERSION)
+	mkdir -p $(PLAYGROUND_DIR)
+	wasm-bindgen $(WASM_LIB) --out-dir $(PLAYGROUND_DIR) --target web --no-typescript
 
 nuget:
 	cargo build -p yaal-ffi --release

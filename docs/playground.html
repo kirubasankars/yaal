@@ -1,0 +1,66 @@
+<style>
+#playground textarea,
+#playground select {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0.35rem 0 1rem;
+  padding: 0.75rem;
+  font: 0.9rem/1.45 ui-monospace, monospace;
+  color: inherit;
+  background: transparent;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+}
+#playground label {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+#playground .presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+#playground button {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid #ccc;
+  border-radius: 999px;
+  padding: 0.25rem 0.8rem;
+  cursor: pointer;
+}
+#playground pre.error {
+  background: #3a1515;
+}
+@media (prefers-color-scheme: dark) {
+  #playground textarea,
+  #playground select,
+  #playground button {
+    border-color: #444;
+  }
+}
+</style>
+<div id="playground">
+<h1>Playground</h1>
+<p>Edit the statement and the arguments. The compiler runs in this page.</p>
+<p class="presets">
+  <button type="button" data-preset="optional">Optional filter</button>
+  <button type="button" data-preset="when">optional_when</button>
+  <button type="button" data-preset="groups">optional_groups_or</button>
+</p>
+<label for="sql">SQL</label>
+<textarea id="sql" rows="10" spellcheck="false"></textarea>
+<label for="params">Arguments</label>
+<textarea id="params" rows="6" spellcheck="false"></textarea>
+<label for="placeholder">Placeholder</label>
+<select id="placeholder">
+  <option value="question">?</option>
+  <option value="numbered">$1</option>
+</select>
+<p><strong>Result</strong></p>
+<pre id="result"><code></code></pre>
+</div>
+<script type="module" src="playground.js"></script>

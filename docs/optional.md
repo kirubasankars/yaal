@@ -30,7 +30,7 @@ The body may contain `optional(...)`, `optional_groups_or(...)`, and `optional_g
 
 An empty `where`, `prewhere`, or `having`, including one left as `1 = 1`, is removed.
 
-The long form is the same rule: `({{id}} is null or u.id = {{id}})`.
+The long form is the same rule: `({{id}} is null or u.id = {{id}})`. [Plans](plans.md) is why that arm never reaches the planner.
 
 `{{name}}...` expands to one placeholder per element:
 
