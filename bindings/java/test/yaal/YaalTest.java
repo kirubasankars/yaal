@@ -34,6 +34,13 @@ public final class YaalTest {
         expect(parameter.name().equals("id") && parameter.type().equals("integer") && Long.valueOf(1).equals(parameter.value()),
                 String.valueOf(parameter));
 
+        Yaal.Compiled expanded = Yaal.compile(
+                "--(id)--\nselect * from t where id in ({{id}}...)",
+                Map.of("id", List.of(1, 2)),
+                "question");
+        expect(expanded.statements().get(0).values().equals(List.of(1L, 2L)),
+                String.valueOf(expanded.statements().get(0).values()));
+
         Yaal.Compiled numbered = Yaal.compile(SQL, Map.of("id", 1), "numbered");
         String numberedSql = numbered.statements().get(0).sql();
         expect(numberedSql.contains("$1") && !numberedSql.contains("?"), numberedSql);

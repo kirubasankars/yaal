@@ -20,7 +20,27 @@ public sealed record Compiled(
 
 public sealed record CompiledStatement(
     [property: JsonPropertyName("sql")] string Sql,
-    [property: JsonPropertyName("parameters")] IReadOnlyList<BoundParameter> Parameters);
+    [property: JsonPropertyName("parameters")] IReadOnlyList<BoundParameter> Parameters)
+{
+    public object?[] Values()
+    {
+        var values = new object?[Parameters.Count];
+        for (var index = 0; index < Parameters.Count; index++)
+            values[index] = Bind(Parameters[index].Value);
+        return values;
+    }
+
+    static object? Bind(JsonElement value) => value.ValueKind switch
+    {
+        JsonValueKind.Null or JsonValueKind.Undefined => null,
+        JsonValueKind.True => true,
+        JsonValueKind.False => false,
+        JsonValueKind.String => value.GetString(),
+        JsonValueKind.Number when value.TryGetInt64(out var number) => number,
+        JsonValueKind.Number => value.GetDouble(),
+        _ => value.GetRawText(),
+    };
+}
 
 public sealed record BoundParameter(
     [property: JsonPropertyName("name")] string Name,

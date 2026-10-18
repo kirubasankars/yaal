@@ -6,6 +6,7 @@
 package yaal
 
 import (
+	"bytes"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -48,6 +49,35 @@ type Parameter struct {
 	Name  string          `json:"name"`
 	Type  string          `json:"type"`
 	Value json.RawMessage `json:"value"`
+}
+
+// Values returns the expanded bind values in order.
+// Integral JSON numbers are int64. Other numbers are float64. null is nil.
+func (statement Statement) Values() ([]any, error) {
+	values := make([]any, len(statement.Parameters))
+	for index, parameter := range statement.Parameters {
+		decoder := json.NewDecoder(bytes.NewReader(parameter.Value))
+		decoder.UseNumber()
+		var value any
+		if err := decoder.Decode(&value); err != nil {
+			return nil, err
+		}
+		number, ok := value.(json.Number)
+		if !ok {
+			values[index] = value
+			continue
+		}
+		if integer, err := number.Int64(); err == nil {
+			values[index] = integer
+			continue
+		}
+		floatValue, err := number.Float64()
+		if err != nil {
+			return nil, err
+		}
+		values[index] = floatValue
+	}
+	return values, nil
 }
 
 type nativeAPI interface {

@@ -19,6 +19,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.PosixFilePermission;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -29,7 +30,15 @@ public final class Yaal {
 
     public record Parameter(String name, String type, Object value) {}
 
-    public record Statement(String sql, List<Parameter> parameters) {}
+    public record Statement(String sql, List<Parameter> parameters) {
+        public List<Object> values() {
+            List<Object> values = new ArrayList<>();
+            for (Parameter parameter : parameters) {
+                values.add(parameter.value());
+            }
+            return Collections.unmodifiableList(values);
+        }
+    }
 
     public record Compiled(List<Statement> statements) {}
 

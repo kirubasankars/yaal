@@ -35,6 +35,14 @@ fn err_has(sql: &str, value: Value, needle: &str) {
 }
 
 #[test]
+fn values_expand_a_list() {
+    let sql = "--(id)--\nselect * from t where id in ({{id}}...)";
+    let compiled = compile(sql, &params(json!({"id": [1, 2]})), &CompileOptions::default()).unwrap();
+    let values: Vec<_> = compiled.statements[0].values().cloned().collect();
+    assert_eq!(values, vec![json!(1), json!(2)]);
+}
+
+#[test]
 fn scalar_bind_and_absent_optional() {
     let sql = "--(id)--\nselect * from users u where 1 = 1 and optional(u.id = {{id}})";
     let (out, values) = one(sql, json!({"id": 1}));

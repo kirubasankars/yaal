@@ -108,6 +108,32 @@ func TestFixtureCases(t *testing.T) {
 	}
 }
 
+func TestValuesExpandList(t *testing.T) {
+	compiled, err := Compile("--(id)--\nselect * from t where id in ({{id}}...)", map[string]any{"id": []any{1, 2}}, "question")
+	if err != nil {
+		t.Fatal(err)
+	}
+	values, err := compiled.Statements[0].Values()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(values) != 2 || values[0] != int64(1) || values[1] != int64(2) {
+		t.Fatalf("values %#v", values)
+	}
+
+	fraction, err := Compile("--(n)--\nselect {{n}}", map[string]any{"n": 1.5}, "question")
+	if err != nil {
+		t.Fatal(err)
+	}
+	numbers, err := fraction.Statements[0].Values()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(numbers) != 1 || numbers[0] != 1.5 {
+		t.Fatalf("numbers %#v", numbers)
+	}
+}
+
 func TestPartialOptional(t *testing.T) {
 	_, err := Compile(partialText, map[string]any{"id": 1}, "")
 	var compileErr *CompileError

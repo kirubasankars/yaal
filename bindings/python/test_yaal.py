@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from yaal import CompileError, compile
+from yaal import CompileError, compile, values
 
 SQL = """--(id, active)--
 select * from users u
@@ -41,6 +41,8 @@ class CompileTests(unittest.TestCase):
             [{"name": "id", "type": "integer", "value": 1}],
         )
 
+        self.assertEqual(values(statement), [1])
+
         numbered = compile(SQL, {"id": 1}, placeholder="numbered")
         self.assertIn("$1", numbered["statements"][0]["sql"])
         self.assertNotIn("?", numbered["statements"][0]["sql"])
@@ -66,6 +68,10 @@ class CompileTests(unittest.TestCase):
                 self.assertEqual(norm(statement["sql"]), norm(case["expect_sql"]), name)
                 names = [param["name"] for param in statement["parameters"]]
                 self.assertEqual(names, case.get("expect_param_names", []), name)
+
+    def test_values_expand_a_list(self):
+        compiled = compile("--(id)--\nselect * from t where id in ({{id}}...)", {"id": [1, 2]})
+        self.assertEqual(values(compiled["statements"][0]), [1, 2])
 
     def test_partial_optional_is_an_error(self):
         with self.assertRaises(CompileError) as caught:

@@ -24,6 +24,13 @@ Expect(Norm(compiled.Statements[0].Sql) == "select * from users u where (u.id = 
 var parameter = compiled.Statements[0].Parameters[0];
 Expect(parameter.Name == "id" && parameter.Type == "integer" && parameter.Value.GetInt32() == 1, parameter.ToString() ?? "");
 
+var expanded = Compiler.Compile(
+    "--(id)--\nselect * from t where id in ({{id}}...)",
+    new Dictionary<string, int[]> { ["id"] = [1, 2] });
+var expandedValues = expanded.Statements[0].Values();
+Expect(expandedValues.Length == 2 && expandedValues[0] is long first && first == 1 && expandedValues[1] is long second && second == 2,
+    string.Join(",", expandedValues));
+
 var numbered = Compiler.Compile(Sql, new Dictionary<string, int> { ["id"] = 1 }, "numbered");
 Expect(numbered.Statements[0].Sql.Contains("$1") && !numbered.Statements[0].Sql.Contains('?'), numbered.Statements[0].Sql);
 

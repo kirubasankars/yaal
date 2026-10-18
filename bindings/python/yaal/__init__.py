@@ -33,6 +33,11 @@ def compile(sql, params=None, *, placeholder="question"):
     return data
 
 
+def values(statement):
+    """Return the expanded bind values for one compiled statement, in order."""
+    return [parameter["value"] for parameter in statement["parameters"]]
+
+
 def _invoke(sql, params_json, placeholder):
     lib = _library()
     ptr = lib.yaal_compile(

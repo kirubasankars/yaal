@@ -45,6 +45,13 @@ pub struct CompiledStatement {
     pub parameters: Vec<BoundParam>,
 }
 
+impl CompiledStatement {
+    /// Expanded bind values in placeholder order.
+    pub fn values(&self) -> impl Iterator<Item = &serde_json::Value> {
+        self.parameters.iter().map(|parameter| &parameter.value)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Compiled {
     pub statements: Vec<CompiledStatement>,
