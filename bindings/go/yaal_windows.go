@@ -13,8 +13,8 @@ import (
 )
 
 type windowsLib struct {
-	compile *syscall.Proc
-	free    *syscall.Proc
+	compileProc *syscall.Proc
+	freeProc    *syscall.Proc
 }
 
 func openLibrary() (nativeAPI, error) {
@@ -34,7 +34,7 @@ func openLibrary() (nativeAPI, error) {
 	if err != nil {
 		return nil, err
 	}
-	return windowsLib{compile: compile, free: free}, nil
+	return windowsLib{compileProc: compile, freeProc: free}, nil
 }
 
 func (lib windowsLib) compile(sql, params, placeholder string) (string, error) {
@@ -50,7 +50,7 @@ func (lib windowsLib) compile(sql, params, placeholder string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	result, _, _ := lib.compile.Call(
+	result, _, _ := lib.compileProc.Call(
 		uintptr(unsafe.Pointer(sqlPtr)),
 		uintptr(unsafe.Pointer(paramsPtr)),
 		uintptr(unsafe.Pointer(placeholderPtr)),
@@ -59,7 +59,7 @@ func (lib windowsLib) compile(sql, params, placeholder string) (string, error) {
 		return "", errors.New("yaal_compile returned null")
 	}
 	text := goString(result)
-	lib.free.Call(result)
+	lib.freeProc.Call(result)
 	return text, nil
 }
 
