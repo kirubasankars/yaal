@@ -54,12 +54,14 @@ The result is JSON:
 
 ## CLI
 
+Release archives for Linux x86_64, macOS Apple silicon, and Windows x64 are attached to each [GitHub release](https://github.com/kirubasankars/yaal/releases). [CLI](docs/cli.md) covers how to install and run `yaal`.
+
 ```bash
-cargo run -p yaal-cli -- compile --sql query.sql --params params.json
-cargo run -p yaal-cli -- compile --sql query.sql --param id=1 --placeholder numbered
+yaal compile --sql query.sql --params params.json
+yaal compile --sql query.sql --param id=1 --placeholder numbered
 ```
 
-SQL is read from stdin when `--sql` is omitted and stdin is not a terminal. `yaal compile` with no SQL exits instead of waiting.
+From a checkout, `cargo run -p yaal-cli -- compile` runs the same command. SQL is read from stdin when `--sql` is omitted and stdin is not a terminal. `yaal compile` with no SQL exits instead of waiting.
 
 ## Bindings
 
@@ -102,6 +104,7 @@ Java calls the library with the foreign function API, so the program needs `--en
 
 ## Syntax
 
+- [CLI](docs/cli.md)
 - [Languages](docs/languages.md)
 - [Parameter header](docs/header.md)
 - [optional and optional_when](docs/optional.md)

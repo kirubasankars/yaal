@@ -14,6 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PAGES = {
     "/": ("Yaal", ROOT / "README.md"),
+    "/cli": ("CLI", ROOT / "docs" / "cli.md"),
     "/header": ("Parameter header", ROOT / "docs" / "header.md"),
     "/optional": ("optional", ROOT / "docs" / "optional.md"),
     "/groups": ("optional groups", ROOT / "docs" / "groups.md"),
@@ -26,6 +27,7 @@ PAGES = {
 }
 NAV = [
     ("/", "Home"),
+    ("/cli", "CLI"),
     ("/languages", "Languages"),
     ("/header", "Header"),
     ("/optional", "Optional"),
@@ -136,7 +138,7 @@ def href(url):
         name = url[len("docs/") : -3]
     elif url.endswith(".md") and "/" not in url:
         name = url[:-3]
-    if name in {"header", "optional", "groups", "nested", "sort", "safety", "examples", "languages"}:
+    if name in {"header", "optional", "groups", "nested", "sort", "safety", "examples", "languages", "cli"}:
         return site_href("/" + name)
     return url
 
