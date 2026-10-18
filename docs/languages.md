@@ -144,11 +144,11 @@ while (reader.Read())
 ## Go
 
 ```bash
-go get github.com/kirubasankars/yaal/bindings/go@v1.0.0
+go get github.com/kirubasankars/yaal/bindings/go@v1.1.0
 go get modernc.org/sqlite
 ```
 
-The module tag is `bindings/go/v1.0.0`.
+The module tag is `bindings/go/v1.1.0`.
 
 `main.go`:
 
@@ -222,7 +222,7 @@ where optional(u.id = {{id}})
 <dependency>
   <groupId>io.github.kirubasankars</groupId>
   <artifactId>yaal</artifactId>
-  <version>1.0.0</version>
+  <version>1.1.0</version>
 </dependency>
 <dependency>
   <groupId>org.xerial</groupId>

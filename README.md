@@ -84,7 +84,7 @@ import "github.com/kirubasankars/yaal/bindings/go"
 compiled, err := yaal.Compile(sql, map[string]any{"id": 1}, "question")
 ```
 
-`go get github.com/kirubasankars/yaal/bindings/go@v1.0.0` installs that module. The module tag is `bindings/go/v1.0.0`, and the module contains the native compiler for Linux x86_64, macOS Apple silicon, and Windows x64. `Compile` loads `YAAL_LIB` when that variable is set, then the embedded library, then the shared library built under `target/debug` or `target/release`.
+`go get github.com/kirubasankars/yaal/bindings/go@v1.1.0` installs that module. The module tag is `bindings/go/v1.1.0`, and the module contains the native compiler for Linux x86_64, macOS Apple silicon, and Windows x64. `Compile` loads `YAAL_LIB` when that variable is set, then the embedded library, then the shared library built under `target/debug` or `target/release`.
 
 ```java
 Yaal.Compiled compiled = Yaal.compile(sql, Map.of("id", 1), "question");
@@ -96,7 +96,7 @@ Java calls the library with the foreign function API, so the program needs `--en
 <dependency>
   <groupId>io.github.kirubasankars</groupId>
   <artifactId>yaal</artifactId>
-  <version>1.0.0</version>
+  <version>1.1.0</version>
 </dependency>
 ```
 
