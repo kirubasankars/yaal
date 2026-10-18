@@ -113,6 +113,7 @@ Java calls the library with the foreign function API, so the program needs `--en
 - [sort and dir](docs/sort.md)
 - [Safety](docs/safety.md)
 - [examples](docs/examples.md)
+- [Skill](docs/skill.md)
 
 ## Build
 

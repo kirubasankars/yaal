@@ -24,6 +24,7 @@ PAGES = {
     "/sort": ("sort and dir", ROOT / "docs" / "sort.md"),
     "/safety": ("Safety", ROOT / "docs" / "safety.md"),
     "/examples": ("Examples", ROOT / "docs" / "examples.md"),
+    "/skill": ("Skill", ROOT / "docs" / "skill.md"),
     "/languages": ("Languages", ROOT / "docs" / "languages.md"),
     "/license": ("License", ROOT / "LICENSE"),
 }
@@ -31,6 +32,7 @@ NAV = [
     ("/", "Home"),
     ("/plans", "Plans"),
     ("/playground", "Playground"),
+    ("/skill", "Skill"),
     ("/cli", "CLI"),
     ("/languages", "Languages"),
     ("/header", "Header"),
@@ -153,7 +155,7 @@ def href(url):
         name = url[len("docs/") : -3]
     elif url.endswith(".md") and "/" not in url:
         name = url[:-3]
-    if name in {"header", "optional", "groups", "nested", "sort", "safety", "examples", "languages", "cli", "plans"}:
+    if name in {"header", "optional", "groups", "nested", "sort", "safety", "examples", "languages", "cli", "plans", "skill", "playground"}:
         return site_href("/" + name)
     return url
 
