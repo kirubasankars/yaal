@@ -64,7 +64,7 @@ def smoke(binary, version):
     )
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / "query.sql"
-        path.write_text(sql)
+        path.write_text(sql, newline="\n")
         completed = subprocess.run(
             [str(binary), "compile", "--sql", str(path), "--param", "id=[1, 2]"],
             check=False,
@@ -85,23 +85,21 @@ def smoke(binary, version):
 
     completed = subprocess.run(
         [str(binary), "compile", "--placeholder", "numbered", "--param", "id=1"],
-        input="--(id)--\nselect {{id}}\n",
+        input=b"--(id)--\nselect {{id}}\n",
         check=False,
         capture_output=True,
-        text=True,
     )
     if completed.returncode != 0:
-        raise SystemExit(completed.stderr.strip() or "stdin compile failed")
+        raise SystemExit(completed.stderr.decode().strip() or "stdin compile failed")
     compiled = json.loads(completed.stdout)
     if compiled["statements"][0]["sql"] != "\nselect $1\n":
         raise SystemExit(f"unexpected numbered sql {compiled['statements'][0]['sql']!r}")
 
     completed = subprocess.run(
         [str(binary), "compile", "--placeholder", "nope"],
-        input="--(id)--\nselect {{id}}\n",
+        input=b"--(id)--\nselect {{id}}\n",
         check=False,
         capture_output=True,
-        text=True,
     )
     if completed.returncode == 0:
         raise SystemExit("unknown placeholder exited 0")
