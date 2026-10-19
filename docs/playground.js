@@ -214,6 +214,7 @@ where 1 = 1
   },
 };
 
+const exampleInput = document.querySelector("#example");
 const sqlInput = document.querySelector("#sql");
 const paramsInput = document.querySelector("#params");
 const placeholderInput = document.querySelector("#placeholder");
@@ -269,18 +270,14 @@ function run() {
 
 function load(name) {
   const preset = presets[name];
+  exampleInput.value = name;
   sqlInput.value = preset.sql;
   paramsInput.value = preset.params;
   placeholderInput.value = "question";
-  for (const button of document.querySelectorAll("[data-preset]")) {
-    button.classList.toggle("active", button.dataset.preset === name);
-  }
   schedule();
 }
 
-for (const button of document.querySelectorAll("[data-preset]")) {
-  button.addEventListener("click", () => load(button.dataset.preset));
-}
+exampleInput.addEventListener("change", () => load(exampleInput.value));
 sqlInput.addEventListener("input", schedule);
 paramsInput.addEventListener("input", schedule);
 placeholderInput.addEventListener("change", schedule);

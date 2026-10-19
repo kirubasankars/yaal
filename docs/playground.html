@@ -18,64 +18,41 @@
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
-#playground .presets {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-#playground button {
-  font: inherit;
-  color: inherit;
-  background: transparent;
-  border: 1px solid #ccc;
-  border-radius: 999px;
-  padding: 0.25rem 0.8rem;
-  cursor: pointer;
-}
-#playground button.active {
-  border-color: currentColor;
-}
-#playground .group-label {
-  font-family: ui-sans-serif, system-ui, sans-serif;
-  font-size: 0.78rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  margin: 0.85rem 0 0.35rem;
-}
 #playground pre.error {
   background: #3a1515;
 }
 @media (prefers-color-scheme: dark) {
   #playground textarea,
-  #playground select,
-  #playground button {
+  #playground select {
     border-color: #444;
   }
 }
 </style>
 <div id="playground">
 <h1>Playground</h1>
-<p>Edit the statement and the arguments. The compiler runs in this page. The buttons load cases, including nested forms.</p>
-<p class="presets">
-  <button type="button" data-preset="optional">Optional filter</button>
-  <button type="button" data-preset="several">Several parameters</button>
-  <button type="button" data-preset="list">IN list</button>
-  <button type="button" data-preset="when">optional_when</button>
-  <button type="button" data-preset="groups">optional_groups_or</button>
-  <button type="button" data-preset="groupsAnd">optional_groups_and</button>
-  <button type="button" data-preset="groupList">Group list</button>
-  <button type="button" data-preset="sort">sort and dir</button>
-  <button type="button" data-preset="filterSort">Filter and sort</button>
-</p>
-<p class="group-label">Nested</p>
-<p class="presets">
-  <button type="button" data-preset="whenGroups">when around or-groups</button>
-  <button type="button" data-preset="whenAndGroups">when around and-groups</button>
-  <button type="button" data-preset="whenInGroup">when inside a group</button>
-  <button type="button" data-preset="optionalGroup">optional around a group</button>
-  <button type="button" data-preset="optionalInGroup">optional inside a group</button>
-  <button type="button" data-preset="whenOptionalGroups">when, optional, and groups</button>
-</p>
+<p>Pick an example, then edit the statement and the arguments. The compiler runs in this page.</p>
+<label for="example">Example</label>
+<select id="example">
+  <optgroup label="Cases">
+    <option value="optional">Optional filter</option>
+    <option value="several">Several parameters</option>
+    <option value="list">IN list</option>
+    <option value="when">optional_when</option>
+    <option value="groups">optional_groups_or</option>
+    <option value="groupsAnd">optional_groups_and</option>
+    <option value="groupList">Group list</option>
+    <option value="sort">sort and dir</option>
+    <option value="filterSort">Filter and sort</option>
+  </optgroup>
+  <optgroup label="Nested">
+    <option value="whenGroups">when around or-groups</option>
+    <option value="whenAndGroups">when around and-groups</option>
+    <option value="whenInGroup">when inside a group</option>
+    <option value="optionalGroup">optional around a group</option>
+    <option value="optionalInGroup">optional inside a group</option>
+    <option value="whenOptionalGroups">when, optional, and groups</option>
+  </optgroup>
+</select>
 <label for="sql">SQL</label>
 <textarea id="sql" rows="14" spellcheck="false"></textarea>
 <label for="params">Arguments</label>
