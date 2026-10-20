@@ -8,6 +8,8 @@ license that can be found in the LICENSE file.
 
 Yaal compiles a SQL string into dialect SQL and ordered bind values. You write the full statement, mark the parts that depend on arguments, and pass a JSON object. Yaal removes the unused parts and returns the SQL plus the binds. It does not open a database, shape rows, or track entities. [Plans](docs/plans.md) is why the removed parts never reach the planner.
 
+It is available for Java, .NET, Python, Go, and Rust.
+
 ```sql
 --(id, active)--
 select *

@@ -219,28 +219,55 @@ const sqlInput = document.querySelector("#sql");
 const paramsInput = document.querySelector("#params");
 const placeholderInput = document.querySelector("#placeholder");
 const result = document.querySelector("#result");
-const resultCode = result.querySelector("code");
 
-function show(text, error) {
-  resultCode.textContent = text;
-  result.classList.toggle("error", error);
+function showError(text) {
+  const pre = document.createElement("pre");
+  const code = document.createElement("code");
+  pre.className = "error";
+  code.textContent = text;
+  pre.append(code);
+  result.replaceChildren(pre);
 }
 
-function format(value) {
-  if (value.error) {
-    return { text: value.error, error: true };
+function parameterTable(parameters) {
+  const table = document.createElement("table");
+  const head = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  for (const label of ["Name", "Type", "Value"]) {
+    const cell = document.createElement("th");
+    cell.scope = "col";
+    cell.textContent = label;
+    headRow.append(cell);
   }
-  const chunks = value.statements.map((statement) => {
-    const lines = [statement.sql.trim()];
-    if (statement.parameters.length) {
-      lines.push("");
-      for (const param of statement.parameters) {
-        lines.push(`${param.name}  ${param.type}  ${JSON.stringify(param.value)}`);
-      }
+  head.append(headRow);
+  const body = document.createElement("tbody");
+  for (const param of parameters) {
+    const row = document.createElement("tr");
+    for (const text of [param.name, param.type, JSON.stringify(param.value)]) {
+      const cell = document.createElement("td");
+      cell.textContent = text;
+      row.append(cell);
     }
-    return lines.join("\n");
+    body.append(row);
+  }
+  table.append(head, body);
+  return table;
+}
+
+function showStatements(statements) {
+  const blocks = statements.map((statement) => {
+    const block = document.createElement("div");
+    const pre = document.createElement("pre");
+    const code = document.createElement("code");
+    code.textContent = statement.sql.trim();
+    pre.append(code);
+    block.append(pre);
+    if (statement.parameters.length) {
+      block.append(parameterTable(statement.parameters));
+    }
+    return block;
   });
-  return { text: chunks.join("\n\n"), error: false };
+  result.replaceChildren(...blocks);
 }
 
 let timer = 0;
@@ -254,18 +281,21 @@ function run() {
   try {
     text = compile(sqlInput.value, paramsInput.value, placeholderInput.value);
   } catch (err) {
-    show(String(err), true);
+    showError(String(err));
     return;
   }
   let value;
   try {
     value = JSON.parse(text);
   } catch (err) {
-    show(text, true);
+    showError(text);
     return;
   }
-  const formatted = format(value);
-  show(formatted.text, formatted.error);
+  if (value.error) {
+    showError(value.error);
+    return;
+  }
+  showStatements(value.statements);
 }
 
 function load(name) {
@@ -287,7 +317,7 @@ const ready = init().then(
     load("optional");
   },
   () => {
-    show("The compiler did not load.", true);
+    showError("The compiler did not load.");
   }
 );
 void ready;

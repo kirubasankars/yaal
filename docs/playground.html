@@ -21,9 +21,31 @@
 #playground pre.error {
   background: #3a1515;
 }
+#playground table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.35rem 0 1.25rem;
+  font: 0.9rem/1.45 ui-monospace, monospace;
+}
+#playground th,
+#playground td {
+  text-align: left;
+  padding: 0.4rem 0.65rem;
+  border-bottom: 1px solid #ccc;
+  vertical-align: top;
+}
+#playground th {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
 @media (prefers-color-scheme: dark) {
   #playground textarea,
-  #playground select {
+  #playground select,
+  #playground th,
+  #playground td {
     border-color: #444;
   }
 }
@@ -63,6 +85,6 @@
   <option value="numbered">$1</option>
 </select>
 <p><strong>Result</strong></p>
-<pre id="result"><code></code></pre>
+<div id="result"></div>
 </div>
 <script type="module" src="playground.js"></script>
