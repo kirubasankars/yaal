@@ -170,6 +170,15 @@ def page(title, body):
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{html.escape(title)}</title>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-4G9B45DP60"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){{dataLayer.push(arguments);}}
+  gtag('js', new Date());
+
+  gtag('config', 'G-4G9B45DP60');
+</script>
 <style>
 :root {{ color-scheme: light dark; }}
 body {{ margin: 0; font: 18px/1.5 Georgia, serif; background: #fff; color: #111; }}
